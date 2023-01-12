@@ -1,0 +1,13 @@
+name = "FixedBed"
+uuid = "73aa9ad5-5511-44de-a8c6-10c835891529"
+authors = ["Brust", "David <david.brust@dlr.de> and contributors"]
+version = "0.1.0"
+
+[compat]
+julia = "1"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
