@@ -3,6 +3,14 @@ uuid = "73aa9ad5-5511-44de-a8c6-10c835891529"
 authors = ["Brust", "David <david.brust@dlr.de> and contributors"]
 version = "0.1.0"
 
+[deps]
+ExtendableGrids = "cfc395e8-590f-11e8-1f13-43a2532b2fa8"
+GridVisualize = "5eed8a63-0fb0-45eb-886d-8d5a387d12b8"
+LessUnitful = "f29f6376-6e90-4d80-80c9-fb8ec61203d5"
+PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
+PlutoVista = "646e1f28-b900-46d7-9d87-d554eb38a413"
+VoronoiFVM = "82b139dc-5afc-11e9-35da-9b9bdfd336f3"
+
 [compat]
 julia = "1"
 
