@@ -10,10 +10,10 @@ begin
 	Pkg.activate(joinpath(@__DIR__,".."))
 	
 	using VoronoiFVM
-	using ExtendableGrids
+	using ExtendableGrids, SimplexGridFactory, TetGen
 	using GridVisualize
 	using LessUnitful
-	using PlutoVista	
+	using PlutoVista
 	using PlutoUI
 
 	using FixedBed
@@ -43,8 +43,14 @@ Base.@kwdef mutable struct ModelData
 	
 	
 	Tamb::Float64=298.15*ufac"K" # ambient temperature
-	α_w::Float64=20*ufac"W/(m^2*K)" # wall heat transfer coefficient
-	α_nc::Float64=10*ufac"W/(m^2*K)" # natural convection heat transfer coefficient
+	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
+	α_nc::Float64=15.0*ufac"W/(m^2*K)" # natural convection heat transfer coefficient
+
+	## irradiation data
+	G_lamp::Float64=50.0*ufac"kW/m^2" # solar simulator irradiation flux
+	Abs_lamp::Float64=0.7 # avg absorptivity of cat. of irradiation coming from lamp
+	Eps_ir::Float64=0.7 # avg absorptivity/emissivity of cat. of IR irradiation coming from surroundings / emitted
+	
 	
 	## porous filter data
     D::Float64=10.0*ufac"cm" # disc diameter
@@ -80,6 +86,32 @@ md"""
 
 # ╔═╡ 3b3595c4-f53d-4827-918e-edcb74dd81f8
 data = ModelData(;p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
+
+# ╔═╡ cb6a357f-e244-4725-a04a-3e006dd4b53d
+md"""
+## Irradiation Boundary Condition
+"""
+
+# ╔═╡ 463a9a2b-8437-407f-b31a-dde3165f49ad
+md"""
+### Irradiation conditions
+
+Catalyst surface temperature critically depends on the __irradition__ concentration and the __optical properties__ of the catalyst and components involved.
+
+- Solar simulator (lamp) mean irradiance: $(data.G_lamp) W m⁻²
+- absorptivity of catalyst material of irradiation coming from lamp: $(data.Abs_lamp)
+- absorptivity/emissivity of catalyst material of IR irradiation from surroundings/ emission: $(data.Eps_ir)
+- Temperature of surroundings: $(data.Tamb) K
+
+There can be __different values for optical properties__ of the catalyst depending on __wavelength__: e.g. a different absorption coefficients for radiation coming from the solar simulator (lamp) and from the surroundings.
+
+This needs to be investigated further.
+"""
+
+# ╔═╡ 387b5b8e-a466-4a65-a360-fa2cf08092e3
+md"""
+$(LocalResource("../img/IrradBC.png", :width => 1000))
+"""
 
 # ╔═╡ b4cee9ac-4d14-4169-90b5-25d12ac9c003
 md"""
@@ -135,7 +167,17 @@ For frit diameter of __$(data.D/ufac"cm") cm__, porosity of __$(data.ϕ)__ the m
 
 # ╔═╡ d7317b2d-e2c7-4114-8985-51979f2205ba
 md"""
-# Grid
+# Grid 
+"""
+
+# ╔═╡ 3c75c762-a44c-4328-ae41-a5016ce181f1
+md"""
+## 2D
+"""
+
+# ╔═╡ 2c31e63a-cf42-45cd-b367-112438a02a97
+md"""
+Assume axysymmetric geometry (thin cylindrical disk) to allow a 2-dimensional (rotationally symmetric) representation of the domain. 
 """
 
 # ╔═╡ 2fe11550-683d-4c4b-b940-3e63a4f8a87d
@@ -151,13 +193,50 @@ end
 # ╔═╡ 8cd85a0e-3d11-4bcc-8a7d-f30313b31363
 gridplot(cylinder(;r=data.D/2,h=data.h))
 
+# ╔═╡ a190862c-2251-4110-8274-9960c495a2c4
+md"""
+## 3D
+"""
+
+# ╔═╡ ebe2ed24-e2d6-4652-ae69-1a59747b0c4c
+function prism(;nref=0, l=10.0*ufac"cm", w=10.0*ufac"cm", h=0.5*ufac"cm")
+	builder=SimplexGridBuilder(Generator=TetGen)
+	W=w/2
+	L=l/2
+	H=h
+	p1=point!(builder,0,0,0)
+    p2=point!(builder,W,0,0)
+    p3=point!(builder,W,L,0)
+    p4=point!(builder,0,0,H)
+    p5=point!(builder,W,0,H)
+    p6=point!(builder,W,L,H)
+
+	facetregion!(builder,1)
+    facet!(builder,p1 ,p2 ,p3)
+    facetregion!(builder,2)
+    facet!(builder,p4 ,p5 ,p6)
+    facetregion!(builder,3)
+    facet!(builder,p1 ,p2 ,p5 ,p4)
+    facetregion!(builder,4)
+    facet!(builder,p2 ,p3 ,p6, p5)
+    facetregion!(builder,5)
+    facet!(builder, p3, p1 ,p4 ,p6)
+
+	vol=0.5*W*L*H
+	simplexgrid(builder, maxvolume=vol/100.0)
+	
+end
+
+# ╔═╡ 7c6c81db-1920-49af-a101-462228614f95
+gridplot(prism(),azim=20,elev=20,linewidth=0.5,outlinealpha=0.3)
+
 # ╔═╡ 9d8c6ddc-2662-4055-b636-649565c36287
 md"""
 # Simulation
 """
 
 # ╔═╡ d725f9b9-61c4-4724-a1d9-6a04ba42499d
-function main(;p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
+function main(;nref=0,p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
 	data=ModelData(Qflow=Qflow,	p=p,)
 	iT=data.iT
 
@@ -184,16 +263,26 @@ function main(;p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
 		
 	end
 
+	function irrad_bc(f,u,bnode,data)
+		if bnode.region==3 # top boundary
+			flux_rerad = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
+			flux_convec = data.α_nc*(u[iT]-data.Tamb)
+			f[iT] = -(data.Abs_lamp*data.G_lamp - flux_rerad - flux_convec)
+		end
+	end
+
 	function bcondition(f,u,bnode,data)
 		#boundary_dirichlet!(f,u,bnode;species=iT,region=1,value=data.Tamb)
 		boundary_robin!(f,u,bnode;species=iT,region=1, factor=data.α_nc, value=data.Tamb*data.α_nc)
 		boundary_robin!(f,u,bnode;species=iT,region=2, factor=data.α_w, value=data.Tamb*data.α_w)
-		boundary_dirichlet!(f,u,bnode;species=iT,region=3,value=data.Tamb+300.0)
+		#boundary_dirichlet!(f,u,bnode;species=iT,region=3,value=data.Tamb+300.0)
+		# irradiation boundary condition
+		irrad_bc(f,u,bnode,data)
 	end
 	
 
 	
-	grid=cylinder(;r=data.D/2,h=data.h)
+	grid=cylinder(;nref=nref,r=data.D/2,h=data.h)
 	evelo=edgevelocities(grid,fup)
 	
 	sys=VoronoiFVM.System(grid;
@@ -207,7 +296,8 @@ function main(;p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
     #                      kwargs...
                           )
 	inival=unknowns(sys)
-	inival[iT,:] .= map( (r,z)->(data.Tamb+300*z/data.h),grid)
+	inival[iT,:] .= map( (r,z)->(data.Tamb+500*z/data.h),grid)
+	#inival[iT,:] .= data.Tamb
 	sol=solve(inival,sys)
 	sys,sol,data
 end
@@ -218,7 +308,7 @@ let
 	iT=data.iT
 	vis=GridVisualizer()
 	@. sol[iT,:] -= 273.15
-	scalarplot!(vis,sys,sol;species=iT,title="T",colormap=:summer,show=true)
+	scalarplot!(vis,sys,sol;species=iT,title="Temperature / °C",xlabel="Radial coordinate / m", ylabel="Axial coordinate / m",legend=:best,colormap=:summer,show=true)
 
 end
 
@@ -238,6 +328,33 @@ let
 	plot(Ts.-273.15, λf,xlabel="Temperature / °C",ylabel="Thermal Conductivity / W m⁻¹ K⁻¹", title=Fluid.name )
 end
 
+# ╔═╡ 8310812b-97af-45d9-aff8-234ffbb169af
+md"""
+# Analysis
+"""
+
+# ╔═╡ 909044b9-d40d-4129-bfef-6cd131a932f2
+md"""
+Calculate heat flow ``(\text W)`` into the domain from surface integral over boundaries.
+"""
+
+# ╔═╡ 30f0e723-a5a6-4b49-80d2-a29efb0f417b
+data.Abs_lamp*data.G_lamp*data.Ac
+
+# ╔═╡ a1f5c0c2-290e-418f-b381-4626d61c2bfd
+let
+	sys,sol,data=main(nref=1)
+	tf=VoronoiFVM.TestFunctionFactory(sys)
+	
+	# testfunction arguments:
+		# 2nd arg: boundaries, where the test func. value is 0 -> these boundaries are excludes from the surface integral
+		# 3rd arg: boundaries, where the test func. value is 1 -> these boundaries are included in the surface integral
+	
+	# flux integral over bottom boundary: diffusive in/out flux
+	tf_irr=testfunction(tf,[1,2,4],3)
+	integrate(sys,tf_irr,sol)	
+end
+
 # ╔═╡ Cell order:
 # ╠═7d8eb6f5-3ba6-46ef-8058-1f24a0938ed1
 # ╠═5c3adaa0-9285-11ed-3ef8-1b57dd870d6f
@@ -248,14 +365,26 @@ end
 # ╟─6d5a7d83-53f9-43f3-9ccd-dadab08f62c1
 # ╟─3b3595c4-f53d-4827-918e-edcb74dd81f8
 # ╠═d912a1ca-1b69-4ea1-baa5-69794e004693
+# ╟─cb6a357f-e244-4725-a04a-3e006dd4b53d
+# ╟─463a9a2b-8437-407f-b31a-dde3165f49ad
+# ╟─387b5b8e-a466-4a65-a360-fa2cf08092e3
 # ╟─b4cee9ac-4d14-4169-90b5-25d12ac9c003
 # ╟─bbd0b076-bcc1-43a1-91cb-d72bb17d3c88
 # ╠═7c4d4083-33e2-4b17-8575-214ef458d75d
-# ╟─d7317b2d-e2c7-4114-8985-51979f2205ba
+# ╠═d7317b2d-e2c7-4114-8985-51979f2205ba
+# ╟─3c75c762-a44c-4328-ae41-a5016ce181f1
+# ╟─2c31e63a-cf42-45cd-b367-112438a02a97
 # ╠═2fe11550-683d-4c4b-b940-3e63a4f8a87d
 # ╠═8cd85a0e-3d11-4bcc-8a7d-f30313b31363
+# ╟─a190862c-2251-4110-8274-9960c495a2c4
+# ╠═ebe2ed24-e2d6-4652-ae69-1a59747b0c4c
+# ╠═7c6c81db-1920-49af-a101-462228614f95
 # ╟─9d8c6ddc-2662-4055-b636-649565c36287
 # ╠═f15fd785-010c-4fda-ab4f-7947642556dd
 # ╠═d725f9b9-61c4-4724-a1d9-6a04ba42499d
 # ╟─e148212c-bc7c-4553-8ffa-26e6c20c5f47
 # ╠═6a92c1c7-fb51-4363-b8d0-18eeb24087a8
+# ╟─8310812b-97af-45d9-aff8-234ffbb169af
+# ╟─909044b9-d40d-4129-bfef-6cd131a932f2
+# ╠═30f0e723-a5a6-4b49-80d2-a29efb0f417b
+# ╠═a1f5c0c2-290e-418f-b381-4626d61c2bfd
