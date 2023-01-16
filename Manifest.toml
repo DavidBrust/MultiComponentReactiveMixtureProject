@@ -191,6 +191,12 @@ git-tree-sha1 = "455419f7e328a1a2493cabc6428d79e951349769"
 uuid = "a33af91c-f02d-484b-be07-31d278c5ca2b"
 version = "0.1.1"
 
+[[Conda]]
+deps = ["Downloads", "JSON", "VersionParsing"]
+git-tree-sha1 = "6e47d11ea2776bc5627421d59cdcc1296c058071"
+uuid = "8f4d0f93-b110-5947-807f-2305c1781a2d"
+version = "1.7.0"
+
 [[Configurations]]
 deps = ["ExproniconLite", "OrderedCollections", "TOML"]
 git-tree-sha1 = "62a7c76dbad02fdfdaa53608104edf760938c4ca"
@@ -678,6 +684,12 @@ git-tree-sha1 = "12950d646ce04fb2e89ba5bd890205882c3592d7"
 uuid = "eff96d63-e80a-5855-80a2-b1b0885c5ab7"
 version = "2.8.0"
 
+[[MeshIO]]
+deps = ["ColorTypes", "FileIO", "GeometryBasics", "Printf"]
+git-tree-sha1 = "8be09d84a2d597c7c0c34d7d604c039c9763e48c"
+uuid = "7269a6da-0436-5bbc-96c2-40638cbb6118"
+version = "0.4.10"
+
 [[Metatheory]]
 deps = ["AutoHashEquals", "DataStructures", "Dates", "DocStringExtensions", "Parameters", "Reexport", "TermInterface", "ThreadsX", "TimerOutputs"]
 git-tree-sha1 = "0f39bc7f71abdff12ead4fc4a7d998fb2f3c171f"
@@ -855,6 +867,18 @@ version = "0.5.3"
 deps = ["Unicode"]
 uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
+[[PyCall]]
+deps = ["Conda", "Dates", "Libdl", "LinearAlgebra", "MacroTools", "Serialization", "VersionParsing"]
+git-tree-sha1 = "62f417f6ad727987c755549e9cd88c46578da562"
+uuid = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
+version = "1.95.1"
+
+[[PyPlot]]
+deps = ["Colors", "LaTeXStrings", "PyCall", "Sockets", "Test", "VersionParsing"]
+git-tree-sha1 = "f9d953684d4d21e947cb6d642db18853d43cb027"
+uuid = "d330b81b-6aea-500a-939a-2ce795aea3ee"
+version = "2.11.0"
+
 [[QuadGK]]
 deps = ["DataStructures", "LinearAlgebra"]
 git-tree-sha1 = "97aa253e65b784fd13e83774cadc95b38011d734"
@@ -979,6 +1003,12 @@ deps = ["InteractiveUtils", "MacroTools"]
 git-tree-sha1 = "5d7e3f4e11935503d3ecaf7186eac40602e7d231"
 uuid = "699a6c99-e7fa-54fc-8d76-47d257e15c1d"
 version = "0.9.4"
+
+[[SimplexGridFactory]]
+deps = ["DocStringExtensions", "ElasticArrays", "ExtendableGrids", "FileIO", "GridVisualize", "LinearAlgebra", "MeshIO", "Printf", "Test"]
+git-tree-sha1 = "4566d826852b7815d34c7a8829679c6f15f4b2e7"
+uuid = "57bfcd06-606e-45d6-baf4-4ba06da0efd5"
+version = "0.5.18"
 
 [[SnoopPrecompile]]
 deps = ["Preferences"]
@@ -1127,6 +1157,18 @@ version = "0.2.3"
 deps = ["InteractiveUtils", "Logging", "Random", "Serialization"]
 uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
+[[TetGen]]
+deps = ["DocStringExtensions", "GeometryBasics", "LinearAlgebra", "Printf", "StaticArrays", "TetGen_jll"]
+git-tree-sha1 = "d99fe468112a24feb36bcdac8c168f423de7e93c"
+uuid = "c5d3f3f7-f850-59f6-8a2e-ffc6dc1317ea"
+version = "1.4.0"
+
+[[TetGen_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "9ceedd691bce040e24126a56354f20d71554a495"
+uuid = "b47fdcd6-d2c1-58e9-bbba-c1cee8d8c179"
+version = "1.5.3+0"
+
 [[ThreadsX]]
 deps = ["ArgCheck", "BangBang", "ConstructionBase", "InitialValues", "MicroCollections", "Referenceables", "Setfield", "SplittablesBase", "Transducers"]
 git-tree-sha1 = "34e6bcf36b9ed5d56489600cf9f3c16843fa2aa2"
@@ -1184,6 +1226,11 @@ deps = ["ConstructionBase", "Dates", "LinearAlgebra", "Random"]
 git-tree-sha1 = "d670a70dd3cdbe1c1186f2f17c9a68a7ec24838c"
 uuid = "1986cc42-f94f-5a68-af5c-568840ba703d"
 version = "1.12.2"
+
+[[VersionParsing]]
+git-tree-sha1 = "58d6e80b4ee071f5efd07fda82cb9fbe17200868"
+uuid = "81def892-9a0e-5fdd-b105-ffc91e053289"
+version = "1.3.0"
 
 [[VertexSafeGraphs]]
 deps = ["Graphs"]
