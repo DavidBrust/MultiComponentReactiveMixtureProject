@@ -4,6 +4,16 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+end
+
 # ╔═╡ 5c3adaa0-9285-11ed-3ef8-1b57dd870d6f
 begin
 	using Pkg
@@ -15,11 +25,25 @@ begin
 	using LessUnitful
 	using PlutoVista
 	using PlutoUI
+	using PyPlot
 
 	using FixedBed
 	
 	GridVisualize.default_plotter!(PlutoVista)
+	#GridVisualize.default_plotter!(PyPlot)
 end;
+
+# ╔═╡ c258e0e6-72cc-4b3e-8f6d-e629e4a0d7fd
+html"""
+<style>
+	main {
+		margin: 0 auto;
+		max-width: 1600px;
+    	padding-left: max(160px, 10%);
+    	padding-right: max(160px, 10%);
+	}
+</style>
+"""
 
 # ╔═╡ 7d8eb6f5-3ba6-46ef-8058-1f24a0938ed1
 PlutoUI.TableOfContents(title="Heat Transfer in Fixed Beds")
@@ -53,10 +77,15 @@ Base.@kwdef mutable struct ModelData
 	
 	
 	## porous filter data
-    D::Float64=10.0*ufac"cm" # disc diameter
-	h::Float64=0.5*ufac"cm" # disc thickness
 	d::Float64=100.0*ufac"μm" # average pore size
+	# cylindrical disc / 2D
+    D::Float64=10.0*ufac"cm" # disc diameter
 	Ac::Float64=pi*D^2.0/4.0*ufac"m^2" # cross-sectional area
+
+	# prism / 3D
+	wi::Float64=10.0*ufac"cm" # prism width/side lenght
+	le::Float64=wi # prism width/side lenght
+	h::Float64=0.5*ufac"cm" # frit thickness (applies to 2D & 3D)
 	
 	ρs::Float64=2.23e3*ufac"kg/m^3" # density of non-porous SiO2
 	λs::Float64=1.4*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2 	
@@ -110,7 +139,7 @@ This needs to be investigated further.
 
 # ╔═╡ 387b5b8e-a466-4a65-a360-fa2cf08092e3
 md"""
-$(LocalResource("../img/IrradBC.png", :width => 1000))
+$(LocalResource("../img/IrradBC.png", :width => 800))
 """
 
 # ╔═╡ b4cee9ac-4d14-4169-90b5-25d12ac9c003
@@ -223,16 +252,34 @@ function prism(;nref=0, l=10.0*ufac"cm", w=10.0*ufac"cm", h=0.5*ufac"cm")
     facet!(builder, p3, p1 ,p4 ,p6)
 
 	vol=0.5*W*L*H
-	simplexgrid(builder, maxvolume=vol/100.0)
+	simplexgrid(builder, maxvolume=vol/(100.0*2.0^nref))
 	
 end
 
 # ╔═╡ 7c6c81db-1920-49af-a101-462228614f95
-gridplot(prism(),azim=20,elev=20,linewidth=0.5,outlinealpha=0.3)
+#gridplot(prism(nref=1),azim=20,elev=20,linewidth=0.5,outlinealpha=0.3)
+gridplot(prism(nref=1))
+
+# ╔═╡ ed50c2d4-25e9-4159-84c7-e0c70ffa63a1
+md"""
+The prismatic geometry represents 1/8 of the square plate, using symmetry to make the modelling domain smaller. 
+
+The 3D geomtry has 5 outer facets, whose boundary conditions need to be specified:
+- facet 3: symmetry (no flux)
+- facet 5: symmetry (no flux)
+- facet 4: convective heat transfer to the wall, air gab between porous frit and Al reactor wall (robin bc.)
+- facet 1: convective heat transfer to inflowing gas stream (robin bc.)
+- facet 2: radiation + convection (custom bc.)
+"""
 
 # ╔═╡ 9d8c6ddc-2662-4055-b636-649565c36287
 md"""
 # Simulation
+"""
+
+# ╔═╡ ba5c2095-4858-444a-99b5-ae6cf40374f9
+md"""
+## 2D
 """
 
 # ╔═╡ d725f9b9-61c4-4724-a1d9-6a04ba42499d
@@ -312,6 +359,112 @@ let
 
 end
 
+# ╔═╡ 28a2230f-5a59-4034-86af-e3d58dcceb6c
+md"""
+## 3D
+"""
+
+# ╔═╡ f435b4df-9162-42bd-8154-5f3434ea0e2a
+function main3D(;nref=0,p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
+	data=ModelData(Qflow=Qflow,	p=p,)
+	iT=data.iT
+
+	# function return 3D velocity vector: flow upward in z-direction
+    function fup(x,y,z)
+        return 0,0,-data.u0
+    end    
+	
+	function flux(f,u,edge,data)
+		(;Fluid,u0,p)=data
+		Tbar=0.5*(u[iT,1]+u[iT,2])
+		ρf=density_idealgas(Fluid, Tbar, p)
+		cf=heatcap_gas(Fluid, Tbar)
+		λf=thermcond_gas(Fluid, Tbar)
+		#λf=thermcond_gas(Fluid, Tin)
+		λbed=kbed(data)*λf
+		
+		vh=project(edge,(0,0,data.u0))
+		conv=vh*ρf*cf/λbed
+		#conv=evelo[edge.index]*ρf*cf/λbed
+		Bp,Bm = fbernoulli_pm(conv)
+		f[iT]= λbed*(Bm*u[iT,1]-Bp*u[iT,2])
+		
+		#f[iT] = λbed*(u[iT,1]-u[iT,2])
+		
+	end
+
+	function irrad_bc(f,u,bnode,data)
+		if bnode.region==2 # top boundary
+			flux_rerad = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
+			flux_convec = data.α_nc*(u[iT]-data.Tamb)
+			f[iT] = -(data.Abs_lamp*data.G_lamp - flux_rerad - flux_convec)
+		end
+	end
+
+	function bcondition(f,u,bnode,data)
+		#boundary_dirichlet!(f,u,bnode;species=iT,region=1,value=data.Tamb)
+		boundary_robin!(f,u,bnode;species=iT,region=1, factor=data.α_nc, value=data.Tamb*data.α_nc)
+		boundary_robin!(f,u,bnode;species=iT,region=4, factor=data.α_w, value=data.Tamb*data.α_w)
+		#boundary_dirichlet!(f,u,bnode;species=iT,region=2,value=data.Tamb+300.0)
+		# irradiation boundary condition
+		irrad_bc(f,u,bnode,data)
+	end
+	
+
+	
+	grid=prism(;nref=nref, w=data.wi, l=data.le, h=data.h)
+	#evelo=edgevelocities(grid,fup)
+	
+	sys=VoronoiFVM.System(grid;
+                          data=data,
+                          flux=flux,
+    #                      reaction=pnpreaction,
+    #                      #storage=pnpstorage,
+                          bcondition,
+                          species=[iT],
+	#					  regions=[1,2],
+    #                      kwargs...
+                          )
+	inival=unknowns(sys)
+	#inival[iT,:] .= map( (x,y,z)->(data.Tamb+300*z/data.h),grid)
+	inival[iT,:] .= data.Tamb
+	sol=solve(inival,sys)
+	sys,sol,data
+end
+
+# ╔═╡ ea81db48-d02c-4438-a0ba-9c54a3ea0e52
+Sim3D=main3D(nref=6);
+
+# ╔═╡ fb72aede-8997-48ef-9a2d-98acbf372747
+md"""
+f=$(@bind flevel Slider(range(([minimum(Sim3D[2]),maximum(Sim3D[2])].-273.15)... , length=20),default=(minimum(Sim3D[2])+maximum(Sim3D[2]))/2-273.15,show_value=true))
+
+x=$(@bind xplane Slider(range(0.0,data.wi/2,length=20),default=0.0,show_value=true))
+
+y=$(@bind yplane Slider(range(0.0,data.le/2,length=20),default=0.0,show_value=true))
+
+z=$(@bind zplane Slider(range(0.0,data.h,length=20),default=0.0,show_value=true))
+
+"""
+
+# ╔═╡ 8107492e-fdaf-4a86-96ef-ea34b45c0e67
+let
+	sys,sol,data=Sim3D
+	iT=data.iT
+	vis=GridVisualizer(resolution=(800,800),)
+	solC=copy(sol)
+	@. solC[iT,:] -= 273.15
+
+	#flevels=collect(range(([minimum(Sim3D[2]),maximum(Sim3D[2])].-273.15)... , length=11))
+	#scalarplot!(vis,sys,solC;species=iT,xlabel="X / m", ylabel="Y / m", zlabel="Z / m", levels=flevels, xplanes=[xplane], yplanes=[yplane], zplanes=[zplane], levelalpha=1.0,title="Temperature / °C", outlinealpha=0.05, zoom=1.4)
+	scalarplot!(vis,sys,solC;species=iT,xlabel="X / m", ylabel="Y / m", zlabel="Z / m", levels=[flevel], xplanes=[xplane], yplanes=[yplane], zplanes=[zplane], levelalpha=1.0,title="Temperature / °C", outlinealpha=0.05)
+	scene=reveal(vis)
+	#save("plot_3D.svg",scene)
+end
+
+# ╔═╡ ff727110-b312-4dfe-a68e-c53a5ad91980
+range(([minimum(Sim3D[2]),maximum(Sim3D[2])].-273.15)... , length=5)
+
 # ╔═╡ e148212c-bc7c-4553-8ffa-26e6c20c5f47
 md"""
 # Thermo-physical properties
@@ -356,6 +509,7 @@ let
 end
 
 # ╔═╡ Cell order:
+# ╠═c258e0e6-72cc-4b3e-8f6d-e629e4a0d7fd
 # ╠═7d8eb6f5-3ba6-46ef-8058-1f24a0938ed1
 # ╠═5c3adaa0-9285-11ed-3ef8-1b57dd870d6f
 # ╟─f353e09a-4a61-4def-ab8a-1bd6ce4ed58f
@@ -363,7 +517,7 @@ end
 # ╠═98063329-31e1-4d87-ba85-70419beb07e9
 # ╟─03d0c88a-462b-43c4-a589-616a8870be64
 # ╟─6d5a7d83-53f9-43f3-9ccd-dadab08f62c1
-# ╟─3b3595c4-f53d-4827-918e-edcb74dd81f8
+# ╠═3b3595c4-f53d-4827-918e-edcb74dd81f8
 # ╠═d912a1ca-1b69-4ea1-baa5-69794e004693
 # ╟─cb6a357f-e244-4725-a04a-3e006dd4b53d
 # ╟─463a9a2b-8437-407f-b31a-dde3165f49ad
@@ -371,7 +525,7 @@ end
 # ╟─b4cee9ac-4d14-4169-90b5-25d12ac9c003
 # ╟─bbd0b076-bcc1-43a1-91cb-d72bb17d3c88
 # ╠═7c4d4083-33e2-4b17-8575-214ef458d75d
-# ╠═d7317b2d-e2c7-4114-8985-51979f2205ba
+# ╟─d7317b2d-e2c7-4114-8985-51979f2205ba
 # ╟─3c75c762-a44c-4328-ae41-a5016ce181f1
 # ╟─2c31e63a-cf42-45cd-b367-112438a02a97
 # ╠═2fe11550-683d-4c4b-b940-3e63a4f8a87d
@@ -379,9 +533,17 @@ end
 # ╟─a190862c-2251-4110-8274-9960c495a2c4
 # ╠═ebe2ed24-e2d6-4652-ae69-1a59747b0c4c
 # ╠═7c6c81db-1920-49af-a101-462228614f95
+# ╠═ed50c2d4-25e9-4159-84c7-e0c70ffa63a1
 # ╟─9d8c6ddc-2662-4055-b636-649565c36287
+# ╟─ba5c2095-4858-444a-99b5-ae6cf40374f9
 # ╠═f15fd785-010c-4fda-ab4f-7947642556dd
 # ╠═d725f9b9-61c4-4724-a1d9-6a04ba42499d
+# ╟─28a2230f-5a59-4034-86af-e3d58dcceb6c
+# ╠═ea81db48-d02c-4438-a0ba-9c54a3ea0e52
+# ╠═8107492e-fdaf-4a86-96ef-ea34b45c0e67
+# ╟─fb72aede-8997-48ef-9a2d-98acbf372747
+# ╠═ff727110-b312-4dfe-a68e-c53a5ad91980
+# ╠═f435b4df-9162-42bd-8154-5f3434ea0e2a
 # ╟─e148212c-bc7c-4553-8ffa-26e6c20c5f47
 # ╠═6a92c1c7-fb51-4363-b8d0-18eeb24087a8
 # ╟─8310812b-97af-45d9-aff8-234ffbb169af
