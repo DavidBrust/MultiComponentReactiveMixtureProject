@@ -29,14 +29,6 @@ md"""
 # Porous filter disc
 """
 
-# ╔═╡ 2015c8e8-36cd-478b-88fb-94605283ac29
-md"""
-Specifications of porous filter disc from sintered silica glas (SiO₂): __VitraPOR P2__ (40-100 μm)
-$(LocalResource("../img/filter1.png", :width => 1000))
-$(LocalResource("../img/filter2.png", :width => 1000))
-$(LocalResource("../img/filter3.png", :width => 1000))
-"""
-
 # ╔═╡ 98063329-31e1-4d87-ba85-70419beb07e9
 Base.@kwdef mutable struct ModelData
 	iT::Int64=1 # index of Temperature variable
@@ -86,6 +78,16 @@ md"""
 
 # ╔═╡ 3b3595c4-f53d-4827-918e-edcb74dd81f8
 data = ModelData(;p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
+
+# ╔═╡ 2015c8e8-36cd-478b-88fb-94605283ac29
+md"""
+Specifications of porous filter disc from sintered silica glas (SiO₂): __VitraPOR P2__ (40-100 μm)
+
+Since no value of average particle size is given, the particle size is in a first approximation assumed to equal the pore size of $(round(data.d/ufac"μm",sigdigits=1)) μm.
+$(LocalResource("../img/filter1.png", :width => 1000))
+$(LocalResource("../img/filter2.png", :width => 1000))
+$(LocalResource("../img/filter3.png", :width => 1000))
+"""
 
 # ╔═╡ cb6a357f-e244-4725-a04a-3e006dd4b53d
 md"""
@@ -149,6 +151,12 @@ begin
 	λf = thermcond_gas(Fluid, data.Tin)
 	# Peclet number
 	Pe0 = u0*ρf*cf*data.d/λf
+
+	# Reynolds number
+	ηf=dynvisc_gas(Fluid, data.Tin)
+	Re0 = u0*ρf*data.d/ηf
+	# Prandtl number
+	Pr = cf*ηf/λf
 	kbed(data)
 end
 
@@ -163,6 +171,31 @@ Max. volumetric feed flow rate for each: Q = $(0.5*data.Qflow/ufac"ml/minute") m
 Total feed volumetric flow rate: __$(data.Qflow/ufac"ml/minute") ml/min__
 
 For frit diameter of __$(data.D/ufac"cm") cm__, porosity of __$(data.ϕ)__ the mean superficial velocity is __$(round(u0/ufac"cm/s",sigdigits=2)) cm/s__.
+"""
+
+# ╔═╡ 0cff03d0-00ca-4026-b041-ad9de2908d87
+md"""
+At given experimental conditions the Reynolds, Prandtl and Peclet numbers assume the following values:
+- Re = $(round(Re0,sigdigits=2))
+- Pr = $(round(Pr,sigdigits=2))
+- Pe = $(round(Pe0,sigdigits=2))
+"""
+
+# ╔═╡ 0510e643-8eab-4423-a0e2-aacd0f83a0c4
+md"""
+## Interfacial heat transfer coefficient
+"""
+
+# ╔═╡ 239212da-7911-4a51-9b22-08cd07699d4f
+md"""
+When working with a heterogeneous phase model (separate energy balances for both fluid and porous solid material), the exchange of energe between the phases can be described by an interfacial heat transfer coefficient. It can be calculated according to:
+
+__Kuwahara, F., Shirota, M., & Nakayama, A. (2001).__ A numerical study of interfacial convective heat transfer coefficient in two-energy equation model for convection in porous media. International Journal of Heat and Mass Transfer, 44(6), 1153-1159. doi:10.1016/s0017-9310(00)00166-6
+
+```math
+\frac{h_{\text{sf}} \text D}{k_{\text f}}= \left( 1+ \frac{4(1- \phi)}{\phi} \right) + \frac{1}{2} (1-\phi)^{\frac{1}{2}} \text{Re}^{0.6}_D\text{Pr}^{\frac{1}{3}}
+```
+
 """
 
 # ╔═╡ d7317b2d-e2c7-4114-8985-51979f2205ba
@@ -365,13 +398,16 @@ end
 # ╟─6d5a7d83-53f9-43f3-9ccd-dadab08f62c1
 # ╟─3b3595c4-f53d-4827-918e-edcb74dd81f8
 # ╠═d912a1ca-1b69-4ea1-baa5-69794e004693
+# ╟─0cff03d0-00ca-4026-b041-ad9de2908d87
 # ╟─cb6a357f-e244-4725-a04a-3e006dd4b53d
 # ╟─463a9a2b-8437-407f-b31a-dde3165f49ad
 # ╟─387b5b8e-a466-4a65-a360-fa2cf08092e3
 # ╟─b4cee9ac-4d14-4169-90b5-25d12ac9c003
 # ╟─bbd0b076-bcc1-43a1-91cb-d72bb17d3c88
 # ╠═7c4d4083-33e2-4b17-8575-214ef458d75d
-# ╠═d7317b2d-e2c7-4114-8985-51979f2205ba
+# ╟─0510e643-8eab-4423-a0e2-aacd0f83a0c4
+# ╟─239212da-7911-4a51-9b22-08cd07699d4f
+# ╟─d7317b2d-e2c7-4114-8985-51979f2205ba
 # ╟─3c75c762-a44c-4328-ae41-a5016ce181f1
 # ╟─2c31e63a-cf42-45cd-b367-112438a02a97
 # ╠═2fe11550-683d-4c4b-b940-3e63a4f8a87d

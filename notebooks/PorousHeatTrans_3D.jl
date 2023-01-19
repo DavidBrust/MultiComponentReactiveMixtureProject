@@ -38,7 +38,7 @@ html"""
 <style>
 	main {
 		margin: 0 auto;
-		max-width: 1600px;
+		max-width: 1200px;
     	padding-left: max(160px, 10%);
     	padding-right: max(160px, 10%);
 	}
@@ -87,13 +87,15 @@ Base.@kwdef mutable struct ModelData
 	le::Float64=wi # prism width/side lenght
 	h::Float64=0.5*ufac"cm" # frit thickness (applies to 2D & 3D)
 	
-	ρs::Float64=2.23e3*ufac"kg/m^3" # density of non-porous SiO2
+	ρs::Float64=2.23e3*ufac"kg/m^3" # density of non-porous Boro-Solikatglas 3.3
 	λs::Float64=1.4*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2 	
 	cs::Float64=0.8e3*ufac"J/(kg*K)" # heat capacity of non-porous SiO2
 	
 	ϕ::Float64=0.36 # porosity, class 2
 	k::Float64=2.9e-11*ufac"m^2" # permeability
 	a_s::Float64=0.13*ufac"m^2/g" # specific surface area
+	ρfrit::Float64=(1.0-ϕ)*ρs+ϕ*density_idealgas(Air, 298.15, 1.0*ufac"atm")*ufac"kg/m^3" # density of porous frit
+	a_v::Float64=a_s*ρfrit # volume specific interface area
 	## END porous filter data
 
 	## fluid data
@@ -115,6 +117,50 @@ md"""
 
 # ╔═╡ 3b3595c4-f53d-4827-918e-edcb74dd81f8
 data = ModelData(;p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
+
+# ╔═╡ 6d5a7d83-53f9-43f3-9ccd-dadab08f62c1
+md"""
+Atmospheric pressure operation: __p = $(data.p/ufac"bar") bar__
+
+Reactor to be fed with 1/1 mixture of CO₂/H₂
+
+Max. volumetric feed flow rate for each: Q = $(0.5*data.Qflow/ufac"ml/minute") ml/min
+
+Total feed volumetric flow rate: __$(data.Qflow/ufac"ml/minute") ml/min__
+
+For frit diameter of __$(data.D/ufac"cm") cm__, porosity of __$(data.ϕ)__ the mean superficial velocity is __$(round(data.u0/ufac"cm/s",sigdigits=2)) cm/s__.
+"""
+
+# ╔═╡ 4bcdb950-ed22-496c-ad70-e0c0fa4d7f52
+md"""
+## Dimensionless numbers
+"""
+
+# ╔═╡ 73b71898-0268-42bd-b2e6-d0c5118700dd
+function RePrPe(data;T=data.Tin,p=data.p)
+	d=data.d
+	u0=data.u0
+	ρf = density_idealgas(data.Fluid, T, p)
+	ηf = dynvisc_gas(data.Fluid, T)
+	cf = heatcap_gas(data.Fluid, T)
+	λf = thermcond_gas(data.Fluid, T)
+	
+	Re = u0*ρf*d/ηf # Reynolds number
+	Pr = cf*ηf/λf # Prandtl number
+	Pe = u0*ρf*cf*d/λf # Peclet
+	Re,Pr,Pe
+end
+
+# ╔═╡ 7e83918e-3ba4-4bbb-be8c-839eb32def13
+Re,Pr,Pe = RePrPe(data)
+
+# ╔═╡ 13e66a6a-b329-40e8-9098-05f4077d1242
+md"""
+At given experimental conditions the Reynolds, Prandtl and Peclet numbers assume the following values:
+- Re = $(round(Re,sigdigits=2))
+- Pr = $(round(Pr,sigdigits=2))
+- Pe = $(round(Pe,sigdigits=2))
+"""
 
 # ╔═╡ cb6a357f-e244-4725-a04a-3e006dd4b53d
 md"""
@@ -167,32 +213,31 @@ function kbed(data)
 	1.0-sqrt(1.0-ϕ)+sqrt(1.0-ϕ)*kc
 end
 
-# ╔═╡ d912a1ca-1b69-4ea1-baa5-69794e004693
-begin
-	Ac=pi*data.D^2/4
-	u0 = data.Qflow / (Ac*data.ϕ)
-	# fluid properties: Air
-	Fluid=data.Fluid
-	ρf = density_idealgas(Fluid, data.Tin, data.p)
-	cf = heatcap_gas(Fluid, data.Tin)
-	λf = thermcond_gas(Fluid, data.Tin)
-	# Peclet number
-	Pe0 = u0*ρf*cf*data.d/λf
-	kbed(data)
-end
-
-# ╔═╡ 6d5a7d83-53f9-43f3-9ccd-dadab08f62c1
+# ╔═╡ 16f5e0bc-8e3d-40cd-b67b-694eda6b67d9
 md"""
-Atmospheric pressure operation: __p = $(data.p/ufac"bar") bar__
-
-Reactor to be fed with 1/1 mixture of CO₂/H₂
-
-Max. volumetric feed flow rate for each: Q = $(0.5*data.Qflow/ufac"ml/minute") ml/min
-
-Total feed volumetric flow rate: __$(data.Qflow/ufac"ml/minute") ml/min__
-
-For frit diameter of __$(data.D/ufac"cm") cm__, porosity of __$(data.ϕ)__ the mean superficial velocity is __$(round(u0/ufac"cm/s",sigdigits=2)) cm/s__.
+## Interfacial heat transfer coefficient
 """
+
+# ╔═╡ 1459c3db-5ffc-46bd-9c94-8c8964519f39
+md"""
+When working with a heterogeneous phase model (separate energy balances for both fluid and porous solid material), the exchange of energe between the phases can be described by an interfacial heat transfer coefficient. It can be calculated according to:
+
+__Kuwahara, F., Shirota, M., & Nakayama, A. (2001).__ A numerical study of interfacial convective heat transfer coefficient in two-energy equation model for convection in porous media. International Journal of Heat and Mass Transfer, 44(6), 1153-1159. doi:10.1016/s0017-9310(00)00166-6
+
+```math
+\frac{h_{\text{sf}} \text D}{k_{\text f}}= \left( 1+ \frac{4(1- \phi)}{\phi} \right) + \frac{1}{2} (1-\phi)^{\frac{1}{2}} \text{Re}^{0.6}_D\text{Pr}^{\frac{1}{3}}
+```
+
+"""
+
+# ╔═╡ 4eb00d7b-d10e-478d-a1df-9eea3362ef5f
+function hsf(data;T=data.Tin,p=data.p)
+	Re,Pr,_ = RePrPe(data)
+	λf = thermcond_gas(data.Fluid, T)
+	ϕ = data.ϕ
+	d = data.d
+	λf/d*((1.0 + 4*(1.0-ϕ)/ϕ) + 0.5*(1.0-ϕ)^0.5*Re^0.6*Pr^(1.0/3.0))*ufac"W/m^2"
+end
 
 # ╔═╡ d7317b2d-e2c7-4114-8985-51979f2205ba
 md"""
@@ -211,9 +256,11 @@ Assume axysymmetric geometry (thin cylindrical disk) to allow a 2-dimensional (r
 
 # ╔═╡ 2fe11550-683d-4c4b-b940-3e63a4f8a87d
 function cylinder(;nref=0, r=5.0*ufac"cm", h=0.5*ufac"cm")
-    step=0.1*ufac"cm"*2.0^(-nref)
-    R=collect(0:step:r)
-    Z=collect(0:step:h)
+    #step=0.1*ufac"cm"*2.0^(-nref)
+	hr=r/10.0*2.0^(-nref)
+	hh=h/10.0*2.0^(-nref)
+    R=collect(0:hr:r)
+    Z=collect(0:hh:h)
     grid=simplexgrid(R,Z)
     circular_symmetric!(grid)
 	grid
@@ -226,6 +273,22 @@ gridplot(cylinder(;r=data.D/2,h=data.h))
 md"""
 ## 3D
 """
+
+# ╔═╡ 4d9145f3-06aa-4a7c-82d0-feee0fa01865
+function prism_sq(;nref=0, l=10.0*ufac"cm", w=10.0*ufac"cm", h=0.5*ufac"cm")
+	
+	hw=w/2.0/10.0*2.0^(-nref)
+	hl=l/2.0/10.0*2.0^(-nref)
+	hh=h/10.0*2.0^(-nref)
+	W=collect(0:hw:(w/2.0))
+    L=collect(0:hl:(l/2.0))
+    H=collect(0:hh:h)
+	
+	simplexgrid(W,L,H)	
+end
+
+# ╔═╡ 61a67079-cb15-4283-ac15-96b49c461b6e
+gridplot(prism_sq(nref=0))
 
 # ╔═╡ ebe2ed24-e2d6-4652-ae69-1a59747b0c4c
 function prism(;nref=0, l=10.0*ufac"cm", w=10.0*ufac"cm", h=0.5*ufac"cm")
@@ -349,12 +412,17 @@ function main(;nref=0,p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
 	sys,sol,data
 end
 
+# ╔═╡ e9003129-31db-4f9d-b289-638511c7ec26
+Sim2D=main(nref=1);
+
 # ╔═╡ f15fd785-010c-4fda-ab4f-7947642556dd
 let
-	sys,sol,data=main()
+	sys,sol,data=Sim2D
 	iT=data.iT
 	vis=GridVisualizer()
-	@. sol[iT,:] -= 273.15
+	solC = copy(sol)
+	@. solC[iT,:] -= 273.15
+
 	scalarplot!(vis,sys,sol;species=iT,title="Temperature / °C",xlabel="Radial coordinate / m", ylabel="Axial coordinate / m",legend=:best,colormap=:summer,show=true)
 
 end
@@ -394,7 +462,7 @@ function main3D(;nref=0,p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
 	end
 
 	function irrad_bc(f,u,bnode,data)
-		if bnode.region==2 # top boundary
+		if bnode.region==6 # top boundary
 			flux_rerad = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
 			flux_convec = data.α_nc*(u[iT]-data.Tamb)
 			f[iT] = -(data.Abs_lamp*data.G_lamp - flux_rerad - flux_convec)
@@ -403,8 +471,10 @@ function main3D(;nref=0,p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
 
 	function bcondition(f,u,bnode,data)
 		#boundary_dirichlet!(f,u,bnode;species=iT,region=1,value=data.Tamb)
-		boundary_robin!(f,u,bnode;species=iT,region=1, factor=data.α_nc, value=data.Tamb*data.α_nc)
-		boundary_robin!(f,u,bnode;species=iT,region=4, factor=data.α_w, value=data.Tamb*data.α_w)
+		boundary_robin!(f,u,bnode;species=iT,region=5, factor=data.α_nc, value=data.Tamb*data.α_nc) # bottom
+		boundary_robin!(f,u,bnode;species=iT,region=2, factor=data.α_w, value=data.Tamb*data.α_w)
+		# for prism of square
+		boundary_robin!(f,u,bnode;species=iT,region=3, factor=data.α_w, value=data.Tamb*data.α_w)
 		#boundary_dirichlet!(f,u,bnode;species=iT,region=2,value=data.Tamb+300.0)
 		# irradiation boundary condition
 		irrad_bc(f,u,bnode,data)
@@ -412,8 +482,8 @@ function main3D(;nref=0,p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
 	
 
 	
-	grid=prism(;nref=nref, w=data.wi, l=data.le, h=data.h)
-	#evelo=edgevelocities(grid,fup)
+	#grid=prism(;nref=nref, w=data.wi, l=data.le, h=data.h)
+	grid=prism_sq(;nref=nref, w=data.wi, l=data.le, h=data.h)
 	
 	sys=VoronoiFVM.System(grid;
                           data=data,
@@ -429,11 +499,11 @@ function main3D(;nref=0,p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
 	#inival[iT,:] .= map( (x,y,z)->(data.Tamb+300*z/data.h),grid)
 	inival[iT,:] .= data.Tamb
 	sol=solve(inival,sys)
-	sys,sol,data
+	sys,sol,data,nref
 end
 
 # ╔═╡ ea81db48-d02c-4438-a0ba-9c54a3ea0e52
-Sim3D=main3D(nref=6);
+Sim3D=main3D(nref=1);
 
 # ╔═╡ fb72aede-8997-48ef-9a2d-98acbf372747
 md"""
@@ -449,7 +519,7 @@ z=$(@bind zplane Slider(range(0.0,data.h,length=20),default=0.0,show_value=true)
 
 # ╔═╡ 8107492e-fdaf-4a86-96ef-ea34b45c0e67
 let
-	sys,sol,data=Sim3D
+	sys,sol,data,nref=Sim3D
 	iT=data.iT
 	vis=GridVisualizer(resolution=(800,800),)
 	solC=copy(sol)
@@ -462,8 +532,63 @@ let
 	#save("plot_3D.svg",scene)
 end
 
-# ╔═╡ ff727110-b312-4dfe-a68e-c53a5ad91980
-range(([minimum(Sim3D[2]),maximum(Sim3D[2])].-273.15)... , length=5)
+# ╔═╡ 64dd5097-16aa-4c44-b000-6177cd4be226
+md"""
+### Cut planes
+"""
+
+# ╔═╡ bd179765-f996-4f91-ac4e-57d5817a2ed6
+md"""
+Analyse 2D slices of the 3D solution to be able to compare with the 2D axisymmetric solution. The goal is to show, that the geometry can be treated as 2D with sufficient accuracy.
+Below the difference between 3D and 2D __(3D - 2D)__ calculation is shown for different cross-sections:
+"""
+
+# ╔═╡ 641988da-8888-4e0d-b720-4f21a9900aca
+md"""
+Y - cutplane $(@bind ycut Slider(range(0.0,data.wi/2,length=21),default=0.0,show_value=true))
+"""
+
+# ╔═╡ b4175b62-198d-4605-9cf0-04b0be52c9c0
+function plane(ypos,sol,data,nref)
+	grid=prism_sq(;nref=nref, w=data.wi, l=data.le, h=data.h)
+	
+	bfacemask!(grid, [0,ypos,0],[data.wi/2.0,ypos,data.h],7)
+
+	# transform z coordinate of parent grid into y coordinate of subgrid
+	function _3to2(a,b)
+		a[1]=b[1]
+		a[2]=b[3]
+	end
+	grid_2D  = subgrid(grid, [7], boundary=true, transform=_3to2) 
+	
+	sol_cutplane = view(sol[data.iT, :], grid_2D)
+		
+	collect(sol_cutplane), grid_2D	
+	#sol_cutplane, grid_2D	
+end
+
+# ╔═╡ 3612d83d-a8bc-4c5f-8ea0-a4c975929500
+let
+	sys,sol,data=Sim2D
+
+
+	sys3,sol3,data,nref=Sim3D
+	sol_cutplane, grid_2D = plane(ycut,sol3,data,nref)
+
+	sol_reorder=zeros(length(sol))
+
+	k=1
+	for coord in eachcol(grid_2D[Coordinates])
+		id = findfirst(x->x==coord, eachcol(sys.grid[Coordinates]))
+		sol_reorder[k] = sol[id]
+		k +=1
+	end
+
+	vis=GridVisualizer()
+	#scalarplot!(vis,grid_2D,sol_reorder;colormap=:summer,show=true)
+	scalarplot!(vis,grid_2D,sol_cutplane.-sol_reorder;colormap=:bwr,show=true)
+
+end
 
 # ╔═╡ e148212c-bc7c-4553-8ffa-26e6c20c5f47
 md"""
@@ -478,7 +603,7 @@ let
 	for (i,T) in enumerate(Ts)
 		λf[i]=thermcond_gas(Fluid, T)
 	end
-	plot(Ts.-273.15, λf,xlabel="Temperature / °C",ylabel="Thermal Conductivity / W m⁻¹ K⁻¹", title=Fluid.name )
+	PlutoVista.plot(Ts.-273.15, λf,xlabel="Temperature / °C",ylabel="Thermal Conductivity / W m⁻¹ K⁻¹", title=Fluid.name )
 end
 
 # ╔═╡ 8310812b-97af-45d9-aff8-234ffbb169af
@@ -518,23 +643,32 @@ end
 # ╟─03d0c88a-462b-43c4-a589-616a8870be64
 # ╟─6d5a7d83-53f9-43f3-9ccd-dadab08f62c1
 # ╠═3b3595c4-f53d-4827-918e-edcb74dd81f8
-# ╠═d912a1ca-1b69-4ea1-baa5-69794e004693
+# ╟─4bcdb950-ed22-496c-ad70-e0c0fa4d7f52
+# ╠═73b71898-0268-42bd-b2e6-d0c5118700dd
+# ╠═7e83918e-3ba4-4bbb-be8c-839eb32def13
+# ╟─13e66a6a-b329-40e8-9098-05f4077d1242
 # ╟─cb6a357f-e244-4725-a04a-3e006dd4b53d
 # ╟─463a9a2b-8437-407f-b31a-dde3165f49ad
 # ╟─387b5b8e-a466-4a65-a360-fa2cf08092e3
 # ╟─b4cee9ac-4d14-4169-90b5-25d12ac9c003
 # ╟─bbd0b076-bcc1-43a1-91cb-d72bb17d3c88
 # ╠═7c4d4083-33e2-4b17-8575-214ef458d75d
+# ╟─16f5e0bc-8e3d-40cd-b67b-694eda6b67d9
+# ╟─1459c3db-5ffc-46bd-9c94-8c8964519f39
+# ╠═4eb00d7b-d10e-478d-a1df-9eea3362ef5f
 # ╟─d7317b2d-e2c7-4114-8985-51979f2205ba
 # ╟─3c75c762-a44c-4328-ae41-a5016ce181f1
 # ╟─2c31e63a-cf42-45cd-b367-112438a02a97
 # ╠═2fe11550-683d-4c4b-b940-3e63a4f8a87d
 # ╠═8cd85a0e-3d11-4bcc-8a7d-f30313b31363
 # ╟─a190862c-2251-4110-8274-9960c495a2c4
+# ╠═4d9145f3-06aa-4a7c-82d0-feee0fa01865
+# ╠═61a67079-cb15-4283-ac15-96b49c461b6e
 # ╠═ebe2ed24-e2d6-4652-ae69-1a59747b0c4c
 # ╠═7c6c81db-1920-49af-a101-462228614f95
 # ╠═ed50c2d4-25e9-4159-84c7-e0c70ffa63a1
 # ╟─9d8c6ddc-2662-4055-b636-649565c36287
+# ╠═e9003129-31db-4f9d-b289-638511c7ec26
 # ╟─ba5c2095-4858-444a-99b5-ae6cf40374f9
 # ╠═f15fd785-010c-4fda-ab4f-7947642556dd
 # ╠═d725f9b9-61c4-4724-a1d9-6a04ba42499d
@@ -542,8 +676,12 @@ end
 # ╠═ea81db48-d02c-4438-a0ba-9c54a3ea0e52
 # ╠═8107492e-fdaf-4a86-96ef-ea34b45c0e67
 # ╟─fb72aede-8997-48ef-9a2d-98acbf372747
-# ╠═ff727110-b312-4dfe-a68e-c53a5ad91980
 # ╠═f435b4df-9162-42bd-8154-5f3434ea0e2a
+# ╟─64dd5097-16aa-4c44-b000-6177cd4be226
+# ╟─bd179765-f996-4f91-ac4e-57d5817a2ed6
+# ╟─3612d83d-a8bc-4c5f-8ea0-a4c975929500
+# ╟─641988da-8888-4e0d-b720-4f21a9900aca
+# ╠═b4175b62-198d-4605-9cf0-04b0be52c9c0
 # ╟─e148212c-bc7c-4553-8ffa-26e6c20c5f47
 # ╠═6a92c1c7-fb51-4363-b8d0-18eeb24087a8
 # ╟─8310812b-97af-45d9-aff8-234ffbb169af
