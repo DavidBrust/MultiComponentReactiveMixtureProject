@@ -61,8 +61,11 @@ $(LocalResource("../img/filter2.png", :width => 1000))
 $(LocalResource("../img/filter3.png", :width => 1000))
 """
 
+# ╔═╡ 5136828c-6e88-40fc-b9a5-3c86db2f0879
+abstract type AbstractModelData end
+
 # ╔═╡ 98063329-31e1-4d87-ba85-70419beb07e9
-Base.@kwdef mutable struct ModelData
+Base.@kwdef mutable struct ModelData <:AbstractModelData
 	iT::Int64=1 # index of Temperature variable
 	
 	
@@ -137,7 +140,7 @@ md"""
 """
 
 # ╔═╡ 73b71898-0268-42bd-b2e6-d0c5118700dd
-function RePrPe(data;T=data.Tin,p=data.p)
+function RePrPe(data::AbstractModelData,T,p)
 	d=data.d
 	u0=data.u0
 	ρf = density_idealgas(data.Fluid, T, p)
@@ -152,7 +155,7 @@ function RePrPe(data;T=data.Tin,p=data.p)
 end
 
 # ╔═╡ 7e83918e-3ba4-4bbb-be8c-839eb32def13
-Re,Pr,Pe = RePrPe(data)
+Re,Pr,Pe = RePrPe(data,data.Tin,data.p)
 
 # ╔═╡ 13e66a6a-b329-40e8-9098-05f4077d1242
 md"""
@@ -231,13 +234,18 @@ __Kuwahara, F., Shirota, M., & Nakayama, A. (2001).__ A numerical study of inter
 """
 
 # ╔═╡ 4eb00d7b-d10e-478d-a1df-9eea3362ef5f
-function hsf(data;T=data.Tin,p=data.p)
-	Re,Pr,_ = RePrPe(data)
+function hsf(data::AbstractModelData,T,p)
+	Re,Pr,_ = RePrPe(data,T,p)
 	λf = thermcond_gas(data.Fluid, T)
 	ϕ = data.ϕ
 	d = data.d
-	λf/d*((1.0 + 4*(1.0-ϕ)/ϕ) + 0.5*(1.0-ϕ)^0.5*Re^0.6*Pr^(1.0/3.0))*ufac"W/m^2"
+	λf/d*((1.0 + 4*(1.0-ϕ)/ϕ) + 0.5*(1.0-ϕ)^0.5*Re^0.6*Pr^(1.0/3.0))*ufac"W/(m^2*K)"
 end
+
+# ╔═╡ c9f326c1-abc0-412d-8348-8e23a7027661
+md"""
+For the given porous medium with very fine pore and particle sizes (__$(round(data.d/ufac"μm",sigdigits=2)) μm__), the volume specific interfacial area ``A_{\text v} = `` $(round(data.a_v,sigdigits=4)) `` \text{m}^2`` and interfacial heat transfer coefficient ``h_{\text{sf}} = `` $(round(hsf(data,data.Tin,data.p),sigdigits=4)) ``\text W/ \text m^2 \text K`` take on very large values. Therefore the solid and gas phases are in thermal equilibrium. This justifies the use of a quasi-homogeneous model, describing both phases by a single temperature.
+"""
 
 # ╔═╡ d7317b2d-e2c7-4114-8985-51979f2205ba
 md"""
@@ -423,7 +431,7 @@ let
 	solC = copy(sol)
 	@. solC[iT,:] -= 273.15
 
-	scalarplot!(vis,sys,sol;species=iT,title="Temperature / °C",xlabel="Radial coordinate / m", ylabel="Axial coordinate / m",legend=:best,colormap=:summer,show=true)
+	scalarplot!(vis,sys,solC;species=iT,title="Temperature / °C",xlabel="Radial coordinate / m", ylabel="Axial coordinate / m",legend=:best,colormap=:summer,show=true)
 
 end
 
@@ -639,6 +647,7 @@ end
 # ╠═5c3adaa0-9285-11ed-3ef8-1b57dd870d6f
 # ╟─f353e09a-4a61-4def-ab8a-1bd6ce4ed58f
 # ╟─2015c8e8-36cd-478b-88fb-94605283ac29
+# ╠═5136828c-6e88-40fc-b9a5-3c86db2f0879
 # ╠═98063329-31e1-4d87-ba85-70419beb07e9
 # ╟─03d0c88a-462b-43c4-a589-616a8870be64
 # ╟─6d5a7d83-53f9-43f3-9ccd-dadab08f62c1
@@ -656,6 +665,7 @@ end
 # ╟─16f5e0bc-8e3d-40cd-b67b-694eda6b67d9
 # ╟─1459c3db-5ffc-46bd-9c94-8c8964519f39
 # ╠═4eb00d7b-d10e-478d-a1df-9eea3362ef5f
+# ╟─c9f326c1-abc0-412d-8348-8e23a7027661
 # ╟─d7317b2d-e2c7-4114-8985-51979f2205ba
 # ╟─3c75c762-a44c-4328-ae41-a5016ce181f1
 # ╟─2c31e63a-cf42-45cd-b367-112438a02a97
