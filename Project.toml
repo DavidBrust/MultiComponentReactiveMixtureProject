@@ -5,6 +5,7 @@ version = "0.1.0"
 
 [deps]
 ExtendableGrids = "cfc395e8-590f-11e8-1f13-43a2532b2fa8"
+GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 GridVisualize = "5eed8a63-0fb0-45eb-886d-8d5a387d12b8"
 LessUnitful = "f29f6376-6e90-4d80-80c9-fb8ec61203d5"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
