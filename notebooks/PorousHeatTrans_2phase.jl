@@ -317,30 +317,10 @@ md"""
 # Simulation
 """
 
-# ╔═╡ e9003129-31db-4f9d-b289-638511c7ec26
-# ╠═╡ disabled = true
-#=╠═╡
-Sim2D=main(nref=1);
-  ╠═╡ =#
-
 # ╔═╡ ba5c2095-4858-444a-99b5-ae6cf40374f9
 md"""
 ## 2D
 """
-
-# ╔═╡ f15fd785-010c-4fda-ab4f-7947642556dd
-#=╠═╡
-let
-	sys,sol,data=Sim2D
-	iT=data.iT
-	vis=GridVisualizer()
-	solC = copy(sol)
-	@. solC[iT,:] -= 273.15
-
-	scalarplot!(vis,sys,solC;species=iT,title="Temperature / °C",xlabel="Radial coordinate / m", ylabel="Axial coordinate / m",legend=:best,colormap=:summer,show=true)
-
-end
-  ╠═╡ =#
 
 # ╔═╡ 667c095d-f7c7-4244-806f-a70f1250146e
 md"""
@@ -475,113 +455,6 @@ md"""
 ## 3D
 """
 
-# ╔═╡ f435b4df-9162-42bd-8154-5f3434ea0e2a
-# ╠═╡ disabled = true
-#=╠═╡
-function main3D(;nref=0,p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
-	data=ModelData(Qflow=Qflow,	p=p,)
-	iT=data.iT
-
-	# function return 3D velocity vector: flow upward in z-direction
-    function fup(x,y,z)
-        return 0,0,-data.u0
-    end    
-	
-	function flux(f,u,edge,data)
-		(;Fluid,u0,p)=data
-		Tbar=0.5*(u[iT,1]+u[iT,2])
-		ρf=density_idealgas(Fluid, Tbar, p)
-		cf=heatcap_gas(Fluid, Tbar)
-		λf=thermcond_gas(Fluid, Tbar)
-		#λf=thermcond_gas(Fluid, Tin)
-		λbed=kbed(data)*λf
-		
-		vh=project(edge,(0,0,data.u0))
-		conv=vh*ρf*cf/λbed
-		#conv=evelo[edge.index]*ρf*cf/λbed
-		Bp,Bm = fbernoulli_pm(conv)
-		f[iT]= λbed*(Bm*u[iT,1]-Bp*u[iT,2])
-		
-		#f[iT] = λbed*(u[iT,1]-u[iT,2])
-		
-	end
-
-	function irrad_bc(f,u,bnode,data)
-		if bnode.region==6 # top boundary
-			flux_rerad = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
-			flux_convec = data.α_nc*(u[iT]-data.Tamb)
-			f[iT] = -(data.Abs_lamp*data.G_lamp - flux_rerad - flux_convec)
-		end
-	end
-
-	function bcondition(f,u,bnode,data)
-		#boundary_dirichlet!(f,u,bnode;species=iT,region=1,value=data.Tamb)
-		boundary_robin!(f,u,bnode;species=iT,region=5, factor=data.α_nc, value=data.Tamb*data.α_nc) # bottom
-		boundary_robin!(f,u,bnode;species=iT,region=2, factor=data.α_w, value=data.Tamb*data.α_w)
-		# for prism of square
-		boundary_robin!(f,u,bnode;species=iT,region=3, factor=data.α_w, value=data.Tamb*data.α_w)
-		#boundary_dirichlet!(f,u,bnode;species=iT,region=2,value=data.Tamb+300.0)
-		# irradiation boundary condition
-		irrad_bc(f,u,bnode,data)
-	end
-	
-
-	
-	#grid=prism(;nref=nref, w=data.wi, l=data.le, h=data.h)
-	grid=prism_sq(;nref=nref, w=data.wi, l=data.le, h=data.h)
-	
-	sys=VoronoiFVM.System(grid;
-                          data=data,
-                          flux=flux,
-    #                      reaction=pnpreaction,
-    #                      #storage=pnpstorage,
-                          bcondition,
-                          species=[iT],
-	#					  regions=[1,2],
-    #                      kwargs...
-                          )
-	inival=unknowns(sys)
-	#inival[iT,:] .= map( (x,y,z)->(data.Tamb+300*z/data.h),grid)
-	inival[iT,:] .= data.Tamb
-	sol=solve(inival,sys)
-	sys,sol,data,nref
-end
-  ╠═╡ =#
-
-# ╔═╡ ea81db48-d02c-4438-a0ba-9c54a3ea0e52
-#=╠═╡
-Sim3D=main3D(nref=1);
-  ╠═╡ =#
-
-# ╔═╡ fb72aede-8997-48ef-9a2d-98acbf372747
-#=╠═╡
-md"""
-f=$(@bind flevel Slider(range(([minimum(Sim3D[2]),maximum(Sim3D[2])].-273.15)... , length=20),default=(minimum(Sim3D[2])+maximum(Sim3D[2]))/2-273.15,show_value=true))
-
-x=$(@bind xplane Slider(range(0.0,data.wi/2,length=20),default=0.0,show_value=true))
-
-y=$(@bind yplane Slider(range(0.0,data.le/2,length=20),default=0.0,show_value=true))
-
-z=$(@bind zplane Slider(range(0.0,data.h,length=20),default=0.0,show_value=true))
-
-"""
-  ╠═╡ =#
-
-# ╔═╡ 8107492e-fdaf-4a86-96ef-ea34b45c0e67
-#=╠═╡
-let
-	sys,sol,data,nref=Sim3D
-	iT=data.iT
-	vis=GridVisualizer(resolution=(800,800),)
-	solC=copy(sol)
-	@. solC[iT,:] -= 273.15
-
-	scalarplot!(vis,sys,solC;species=iT,xlabel="X / m", ylabel="Y / m", zlabel="Z / m", levels=[flevel], xplanes=[xplane], yplanes=[yplane], zplanes=[zplane], levelalpha=1.0,title="Temperature / °C", outlinealpha=0.05)
-	scene=reveal(vis)
-	#save("plot_3D.svg",scene)
-end
-  ╠═╡ =#
-
 # ╔═╡ 64dd5097-16aa-4c44-b000-6177cd4be226
 md"""
 ### Cut planes
@@ -616,31 +489,6 @@ function plane(ypos,sol,data,nref)
 	collect(sol_cutplane), grid_2D	
 	#sol_cutplane, grid_2D	
 end
-
-# ╔═╡ 3612d83d-a8bc-4c5f-8ea0-a4c975929500
-#=╠═╡
-let
-	sys,sol,data=Sim2D
-
-
-	sys3,sol3,data,nref=Sim3D
-	sol_cutplane, grid_2D = plane(ycut,sol3,data,nref)
-
-	sol_reorder=zeros(length(sol))
-
-	k=1
-	for coord in eachcol(grid_2D[Coordinates])
-		id = findfirst(x->x==coord, eachcol(sys.grid[Coordinates]))
-		sol_reorder[k] = sol[id]
-		k +=1
-	end
-
-	vis=GridVisualizer()
-	#scalarplot!(vis,grid_2D,sol_reorder;colormap=:summer,show=true)
-	scalarplot!(vis,grid_2D,sol_cutplane.-sol_reorder;colormap=:bwr,show=true)
-
-end
-  ╠═╡ =#
 
 # ╔═╡ e148212c-bc7c-4553-8ffa-26e6c20c5f47
 md"""
