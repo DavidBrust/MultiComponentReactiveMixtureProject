@@ -28,7 +28,7 @@ begin
 	using PyPlot
 
 	using FixedBed
-	
+
 	GridVisualize.default_plotter!(PlutoVista)
 	#GridVisualize.default_plotter!(PyPlot)
 end;
@@ -38,7 +38,7 @@ html"""
 <style>
 	main {
 		margin: 0 auto;
-		max-width: 1200px;
+		max-width: 1600px;
     	padding-left: max(160px, 10%);
     	padding-right: max(160px, 10%);
 	}
@@ -70,25 +70,30 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	
 	
 	Tamb::Float64=298.15*ufac"K" # ambient temperature
-	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
+	#α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
+	α_w::Float64=0.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
 	α_nc::Float64=15.0*ufac"W/(m^2*K)" # natural convection heat transfer coefficient
 
 	## irradiation data
-	G_lamp::Float64=50.0*ufac"kW/m^2" # solar simulator irradiation flux
+	G_lamp::Float64=1.0*ufac"kW/m^2" # solar simulator irradiation flux
 	Abs_lamp::Float64=0.7 # avg absorptivity of cat. of irradiation coming from lamp
 	Eps_ir::Float64=0.7 # avg absorptivity/emissivity of cat. of IR irradiation coming from surroundings / emitted
+	#Eps_ir::Float64=0.0 # avg absorptivity/emissivity of cat. of IR irradiation coming from surroundings / emitted
 	
 	
 	## porous filter data
 	d::Float64=100.0*ufac"μm" # average pore size
 	# cylindrical disc / 2D
-    D::Float64=10.0*ufac"cm" # disc diameter
-	Ac::Float64=pi*D^2.0/4.0*ufac"m^2" # cross-sectional area
+    D::Float64=12.0*ufac"cm" # disc diameter
+	
 
 	# prism / 3D
-	wi::Float64=10.0*ufac"cm" # prism width/side lenght
+	wi::Float64=12.0*ufac"cm" # prism width/side lenght
 	le::Float64=wi # prism width/side lenght
 	h::Float64=0.5*ufac"cm" # frit thickness (applies to 2D & 3D)
+
+	#Ac::Float64=pi*D^2.0/4.0*ufac"m^2" # cross-sectional area, circular
+	Ac::Float64=wi^2*ufac"m^2" # cross-sectional area, square
 	
 	ρs::Float64=2.23e3*ufac"kg/m^3" # density of non-porous Boro-Solikatglas 3.3
 	λs::Float64=1.4*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2 	
@@ -102,10 +107,13 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	## END porous filter data
 
 	## fluid data
-	Qflow::Float64=2000.0*ufac"ml/minute" # volumetric feed flow rate
+	#Qflow::Float64=100000.0*ufac"ml/minute" # volumetric feed flow rate
+	#Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate
+	Qflow::Float64=0.0*ufac"ml/minute" # volumetric feed flow rate
 	Tin::Float64=298.15*ufac"K" # inlet temperature
 	p::Float64=1.0*ufac"atm" # reactor pressure		
-	u0::Float64=Qflow/(Ac*ϕ)*ufac"m/s" # mean superficial velocity
+	# u0::Float64=Qflow/(Ac*ϕ)*ufac"m/s" # mean superficial velocity
+	u0::Float64=Qflow/(Ac)*ufac"m/s" # mean superficial velocity
 	# fluid properties: Air
 	# values taken from VDI heat atlas 2010 chapter D3.1
 	Fluid::FluidProps=Air
@@ -118,8 +126,25 @@ md"""
 # Experimental Conditions
 """
 
+# ╔═╡ 821aecc3-cf5d-4db2-bace-dab82c8cd711
+md"""
+## Average Superficial Velocity
+"""
+
+# ╔═╡ 561a9857-d29e-40cd-809f-cc667613251c
+md"""
+Following the definition provided in VDI heat atlas, the average superficiel veloctiy ``u_0`` is defined based on the volumetric flow rate and the cross-sectional area of the flow path according to:
+```math
+\begin{align}
+	u_0 &= \frac{\dot V}{A_{\text c}} \\
+	A_{\text c} &= \frac{\pi D^2}{4}, \quad \text{circular cross section} \\
+	A_{\text c} &= W^2, \quad \text{square cross section}
+\end{align}
+```
+"""
+
 # ╔═╡ 3b3595c4-f53d-4827-918e-edcb74dd81f8
-data = ModelData(;p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
+data = ModelData()
 
 # ╔═╡ 6d5a7d83-53f9-43f3-9ccd-dadab08f62c1
 md"""
@@ -131,7 +156,11 @@ Max. volumetric feed flow rate for each: Q = $(0.5*data.Qflow/ufac"ml/minute") m
 
 Total feed volumetric flow rate: __$(data.Qflow/ufac"ml/minute") ml/min__
 
-For frit diameter of __$(data.D/ufac"cm") cm__, porosity of __$(data.ϕ)__ the mean superficial velocity is __$(round(data.u0/ufac"cm/s",sigdigits=2)) cm/s__.
+"""
+
+# ╔═╡ fdddb318-831c-4277-a5a3-b4be8f63c430
+md"""
+For a (sqare) frit with side length of __$(data.wi/ufac"cm") cm__ the mean superficial velocity is __$(round(data.u0/ufac"cm/s",sigdigits=2)) cm/s__.
 """
 
 # ╔═╡ 4bcdb950-ed22-496c-ad70-e0c0fa4d7f52
@@ -275,7 +304,7 @@ function cylinder(;nref=0, r=5.0*ufac"cm", h=0.5*ufac"cm")
 end
 
 # ╔═╡ 8cd85a0e-3d11-4bcc-8a7d-f30313b31363
-gridplot(cylinder(;r=data.D/2,h=data.h))
+gridplot(cylinder(;r=data.D/2,h=data.h),resolution=(1000,1000))
 
 # ╔═╡ a190862c-2251-4110-8274-9960c495a2c4
 md"""
@@ -283,20 +312,20 @@ md"""
 """
 
 # ╔═╡ 4d9145f3-06aa-4a7c-82d0-feee0fa01865
-function prism_sq(;nref=0, l=10.0*ufac"cm", w=10.0*ufac"cm", h=0.5*ufac"cm")
+function prism_sq(data;nref=0, w=data.wi, h=data.h)
 	
 	hw=w/2.0/10.0*2.0^(-nref)
-	hl=l/2.0/10.0*2.0^(-nref)
+	#hl=l/2.0/10.0*2.0^(-nref)
 	hh=h/10.0*2.0^(-nref)
 	W=collect(0:hw:(w/2.0))
-    L=collect(0:hl:(l/2.0))
+    #L=collect(0:hl:(l/2.0))
     H=collect(0:hh:h)
 	
-	simplexgrid(W,L,H)	
+	simplexgrid(W,W,H)	
 end
 
 # ╔═╡ 61a67079-cb15-4283-ac15-96b49c461b6e
-gridplot(prism_sq(nref=0))
+gridplot(prism_sq(data,nref=0),Plotter=PlutoVista,resolution=(1000,1000))
 
 # ╔═╡ ebe2ed24-e2d6-4652-ae69-1a59747b0c4c
 function prism(;nref=0, l=10.0*ufac"cm", w=10.0*ufac"cm", h=0.5*ufac"cm")
@@ -329,7 +358,7 @@ end
 
 # ╔═╡ 7c6c81db-1920-49af-a101-462228614f95
 #gridplot(prism(nref=1),azim=20,elev=20,linewidth=0.5,outlinealpha=0.3)
-gridplot(prism(nref=1))
+gridplot(prism(nref=1),Plotter=PlutoVista)
 
 # ╔═╡ ed50c2d4-25e9-4159-84c7-e0c70ffa63a1
 md"""
@@ -354,13 +383,14 @@ md"""
 """
 
 # ╔═╡ d725f9b9-61c4-4724-a1d9-6a04ba42499d
-function main(;nref=0,p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
-	data=ModelData(Qflow=Qflow,	p=p,)
+function main(;nref=0)
+	data=ModelData()
 	iT=data.iT
 
 	# function return 2D velocity vector: flow upward in z-direction
     function fup(r,z)
         return 0,-data.u0
+		
     end    
 	
 	function flux(f,u,edge,data)
@@ -369,39 +399,53 @@ function main(;nref=0,p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
 		ρf=density_idealgas(Fluid, Tbar, p)
 		cf=heatcap_gas(Fluid, Tbar)
 		λf=thermcond_gas(Fluid, Tbar)
-		#λf=thermcond_gas(Fluid, Tin)
 		λbed=kbed(data)*λf
-		
-		#f[iT] = λbed*(u[iT,1]-u[iT,2])
+
 		conv=evelo[edge.index]*ρf*cf/λbed
 		Bp,Bm = fbernoulli_pm(conv)
-		f[iT]= λbed*(Bm*u[iT,1]-Bp*u[iT,2])
 		
-		#f[iT] = λbed*(u[iT,1]-u[iT,2])
+		#f[iT]= λbed*(Bm*u[iT,1]-Bp*u[iT,2])
+		f[iT]= λbed*(Bm*(u[iT,1]-data.Tamb)-Bp*(u[iT,2]-data.Tamb))
+		
 		
 	end
 
-	function irrad_bc(f,u,bnode,data)
+	function top(f,u,bnode,data)
 		if bnode.region==3 # top boundary
 			flux_rerad = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
-			flux_convec = data.α_nc*(u[iT]-data.Tamb)
-			f[iT] = -(data.Abs_lamp*data.G_lamp - flux_rerad - flux_convec)
+			
+			#flux_convec = data.α_nc*(u[iT]-data.Tamb)
+			ρf=density_idealgas(data.Fluid, u[iT], data.p)
+			cf=heatcap_gas(data.Fluid, u[iT])
+            flux_convec = -bfvelo[bnode.ibnode,bnode.ibface]*ρf*cf*(u[iT]-data.Tamb)
+			
+			f[iT] = -data.Abs_lamp*data.G_lamp + flux_rerad + flux_convec
 		end
 	end
 
+	function bottom(f,u,bnode,data)
+		if bnode.region==1 # bottom boundary
+            f[iT] = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
+		end
+	end
+
+
 	function bcondition(f,u,bnode,data)
 		#boundary_dirichlet!(f,u,bnode;species=iT,region=1,value=data.Tamb)
-		boundary_robin!(f,u,bnode;species=iT,region=1, factor=data.α_nc, value=data.Tamb*data.α_nc)
+		#boundary_robin!(f,u,bnode;species=iT,region=1, factor=data.α_nc, value=data.Tamb*data.α_nc)
+		bottom(f,u,bnode,data) # bottom boundary
+		
 		boundary_robin!(f,u,bnode;species=iT,region=2, factor=data.α_w, value=data.Tamb*data.α_w)
 		#boundary_dirichlet!(f,u,bnode;species=iT,region=3,value=data.Tamb+300.0)
 		# irradiation boundary condition
-		irrad_bc(f,u,bnode,data)
+		top(f,u,bnode,data)
 	end
 	
 
 	
 	grid=cylinder(;nref=nref,r=data.D/2,h=data.h)
 	evelo=edgevelocities(grid,fup)
+    bfvelo=bfacevelocities(grid,fup)
 	
 	sys=VoronoiFVM.System(grid;
                           data=data,
@@ -427,7 +471,7 @@ Sim2D=main(nref=1);
 let
 	sys,sol,data=Sim2D
 	iT=data.iT
-	vis=GridVisualizer()
+	vis=GridVisualizer(resolution=(800,800))
 	solC = copy(sol)
 	@. solC[iT,:] -= 273.15
 
@@ -441,8 +485,8 @@ md"""
 """
 
 # ╔═╡ f435b4df-9162-42bd-8154-5f3434ea0e2a
-function main3D(;nref=0,p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
-	data=ModelData(Qflow=Qflow,	p=p,)
+function main3D(;nref=0)
+	data=ModelData()
 	iT=data.iT
 
 	# function return 3D velocity vector: flow upward in z-direction
@@ -461,11 +505,11 @@ function main3D(;nref=0,p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
 		
 		vh=project(edge,(0,0,data.u0))
 		conv=vh*ρf*cf/λbed
-		#conv=evelo[edge.index]*ρf*cf/λbed
 		Bp,Bm = fbernoulli_pm(conv)
-		f[iT]= λbed*(Bm*u[iT,1]-Bp*u[iT,2])
+		#f[iT]= λbed*(Bm*u[iT,1]-Bp*u[iT,2])
+		f[iT]= λbed*(Bm*(u[iT,1]-data.Tamb)-Bp*(u[iT,2]-data.Tamb))
 		
-		#f[iT] = λbed*(u[iT,1]-u[iT,2])
+		
 		
 	end
 
@@ -477,21 +521,42 @@ function main3D(;nref=0,p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
 		end
 	end
 
+	function top(f,u,bnode,data)
+		if bnode.region==6 # top boundary
+			#flux_rerad = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
+			flux_rerad = 0
+			
+			ρf=density_idealgas(data.Fluid, u[iT], data.p)
+			cf=heatcap_gas(data.Fluid, u[iT])
+            flux_convec = data.u0*ρf*cf*(u[iT]-data.Tamb) # flow velocity is normal to top boundary
+			
+			f[iT] = -data.Abs_lamp*data.G_lamp + flux_rerad + flux_convec
+		end
+	end
+
+	function bottom(f,u,bnode,data)
+		if bnode.region==5 # bottom boundary
+            f[iT] = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
+		end
+	end
+
 	function bcondition(f,u,bnode,data)
 		#boundary_dirichlet!(f,u,bnode;species=iT,region=1,value=data.Tamb)
-		boundary_robin!(f,u,bnode;species=iT,region=5, factor=data.α_nc, value=data.Tamb*data.α_nc) # bottom
+		#boundary_robin!(f,u,bnode;species=iT,region=5, factor=data.α_nc, value=data.Tamb*data.α_nc) # bottom
+		bottom(f,u,bnode,data)
 		boundary_robin!(f,u,bnode;species=iT,region=2, factor=data.α_w, value=data.Tamb*data.α_w)
 		# for prism of square
 		boundary_robin!(f,u,bnode;species=iT,region=3, factor=data.α_w, value=data.Tamb*data.α_w)
 		#boundary_dirichlet!(f,u,bnode;species=iT,region=2,value=data.Tamb+300.0)
 		# irradiation boundary condition
-		irrad_bc(f,u,bnode,data)
+		#irrad_bc(f,u,bnode,data)
+		top(f,u,bnode,data)
 	end
 	
 
 	
 	#grid=prism(;nref=nref, w=data.wi, l=data.le, h=data.h)
-	grid=prism_sq(;nref=nref, w=data.wi, l=data.le, h=data.h)
+	grid=prism_sq(data;nref=nref,)
 	
 	sys=VoronoiFVM.System(grid;
                           data=data,
@@ -511,11 +576,11 @@ function main3D(;nref=0,p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
 end
 
 # ╔═╡ ea81db48-d02c-4438-a0ba-9c54a3ea0e52
-Sim3D=main3D(nref=1);
+Sim3D=main3D(nref=0);
 
 # ╔═╡ fb72aede-8997-48ef-9a2d-98acbf372747
 md"""
-f=$(@bind flevel Slider(range(([minimum(Sim3D[2]),maximum(Sim3D[2])].-273.15)... , length=20),default=(minimum(Sim3D[2])+maximum(Sim3D[2]))/2-273.15,show_value=true))
+f=$(@bind flevel Slider(range(([minimum(Sim3D[2]),maximum(Sim3D[2])].-273.15)... , length=40),default=(minimum(Sim3D[2])+maximum(Sim3D[2]))/2-273.15,show_value=true))
 
 x=$(@bind xplane Slider(range(0.0,data.wi/2,length=20),default=0.0,show_value=true))
 
@@ -529,12 +594,10 @@ z=$(@bind zplane Slider(range(0.0,data.h,length=20),default=0.0,show_value=true)
 let
 	sys,sol,data,nref=Sim3D
 	iT=data.iT
-	vis=GridVisualizer(resolution=(800,800),)
+	vis=GridVisualizer(resolution=(1000,1000),Plotter=PlutoVista)
 	solC=copy(sol)
 	@. solC[iT,:] -= 273.15
 
-	#flevels=collect(range(([minimum(Sim3D[2]),maximum(Sim3D[2])].-273.15)... , length=11))
-	#scalarplot!(vis,sys,solC;species=iT,xlabel="X / m", ylabel="Y / m", zlabel="Z / m", levels=flevels, xplanes=[xplane], yplanes=[yplane], zplanes=[zplane], levelalpha=1.0,title="Temperature / °C", outlinealpha=0.05, zoom=1.4)
 	scalarplot!(vis,sys,solC;species=iT,xlabel="X / m", ylabel="Y / m", zlabel="Z / m", levels=[flevel], xplanes=[xplane], yplanes=[yplane], zplanes=[zplane], levelalpha=1.0,title="Temperature / °C", outlinealpha=0.05)
 	scene=reveal(vis)
 	#save("plot_3D.svg",scene)
@@ -558,7 +621,7 @@ Y - cutplane $(@bind ycut Slider(range(0.0,data.wi/2,length=21),default=0.0,show
 
 # ╔═╡ b4175b62-198d-4605-9cf0-04b0be52c9c0
 function plane(ypos,sol,data,nref)
-	grid=prism_sq(;nref=nref, w=data.wi, l=data.le, h=data.h)
+	grid=prism_sq(data;nref=nref)
 	
 	bfacemask!(grid, [0,ypos,0],[data.wi/2.0,ypos,data.h],7)
 
@@ -592,7 +655,7 @@ let
 		k +=1
 	end
 
-	vis=GridVisualizer()
+	vis=GridVisualizer(resolution=(800,800))
 	#scalarplot!(vis,grid_2D,sol_reorder;colormap=:summer,show=true)
 	scalarplot!(vis,grid_2D,sol_cutplane.-sol_reorder;colormap=:bwr,show=true)
 
@@ -629,17 +692,22 @@ data.Abs_lamp*data.G_lamp*data.Ac
 
 # ╔═╡ a1f5c0c2-290e-418f-b381-4626d61c2bfd
 let
-	sys,sol,data=main(nref=1)
-	tf=VoronoiFVM.TestFunctionFactory(sys)
+	# sys,sol,data=main(nref=1)
+	sys,sol,data=Sim3D
+	
+	tff=VoronoiFVM.TestFunctionFactory(sys)
 	
 	# testfunction arguments:
 		# 2nd arg: boundaries, where the test func. value is 0 -> these boundaries are excludes from the surface integral
 		# 3rd arg: boundaries, where the test func. value is 1 -> these boundaries are included in the surface integral
 	
-	# flux integral over bottom boundary: diffusive in/out flux
-	tf_irr=testfunction(tf,[1,2,4],3)
-	integrate(sys,tf_irr,sol)	
+	# flux integral over top boundary: radiation (abs+emit), convective trans
+	tf=testfunction(tff,[1,2,3,4,5],6)
+	integrate(sys,tf,sol)*4
 end
+
+# ╔═╡ 09632d67-a2cd-4c6f-b390-688e9900fc1e
+gridplot(prism_sq(data,nref=0),)
 
 # ╔═╡ Cell order:
 # ╠═c258e0e6-72cc-4b3e-8f6d-e629e4a0d7fd
@@ -651,6 +719,9 @@ end
 # ╠═98063329-31e1-4d87-ba85-70419beb07e9
 # ╟─03d0c88a-462b-43c4-a589-616a8870be64
 # ╟─6d5a7d83-53f9-43f3-9ccd-dadab08f62c1
+# ╟─821aecc3-cf5d-4db2-bace-dab82c8cd711
+# ╟─561a9857-d29e-40cd-809f-cc667613251c
+# ╟─fdddb318-831c-4277-a5a3-b4be8f63c430
 # ╠═3b3595c4-f53d-4827-918e-edcb74dd81f8
 # ╟─4bcdb950-ed22-496c-ad70-e0c0fa4d7f52
 # ╠═73b71898-0268-42bd-b2e6-d0c5118700dd
@@ -663,7 +734,7 @@ end
 # ╟─bbd0b076-bcc1-43a1-91cb-d72bb17d3c88
 # ╠═7c4d4083-33e2-4b17-8575-214ef458d75d
 # ╟─16f5e0bc-8e3d-40cd-b67b-694eda6b67d9
-# ╟─1459c3db-5ffc-46bd-9c94-8c8964519f39
+# ╠═1459c3db-5ffc-46bd-9c94-8c8964519f39
 # ╠═4eb00d7b-d10e-478d-a1df-9eea3362ef5f
 # ╟─c9f326c1-abc0-412d-8348-8e23a7027661
 # ╟─d7317b2d-e2c7-4114-8985-51979f2205ba
@@ -680,7 +751,7 @@ end
 # ╟─9d8c6ddc-2662-4055-b636-649565c36287
 # ╠═e9003129-31db-4f9d-b289-638511c7ec26
 # ╟─ba5c2095-4858-444a-99b5-ae6cf40374f9
-# ╠═f15fd785-010c-4fda-ab4f-7947642556dd
+# ╟─f15fd785-010c-4fda-ab4f-7947642556dd
 # ╠═d725f9b9-61c4-4724-a1d9-6a04ba42499d
 # ╟─28a2230f-5a59-4034-86af-e3d58dcceb6c
 # ╠═ea81db48-d02c-4438-a0ba-9c54a3ea0e52
@@ -689,7 +760,7 @@ end
 # ╠═f435b4df-9162-42bd-8154-5f3434ea0e2a
 # ╟─64dd5097-16aa-4c44-b000-6177cd4be226
 # ╟─bd179765-f996-4f91-ac4e-57d5817a2ed6
-# ╟─3612d83d-a8bc-4c5f-8ea0-a4c975929500
+# ╠═3612d83d-a8bc-4c5f-8ea0-a4c975929500
 # ╟─641988da-8888-4e0d-b720-4f21a9900aca
 # ╠═b4175b62-198d-4605-9cf0-04b0be52c9c0
 # ╟─e148212c-bc7c-4553-8ffa-26e6c20c5f47
@@ -698,3 +769,4 @@ end
 # ╟─909044b9-d40d-4129-bfef-6cd131a932f2
 # ╠═30f0e723-a5a6-4b49-80d2-a29efb0f417b
 # ╠═a1f5c0c2-290e-418f-b381-4626d61c2bfd
+# ╠═09632d67-a2cd-4c6f-b390-688e9900fc1e
