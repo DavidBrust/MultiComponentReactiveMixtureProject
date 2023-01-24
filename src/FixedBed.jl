@@ -11,4 +11,7 @@ include("kinetics.jl")
 export ri
 export S3P
 
+include("modelprops.jl")
+export AbstractModelData, ModelData, RePrPe, kbed, hsf
+
 end
