@@ -714,7 +714,7 @@ gridplot(prism_sq(data,nref=0),)
 # ╠═7d8eb6f5-3ba6-46ef-8058-1f24a0938ed1
 # ╠═5c3adaa0-9285-11ed-3ef8-1b57dd870d6f
 # ╟─f353e09a-4a61-4def-ab8a-1bd6ce4ed58f
-# ╟─2015c8e8-36cd-478b-88fb-94605283ac29
+# ╠═2015c8e8-36cd-478b-88fb-94605283ac29
 # ╠═5136828c-6e88-40fc-b9a5-3c86db2f0879
 # ╠═98063329-31e1-4d87-ba85-70419beb07e9
 # ╟─03d0c88a-462b-43c4-a589-616a8870be64
@@ -756,7 +756,7 @@ gridplot(prism_sq(data,nref=0),)
 # ╟─28a2230f-5a59-4034-86af-e3d58dcceb6c
 # ╠═ea81db48-d02c-4438-a0ba-9c54a3ea0e52
 # ╠═8107492e-fdaf-4a86-96ef-ea34b45c0e67
-# ╟─fb72aede-8997-48ef-9a2d-98acbf372747
+# ╠═fb72aede-8997-48ef-9a2d-98acbf372747
 # ╠═f435b4df-9162-42bd-8154-5f3434ea0e2a
 # ╟─64dd5097-16aa-4c44-b000-6177cd4be226
 # ╟─bd179765-f996-4f91-ac4e-57d5817a2ed6

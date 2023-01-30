@@ -2,6 +2,8 @@ abstract type AbstractModelData end
 
 Base.@kwdef mutable struct ModelData <:AbstractModelData
 	iT::Int64=1 # index of Temperature variable
+    ng::Int64=2 # number of gas phase species
+	
 	
 	
 	Tamb::Float64=298.15*ufac"K" # ambient temperature
