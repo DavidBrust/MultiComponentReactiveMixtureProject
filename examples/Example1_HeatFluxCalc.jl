@@ -194,9 +194,9 @@ end
 
 function PlotLosses(C=[1,10,25,50,75,100])
     q_in,q_top_abs,q_top_refl,q_top_rerad,q_top_convec,q_sides_conv,q_bot_rerad = HeatFluxes(C)
-    p=plot(xguide="Irradiation / W cm⁻²", yguide="Loss contributions / -", legend=:outertopright, size=(400,250))
-	areaplot!(C*1.0*ufac"kW/m^2"/ufac"W/cm^2", [q_top_refl q_top_rerad q_top_convec q_sides_conv q_bot_rerad] ./ (q_in), fillalpha = [0.2 0.2], seriescolor = [1 2 3 4 5], label=["Refl Top" "Rerad Top" "Conv Top" "Conv Sides" "Rerad Bot"])
-
+    p=plot(xguide="Irradiation / kW m⁻²", yguide="Loss contributions / -", legend=:outertopright, size=(400,250))
+	areaplot!(C, [q_top_refl q_top_rerad q_top_convec q_sides_conv q_bot_rerad] ./ (q_in), fillalpha = [0.2 0.2], seriescolor = [1 2 3 4 5], label=["Refl Top" "Rerad Top" "Conv Top" "Conv Sides" "Rerad Bot"])
+    savefig("img/loss_contributions.svg")
 
 end
 
