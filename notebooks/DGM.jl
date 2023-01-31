@@ -123,7 +123,7 @@ In the framework of the DGM a system with ``\nu`` gas phase species has ``\nu+1`
 md"""
 ```math
 \begin{align}
-	\sum_{j=1 \atop j \neq i}^{\nu} \frac{x_i N_j-x_j N_i}{D_{ij}^{\text{eff}}} - \frac{N_i}{D_{i,\text K}^{\text{eff}}} &= \frac{\nabla p_i}{RT} + \frac{1}{D_{ij}^{\text{eff}}} \frac{p_i}{RT} \left(\frac{\kappa}{\mu} \nabla p \right) \\
+	\sum_{j=1 \atop j \neq i}^{\nu} \frac{x_i N_j-x_j N_i}{D_{ij}^{\text{eff}}} - \frac{N_i}{D_{i,\text K}^{\text{eff}}} &= \frac{\nabla p_i}{RT} + \frac{1}{D_{i,K}^{\text{eff}}} \frac{p_i}{RT} \left(\frac{\kappa}{\mu} \nabla p \right) \\
 	\sum_{i=1}^\nu p_i &= p
 \end{align}
 ```
@@ -286,6 +286,11 @@ Compare against data from __Veldsink, J. W., van Damme, R. M. J., Versteeg, G. F
 
 """
 
+# ╔═╡ 39452e46-ac88-4900-8f15-d8d67f9ac993
+md"""
+$(LocalResource("../img/params_DGM.png"))
+"""
+
 # ╔═╡ d6178bb7-4d33-4102-8d52-d1c2ef2f70b9
 begin
 	p_p0_dat = CSV.read("../data/Veldsink1995/p_p0.csv", DataFrame, delim=";", header=["r_R0","p_P0"] )
@@ -293,9 +298,23 @@ begin
 	xB_dat = CSV.read("../data/Veldsink1995/x_B.csv", DataFrame, delim=";", header=["r_R0","xB"] )
 end;
 
+# ╔═╡ cb908660-7fcb-4e2d-b1c3-f02d60a31221
+function thiele_mod(data)
+	δ=data.R0/3
+	n=1
+	kn=data.RRc
+	D_Ae=data.Dg[1]*data.ϵ_τ
+	δ*sqrt( (n+1)*kn*ph"R"*data.Tamb/(2*D_Ae))
+end
+
+# ╔═╡ b94129e3-684e-4b97-94af-2d3c029a0244
+md"""
+Reaction rate coefficinet pre factor, used to matched the rate of reaction that was used in Veldsink 1995 and described there as "fast kinetics".
+"""
+
 # ╔═╡ bc0bfd62-6057-4c07-89ac-cde6e8c840e3
 md"""
-$(@bind RRc_mod Slider(range(1.0,10.0,length=50),show_value=true,default=1.0))
+$(@bind RRc_mod Slider(range(1.0,5.0,length=41),show_value=true,default=2.4))
 """
 
 # ╔═╡ 8c639001-b3ef-494c-a3eb-c600b011c159
@@ -314,11 +333,6 @@ md"""
 # ╔═╡ 62dfbf09-c2dc-4fb9-82b8-07c631a5f826
 md"""
 From __Veldsink, J. W., van Damme, R. M. J., Versteeg, G. F., & van Swaaij, W. P. M. (1995).__ The use of the dusty-gas model for the description of mass transport with chemical reaction in porous media. The Chemical Engineering Journal and the Biochemical Engineering Journal, 57(2), 115-125. doi:10.1016/0923-0467(94)02929-6
-"""
-
-# ╔═╡ 39452e46-ac88-4900-8f15-d8d67f9ac993
-md"""
-$(LocalResource("../img/params_DGM.png"))
 """
 
 # ╔═╡ 3a35ac76-e1b7-458d-90b7-d59ba4f43367
@@ -423,12 +437,24 @@ function main(;data=ModelData(),nref=1)
 	sol=solve(sys;inival)
 
 	
-	sol,grid,data
+	sol,grid,data,sys
 end;
+
+# ╔═╡ 1bd2ffdb-c364-4a3f-8955-9de8273d2acd
+let
+	sol,grid,data,sys=main(nref=5)
+	tf=VoronoiFVM.TestFunctionFactory(sys)
+	Γ_where_T_equal_1=[2]
+	Γ_where_T_equal_0=[1]
+	T=testfunction(tf,Γ_where_T_equal_0,Γ_where_T_equal_1)
+	I=integrate(sys,T,sol)
+end
+
+# ╔═╡ 5abd4e0e-bcb3-4657-a73d-f558dc404e7f
+thiele_mod(ModelData(RRc=5.0e-2*RRc_mod))
 
 # ╔═╡ aa498412-e970-45f2-8b11-249cc5c2b18d
 sol,grid=main(data=ModelData(RRc=5.0e-2*RRc_mod),nref=2);
-
 
 # ╔═╡ 7530df59-03e7-4bb6-83f2-86369edc13ee
 data=ModelData()
@@ -506,6 +532,9 @@ let
 
 end
 
+# ╔═╡ 154ab2c8-1956-4258-8c10-f2b0314ed069
+data.D_K_eff
+
 # ╔═╡ Cell order:
 # ╠═11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 # ╟─863c9da7-ef45-49ad-80d0-3594eca4a189
@@ -522,7 +551,7 @@ end
 # ╟─8f4843c6-8d2b-4e24-b6f8-4eaf3dfc9bf0
 # ╟─66b55f6b-1af5-438d-aaa8-fe4745e85426
 # ╟─8528e15f-cce7-44d7-ac17-432f92cc5f53
-# ╠═19a46c60-d7b5-45da-a3c5-3687316b2a2c
+# ╟─19a46c60-d7b5-45da-a3c5-3687316b2a2c
 # ╟─d5987ad8-e71b-4d40-b1c1-88142558265d
 # ╟─d2adc467-d366-4461-9a00-9832e7d5a737
 # ╠═ed7941c4-0485-4d84-ad5b-383eb5cae70a
@@ -538,12 +567,17 @@ end
 # ╟─50e852a3-0aae-4cf3-9950-5548e34545a4
 # ╟─39452e46-ac88-4900-8f15-d8d67f9ac993
 # ╠═d6178bb7-4d33-4102-8d52-d1c2ef2f70b9
+# ╠═1bd2ffdb-c364-4a3f-8955-9de8273d2acd
+# ╠═cb908660-7fcb-4e2d-b1c3-f02d60a31221
+# ╠═5abd4e0e-bcb3-4657-a73d-f558dc404e7f
 # ╟─cecfe64e-1caa-447e-b3ba-a12ecf05e805
 # ╠═aa498412-e970-45f2-8b11-249cc5c2b18d
-# ╟─bc0bfd62-6057-4c07-89ac-cde6e8c840e3
+# ╟─b94129e3-684e-4b97-94af-2d3c029a0244
+# ╠═bc0bfd62-6057-4c07-89ac-cde6e8c840e3
 # ╠═4b41d985-8ebc-4cab-a089-756fce0d3060
 # ╟─8c639001-b3ef-494c-a3eb-c600b011c159
 # ╟─bba07772-a923-482e-b24b-acfaa24ac81c
 # ╟─62dfbf09-c2dc-4fb9-82b8-07c631a5f826
+# ╠═154ab2c8-1956-4258-8c10-f2b0314ed069
 # ╠═3a35ac76-e1b7-458d-90b7-d59ba4f43367
 # ╠═7530df59-03e7-4bb6-83f2-86369edc13ee
