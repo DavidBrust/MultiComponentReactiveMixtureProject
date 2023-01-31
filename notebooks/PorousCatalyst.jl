@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.19
+# v0.19.22
 
 using Markdown
 using InteractiveUtils
@@ -127,13 +127,6 @@ md"""
 Calculation of Knudsen diffusion coefficients according to __Wesselingh, J. A., & Krishna, R. (2006).__ Mass Transfer in Multicomponent Mixtures (ch. 21, Fig. 21.8)
 """
 
-# ╔═╡ 722e681c-225a-4484-b0b8-c85d4536e5f9
-function DK_eff(data,T,i)
-	ϕ=data.ϕ # porosity
-	dp=data.dp # avg. particle size (assumed to be = pore size)
-	dp*ϕ^1.5/(1.0-ϕ)*sqrt(8.0*ph"R"*T/(9.0*π*data.Fluids[i].MW))
-end
-
 # ╔═╡ 2fb1a154-2721-4da6-848e-99d46dfce774
 md"""
 ### Darcy's law
@@ -178,6 +171,97 @@ function D_matrix(data, T, p)
 	Symmetric(v, :L)
 end
 
+# ╔═╡ 02b76cda-ffae-4243-ab40-8d0fe1325776
+md"""
+##### Auxiliary functions
+"""
+
+# ╔═╡ 78cf4646-c373-4688-b1ac-92ed5f922e3c
+function reaction(f,u,node,data)
+	ngas=data.ng
+	ip=data.ip
+	RRc=data.RRc
+
+	
+	RR=RRc*u[1]
+	f[1] = RR # A
+	f[2] = -3.0*RR # H2
+	f[3] = -RR # B
+	
+	# ∑xi = 1
+	f[ip]=u[ip]-sum(u[1:ngas])
+	#f[ip]=log(sum(u[1:ngas])) -log(u[ip])
+	
+end
+
+# ╔═╡ 906ad096-4f0c-4640-ad3e-9632261902e3
+md"""
+## Boundary Conditions
+"""
+
+# ╔═╡ 7da59e27-62b9-4b89-b315-d88a4fd34f56
+function top(f,u,bnode,data)
+	if bnode.region==3 # top boundary			
+		# flow velocity is normal to top boundary
+		for i=1:data.ng
+			f[i] = data.u0*u[i]/(ph"R"*data.Tin)
+		end
+	end
+end
+
+# ╔═╡ 8a44c24e-ffd7-4265-81c5-4dd9fbf84164
+function bottom(f,u,bnode,data)
+	if bnode.region==1 # bottom boundary			
+		# flow velocity is normal to bot boundary
+		pi=zeros(Float64, data.ng)
+		pi[1] = 1.0*data.p # composition 100% species 1
+		for i=1:data.ng
+			f[i] = -data.u0*pi[i]/(ph"R"*data.Tin)				
+		end
+	end
+end
+
+# ╔═╡ 29d66705-3d9f-40b1-866d-dd3392a1a268
+function bcond(f,u,bnode,data)
+	ip=data.ip
+	p0=data.p
+	#Δp=data.Δp
+	boundary_dirichlet!(f,u,bnode,1,1,1.0*p0)
+	boundary_dirichlet!(f,u,bnode,2,1,0.0*p0)
+	boundary_dirichlet!(f,u,bnode,3,1,0.0*p0)
+
+	#boundary_dirichlet!(f,u,bnode,ip,1,p0) # total pressure
+	#boundary_dirichlet!(f,u,bnode,ip,3,p0-Δp) # total pressure
+
+	
+
+	top(f,u,bnode,data)
+	#bottom(f,u,bnode,data)
+	
+end
+
+# ╔═╡ 8db106cc-c5f1-498b-bf8b-fddd8e21b444
+function Bern(x)
+	y=0
+	sat=1e-2
+	x=2*x/sat
+	if x≈0.0
+		y=0
+	else
+		y=1-x/(exp(x)-1)
+		
+	end
+	sat*y
+end
+
+# ╔═╡ 722e681c-225a-4484-b0b8-c85d4536e5f9
+function DK_eff(data,T,i)
+	ϕ=data.ϕ # porosity
+	dp=data.dp # avg. particle size (assumed to be = pore size)
+	DK=dp*ϕ^1.5/(1.0-ϕ)*sqrt(8.0*ph"R"*T/(9.0*π*data.Fluids[i].MW))
+	Bern(DK)
+end
+
 # ╔═╡ b6381008-0280-404c-a86c-9c9c3c9f82eb
 function M_matrix(data,T,p,x)
 	n=data.ng
@@ -200,13 +284,14 @@ end
 
 # ╔═╡ ed7941c4-0485-4d84-ad5b-383eb5cae70a
 function flux(f,u,edge,data)
-	ngas=data.ng
+	#(;ng, ip, k, Tin, pscale) = data
+	ng=data.ng
 	ip=data.ip
-	#B0=data.B0
 	k=data.k
 	
-	F=zeros(eltype(u), ngas)
-	X=zeros(eltype(u), ngas)
+	
+	F=zeros(eltype(u), ng)
+	X=zeros(eltype(u), ng)
 	
 	T=data.Tin
 	
@@ -214,89 +299,37 @@ function flux(f,u,edge,data)
 	mole_frac!(data,X,u)
 	μ=dynvisc_mix(data, T, X)
 	#μ=data.μ
-		
-	δp = u[ip,1]-u[ip,2]
-	#ud = vel_darcy(data, δp, T, X) # darcy velocity
 
-	# Darcy flow
-	#f[ip]=k/μ * δp
-	
+	pk,pl = u[ip,1],u[ip,2]
+	δp = pk-pl
+
+
+	# Darcy flow	
 	#vh = project(edge,(0,data.u0))
 	ud=k/μ * δp
 	#ud=0
 	
 	
-	for i=1:ngas
-		#δpi = u[i,1]-u[i,2]
-		#pim = 0.5*(u[i,1]+u[i,2])
-		#F[i] = (δpi + pim/DK[i]*B0/μ*δp)/(ph"R"*T)
+	for i=1:ng
 
 		DK = DK_eff(data,T,i)
 		#DK = data.D_K_eff[i]
 		
-		#bp,bm=fbernoulli_pm(0/DK)
 		bp,bm=fbernoulli_pm(ud/DK)
+		
+		
 		F[i] = -(bm*u[i,1]-bp*u[i,2])/(ph"R"*T)
-		#F[i] = (δpi)/(ph"R"*T)
-		#X[i] = pim/pm
 	end
 	
     
 	# computation of fluxes J
 	#J = M_matrix(data,X) \ F
-	pm = 0.5*(u[ip,1]+u[ip,2])
+	pm = 0.5*(pk+pl)
 	J = M_matrix(data,T,pm,X) \ F
 	
-	f[1:ngas] = J
+	f[1:ng] = J
 	
 	#f[ip] via reaction: ∑pi = p
-end
-
-# ╔═╡ 02b76cda-ffae-4243-ab40-8d0fe1325776
-md"""
-##### Auxiliary functions
-"""
-
-# ╔═╡ 78cf4646-c373-4688-b1ac-92ed5f922e3c
-function reaction(f,u,node,data)
-	ngas=data.ng
-	ip=data.ip
-	RRc=data.RRc
-		
-	RR=RRc*u[1]
-	f[1] = RR # A
-	f[2] = -3.0*RR # H2
-	f[3] = -RR # B
-	
-	# ∑xi = 1
-	f[ip]=u[ip]-sum(u[1:ngas])
-	#f[ip]=log(sum(u[1:ngas])) -log(u[ip])
-	
-end
-
-# ╔═╡ 29d66705-3d9f-40b1-866d-dd3392a1a268
-function bcond(f,u,bnode,data)
-	ip=data.ip
-	p0=data.p
-	Δp=data.Δp
-	boundary_dirichlet!(f,u,bnode,1,1,1.0*p0)
-	boundary_dirichlet!(f,u,bnode,2,1,0.0*p0)
-	boundary_dirichlet!(f,u,bnode,3,1,0.0*p0)
-
-	boundary_dirichlet!(f,u,bnode,ip,1,p0) # total pressure
-	#boundary_dirichlet!(f,u,bnode,ip,3,p0-Δp) # total pressure
-	
-	function top(f,u,bnode,data)
-		if bnode.region==3 # top boundary
-			
-			# flow velocity is normal to top boundary
-			for i=1:data.ng
-            	f[i] = data.u0*u[i]/(ph"R"*data.Tin)
-			end
-		end
-	end
-
-	
 end
 
 # ╔═╡ 2f24ba85-748a-44a6-bde1-8e320106198d
@@ -328,9 +361,10 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	
 	#iT::Int64=1 # index of Temperature variable
 	ip::Int64=ng+1 # index of total pressure variable
+	pscale::Float64  = 1.0*ufac"GPa"         # pressure scaling nparameter
 
 	
-	RRc::Float64 = 1.0e-3 # reaction rate constant	
+	RRc::Float64 = 1.0e-4 # reaction rate constant	
 	μ::Float64=1.0e-5*ufac"Pa*s" # gas viscosity
 
 	
@@ -345,7 +379,7 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 		
 	
 	## porous filter data
-	dp::Float64=1.0*ufac"μm" # average pore size
+	dp::Float64=100.0*ufac"μm" # average pore size
 	#dp::Float64=1.0*ufac"μm" # average pore size
 	#dp::Float64=2.9e-7*ufac"m" # average pore size
 	# cylindrical disc / 2D
@@ -376,7 +410,8 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 
 	## fluid data
 	
-	Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate
+	#Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate
+	Qflow::Float64=400.0*ufac"ml/minute" # volumetric feed flow rate
 	Tin::Float64=298.15*ufac"K" # inlet temperature
 	#Tin::Float64=600.0*ufac"K" # inlet temperature
 	p::Float64=1.0*ufac"atm" # reactor pressure
@@ -396,9 +431,17 @@ data=ModelData()
 # ╔═╡ fbd53732-2fef-490f-aef0-cac0e7d60574
 function cylinder(;nref=2, r=data.D/2, h=data.h)
     #step=0.1*ufac"cm"*2.0^(-nref)
+
+	
 	hr=r/10.0*2.0^(-nref)
+	hrf=r/100.0*2.0^(-nref)
 	hh=h/10.0*2.0^(-nref)
-    R=collect(0:hr:r)
+
+	RLeft=geomspace(0.0,r/2,hrf, hr)
+	RRight=geomspace(r/2,r,hr,hrf)
+	R=glue(RLeft, RRight)
+	
+    #R=collect(0:hr:r)
     Z=collect(0:hh:h)
     grid=simplexgrid(R,Z)
     circular_symmetric!(grid)
@@ -406,7 +449,7 @@ function cylinder(;nref=2, r=data.D/2, h=data.h)
 end
 
 # ╔═╡ 8f2b1d6a-04eb-4a79-9807-99905c8ef398
-gridplot(cylinder(),legend=:rt,show=true)
+gridplot(cylinder(nref=0),legend=:rt,show=true)
 
 # ╔═╡ 333b5c80-259d-47aa-a441-ee7894d6c407
 function main(;data=ModelData())
@@ -425,10 +468,12 @@ function main(;data=ModelData())
 
 	inival=unknowns(sys)
 	inival[:,:].=1.0*data.p
-
+	for i=1:ngas
+		inival[i,:] ./= ngas
+	end
 
 	
-	sol=solve(sys;inival)
+	sol=solve(sys;inival,)
 
 	
 	sol,grid,sys
@@ -441,7 +486,7 @@ sol,grid,sys=main();
 begin
 	tf=VoronoiFVM.TestFunctionFactory(sys)
 	Γ_where_T_equal_1=[4]
-	Γ_where_T_equal_0=[1,3,2]
+	Γ_where_T_equal_0=[1,2,3,]
 	T=testfunction(tf,Γ_where_T_equal_0,Γ_where_T_equal_1)
 	#I=integrate(sys,T,sol) / (4*π*data.R0^2)
 	I=integrate(sys,T,sol)
@@ -472,6 +517,9 @@ function plane(data,sol)
 	#sol_cutplane, grid_2D	
 end
 
+# ╔═╡ d601aeb5-3254-4436-88f7-52a17d79d7a2
+DK_eff(data,600.0,1)
+
 # ╔═╡ 738d2865-7f47-4d28-bf6c-56e5386bfe9b
 let
 	T=data.Tin
@@ -487,7 +535,7 @@ let
 	ip=data.ip
 	# visualization
 	vis=GridVisualizer(layout=(2,1))
-	
+
 	# 2D plot
 	scalarplot!(vis[1,1], grid, sol[1,:], zoom=2.2)
 	
@@ -509,9 +557,6 @@ let
 
 end
 
-# ╔═╡ 81a24bec-6a26-4cd8-808f-e02ff8dfac67
- DK_eff(ModelData(dp=0.06*ufac"μm"),data.Tin,1)
-
 # ╔═╡ Cell order:
 # ╠═11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 # ╟─863c9da7-ef45-49ad-80d0-3594eca4a189
@@ -532,6 +577,7 @@ end
 # ╟─a60ce05e-8d92-4172-b4c1-ac3221c54fe5
 # ╟─24374b7a-ce77-45f0-a7a0-c47a224a0b06
 # ╟─4865804f-d385-4a1a-9953-5ac66ea50057
+# ╠═d601aeb5-3254-4436-88f7-52a17d79d7a2
 # ╠═722e681c-225a-4484-b0b8-c85d4536e5f9
 # ╟─2fb1a154-2721-4da6-848e-99d46dfce774
 # ╟─cc12f23a-4a80-463b-baf8-22f58d341d9d
@@ -542,13 +588,16 @@ end
 # ╠═b6381008-0280-404c-a86c-9c9c3c9f82eb
 # ╟─02b76cda-ffae-4243-ab40-8d0fe1325776
 # ╠═78cf4646-c373-4688-b1ac-92ed5f922e3c
+# ╟─906ad096-4f0c-4640-ad3e-9632261902e3
+# ╠═7da59e27-62b9-4b89-b315-d88a4fd34f56
+# ╠═8a44c24e-ffd7-4265-81c5-4dd9fbf84164
 # ╠═29d66705-3d9f-40b1-866d-dd3392a1a268
 # ╠═333b5c80-259d-47aa-a441-ee7894d6c407
 # ╠═aa498412-e970-45f2-8b11-249cc5c2b18d
 # ╠═3d660986-f6d7-41a6-800b-68ccd920c7ac
 # ╠═358cafd5-1200-4ff7-b56b-fc4bb50afbd7
 # ╟─4b41d985-8ebc-4cab-a089-756fce0d3060
-# ╠═81a24bec-6a26-4cd8-808f-e02ff8dfac67
+# ╠═8db106cc-c5f1-498b-bf8b-fddd8e21b444
 # ╠═bd7552d2-2c31-4834-97d9-ccdb4652242f
 # ╟─2f24ba85-748a-44a6-bde1-8e320106198d
 # ╟─a96be76c-df66-4149-994c-5b14cc0c3a37

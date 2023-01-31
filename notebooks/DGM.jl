@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.19
+# v0.19.22
 
 using Markdown
 using InteractiveUtils
@@ -275,6 +275,30 @@ function bcond(f,u,bnode,data)
 	
 end
 
+# ╔═╡ 333b5c80-259d-47aa-a441-ee7894d6c407
+function main(;data=ModelData(),nref=1)
+	grid=grid_(data,nref=nref)
+	ngas=data.ng
+	R0=data.R0
+	sys=VoronoiFVM.System( 	grid;
+							data=data,
+							flux=flux,
+							reaction=reaction,
+							bcondition=bcond
+							)
+	enable_species!(sys; species=collect(1:(ngas+1)))
+
+	inival=unknowns(sys)
+	inival[:,:].=1.0*data.pamb
+
+
+	
+	sol=solve(sys;inival)
+
+	
+	sol,grid,data,sys
+end;
+
 # ╔═╡ ea20ff65-4ecb-4847-af46-37b71d474efd
 md"""
 # Model Verification
@@ -298,6 +322,16 @@ begin
 	xB_dat = CSV.read("../data/Veldsink1995/x_B.csv", DataFrame, delim=";", header=["r_R0","xB"] )
 end;
 
+# ╔═╡ 1bd2ffdb-c364-4a3f-8955-9de8273d2acd
+let
+	sol,grid,data,sys=main(nref=5)
+	tf=VoronoiFVM.TestFunctionFactory(sys)
+	Γ_where_T_equal_1=[2]
+	Γ_where_T_equal_0=[1]
+	T=testfunction(tf,Γ_where_T_equal_0,Γ_where_T_equal_1)
+	I=integrate(sys,T,sol)
+end
+
 # ╔═╡ cb908660-7fcb-4e2d-b1c3-f02d60a31221
 function thiele_mod(data)
 	δ=data.R0/3
@@ -316,6 +350,12 @@ Reaction rate coefficinet pre factor, used to matched the rate of reaction that 
 md"""
 $(@bind RRc_mod Slider(range(1.0,5.0,length=41),show_value=true,default=2.4))
 """
+
+# ╔═╡ 5abd4e0e-bcb3-4657-a73d-f558dc404e7f
+thiele_mod(ModelData(RRc=5.0e-2*RRc_mod))
+
+# ╔═╡ aa498412-e970-45f2-8b11-249cc5c2b18d
+sol,grid=main(data=ModelData(RRc=5.0e-2*RRc_mod),nref=2);
 
 # ╔═╡ 8c639001-b3ef-494c-a3eb-c600b011c159
 md"""
@@ -416,46 +456,6 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	
 end;
 
-# ╔═╡ 333b5c80-259d-47aa-a441-ee7894d6c407
-function main(;data=ModelData(),nref=1)
-	grid=grid_(data,nref=nref)
-	ngas=data.ng
-	R0=data.R0
-	sys=VoronoiFVM.System( 	grid;
-							data=data,
-							flux=flux,
-							reaction=reaction,
-							bcondition=bcond
-							)
-	enable_species!(sys; species=collect(1:(ngas+1)))
-
-	inival=unknowns(sys)
-	inival[:,:].=1.0*data.pamb
-
-
-	
-	sol=solve(sys;inival)
-
-	
-	sol,grid,data,sys
-end;
-
-# ╔═╡ 1bd2ffdb-c364-4a3f-8955-9de8273d2acd
-let
-	sol,grid,data,sys=main(nref=5)
-	tf=VoronoiFVM.TestFunctionFactory(sys)
-	Γ_where_T_equal_1=[2]
-	Γ_where_T_equal_0=[1]
-	T=testfunction(tf,Γ_where_T_equal_0,Γ_where_T_equal_1)
-	I=integrate(sys,T,sol)
-end
-
-# ╔═╡ 5abd4e0e-bcb3-4657-a73d-f558dc404e7f
-thiele_mod(ModelData(RRc=5.0e-2*RRc_mod))
-
-# ╔═╡ aa498412-e970-45f2-8b11-249cc5c2b18d
-sol,grid=main(data=ModelData(RRc=5.0e-2*RRc_mod),nref=2);
-
 # ╔═╡ 7530df59-03e7-4bb6-83f2-86369edc13ee
 data=ModelData()
 
@@ -535,6 +535,9 @@ end
 # ╔═╡ 154ab2c8-1956-4258-8c10-f2b0314ed069
 data.D_K_eff
 
+# ╔═╡ b4edce69-a693-44c4-b0f1-604ce30ecfad
+data.D_0*data.ϵ_τ
+
 # ╔═╡ Cell order:
 # ╠═11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 # ╟─863c9da7-ef45-49ad-80d0-3594eca4a189
@@ -579,5 +582,6 @@ data.D_K_eff
 # ╟─bba07772-a923-482e-b24b-acfaa24ac81c
 # ╟─62dfbf09-c2dc-4fb9-82b8-07c631a5f826
 # ╠═154ab2c8-1956-4258-8c10-f2b0314ed069
+# ╠═b4edce69-a693-44c4-b0f1-604ce30ecfad
 # ╠═3a35ac76-e1b7-458d-90b7-d59ba4f43367
 # ╠═7530df59-03e7-4bb6-83f2-86369edc13ee
