@@ -17,6 +17,7 @@ end
 # ╔═╡ 5c3adaa0-9285-11ed-3ef8-1b57dd870d6f
 begin
 	using Pkg
+	using Revise
 	Pkg.activate(joinpath(@__DIR__,".."))
 	
 	using VoronoiFVM
@@ -25,25 +26,13 @@ begin
 	using LessUnitful
 	using PlutoVista
 	using PlutoUI
-	using PyPlot
+	#using PyPlot
 
 	using FixedBed
-
+	
 	GridVisualize.default_plotter!(PlutoVista)
 	#GridVisualize.default_plotter!(PyPlot)
 end;
-
-# ╔═╡ c258e0e6-72cc-4b3e-8f6d-e629e4a0d7fd
-html"""
-<style>
-	main {
-		margin: 0 auto;
-		max-width: 1600px;
-    	padding-left: max(160px, 10%);
-    	padding-right: max(160px, 10%);
-	}
-</style>
-"""
 
 # ╔═╡ 7d8eb6f5-3ba6-46ef-8058-1f24a0938ed1
 PlutoUI.TableOfContents(title="Heat Transfer in Fixed Beds")
@@ -61,21 +50,20 @@ $(LocalResource("../img/filter2.png", :width => 1000))
 $(LocalResource("../img/filter3.png", :width => 1000))
 """
 
-# ╔═╡ 5136828c-6e88-40fc-b9a5-3c86db2f0879
-abstract type AbstractModelData end
-
 # ╔═╡ 98063329-31e1-4d87-ba85-70419beb07e9
 Base.@kwdef mutable struct ModelData <:AbstractModelData
 	iT::Int64=1 # index of Temperature variable
-	
+	ng::Int64=1 # number of gas phase components
+	X0::Vector{Float64} = [1.0]
+	Fluids::Vector{AbstractFluidProps} = [Air]
 	
 	Tamb::Float64=298.15*ufac"K" # ambient temperature
-	#α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
-	α_w::Float64=0.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
+	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
+	#α_w::Float64=0.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
 	α_nc::Float64=15.0*ufac"W/(m^2*K)" # natural convection heat transfer coefficient
 
 	## irradiation data
-	G_lamp::Float64=1.0*ufac"kW/m^2" # solar simulator irradiation flux
+	G_lamp::Float64=50.0*ufac"kW/m^2" # solar simulator irradiation flux
 	Abs_lamp::Float64=0.7 # avg absorptivity of cat. of irradiation coming from lamp
 	Eps_ir::Float64=0.7 # avg absorptivity/emissivity of cat. of IR irradiation coming from surroundings / emitted
 	#Eps_ir::Float64=0.0 # avg absorptivity/emissivity of cat. of IR irradiation coming from surroundings / emitted
@@ -102,14 +90,14 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	ϕ::Float64=0.36 # porosity, class 2
 	k::Float64=2.9e-11*ufac"m^2" # permeability
 	a_s::Float64=0.13*ufac"m^2/g" # specific surface area
-	ρfrit::Float64=(1.0-ϕ)*ρs+ϕ*density_idealgas(Air, 298.15, 1.0*ufac"atm")*ufac"kg/m^3" # density of porous frit
+	ρfrit::Float64=(1.0-ϕ)*ρs*ufac"kg/m^3" # density of porous frit
 	a_v::Float64=a_s*ρfrit # volume specific interface area
 	## END porous filter data
 
 	## fluid data
 	#Qflow::Float64=100000.0*ufac"ml/minute" # volumetric feed flow rate
-	#Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate
-	Qflow::Float64=0.0*ufac"ml/minute" # volumetric feed flow rate
+	Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate
+	#Qflow::Float64=0.0*ufac"ml/minute" # volumetric feed flow rate
 	Tin::Float64=298.15*ufac"K" # inlet temperature
 	p::Float64=1.0*ufac"atm" # reactor pressure		
 	# u0::Float64=Qflow/(Ac*ϕ)*ufac"m/s" # mean superficial velocity
@@ -168,23 +156,8 @@ md"""
 ## Dimensionless numbers
 """
 
-# ╔═╡ 73b71898-0268-42bd-b2e6-d0c5118700dd
-function RePrPe(data::AbstractModelData,T,p)
-	d=data.d
-	u0=data.u0
-	ρf = density_idealgas(data.Fluid, T, p)
-	ηf = dynvisc_gas(data.Fluid, T)
-	cf = heatcap_gas(data.Fluid, T)
-	λf = thermcond_gas(data.Fluid, T)
-	
-	Re = u0*ρf*d/ηf # Reynolds number
-	Pr = cf*ηf/λf # Prandtl number
-	Pe = u0*ρf*cf*d/λf # Peclet
-	Re,Pr,Pe
-end
-
-# ╔═╡ 7e83918e-3ba4-4bbb-be8c-839eb32def13
-Re,Pr,Pe = RePrPe(data,data.Tin,data.p)
+# ╔═╡ 34f73c7e-0cc3-4d42-8b92-b4171c36e54a
+Re,Pr,Pe=RePrPe(data::AbstractModelData,data.Tin,data.p,data.X0);
 
 # ╔═╡ 13e66a6a-b329-40e8-9098-05f4077d1242
 md"""
@@ -234,6 +207,9 @@ __Zehner, P., & Schlünder, E. U. (1970).__ Wärmeleitfähigkeit von Schüttunge
 Implementation follows the notation in __VDI Heat Atlas 2010, ch. D6.3 eqs. (5a-5e).__
 """
 
+# ╔═╡ 6dac2935-c7bf-457c-b83f-bd757bc3a4bc
+
+
 # ╔═╡ 7c4d4083-33e2-4b17-8575-214ef458d75d
 function kbed(data)
 	(;ϕ,λs,Fluid,Tin) = data
@@ -262,18 +238,9 @@ __Kuwahara, F., Shirota, M., & Nakayama, A. (2001).__ A numerical study of inter
 
 """
 
-# ╔═╡ 4eb00d7b-d10e-478d-a1df-9eea3362ef5f
-function hsf(data::AbstractModelData,T,p)
-	Re,Pr,_ = RePrPe(data,T,p)
-	λf = thermcond_gas(data.Fluid, T)
-	ϕ = data.ϕ
-	d = data.d
-	λf/d*((1.0 + 4*(1.0-ϕ)/ϕ) + 0.5*(1.0-ϕ)^0.5*Re^0.6*Pr^(1.0/3.0))*ufac"W/(m^2*K)"
-end
-
 # ╔═╡ c9f326c1-abc0-412d-8348-8e23a7027661
 md"""
-For the given porous medium with very fine pore and particle sizes (__$(round(data.d/ufac"μm",sigdigits=2)) μm__), the volume specific interfacial area ``A_{\text v} = `` $(round(data.a_v,sigdigits=4)) `` \text{m}^2`` and interfacial heat transfer coefficient ``h_{\text{sf}} = `` $(round(hsf(data,data.Tin,data.p),sigdigits=4)) ``\text W/ \text m^2 \text K`` take on very large values. Therefore the solid and gas phases are in thermal equilibrium. This justifies the use of a quasi-homogeneous model, describing both phases by a single temperature.
+For the given porous medium with very fine pore and particle sizes (__$(round(data.d/ufac"μm",sigdigits=2)) μm__), the volume specific interfacial area ``A_{\text v} = `` $(round(data.a_v,sigdigits=4)) `` \text{m}^2`` and interfacial heat transfer coefficient ``h_{\text{sf}} = `` $(round(hsf(data,data.Tin,data.p,data.X0),sigdigits=4)) ``\text W/ \text m^2 \text K`` take on very large values. Therefore the solid and gas phases are in thermal equilibrium. This justifies the use of a quasi-homogeneous model, describing both phases by a single temperature.
 """
 
 # ╔═╡ d7317b2d-e2c7-4114-8985-51979f2205ba
@@ -304,7 +271,7 @@ function cylinder(;nref=0, r=5.0*ufac"cm", h=0.5*ufac"cm")
 end
 
 # ╔═╡ 8cd85a0e-3d11-4bcc-8a7d-f30313b31363
-gridplot(cylinder(;r=data.D/2,h=data.h),resolution=(1000,1000))
+gridplot(cylinder(;r=data.D/2,h=data.h),show=true)
 
 # ╔═╡ a190862c-2251-4110-8274-9960c495a2c4
 md"""
@@ -325,7 +292,7 @@ function prism_sq(data;nref=0, w=data.wi, h=data.h)
 end
 
 # ╔═╡ 61a67079-cb15-4283-ac15-96b49c461b6e
-gridplot(prism_sq(data,nref=0),Plotter=PlutoVista,resolution=(1000,1000))
+gridplot(prism_sq(data,nref=0),reveal=true)
 
 # ╔═╡ ebe2ed24-e2d6-4652-ae69-1a59747b0c4c
 function prism(;nref=0, l=10.0*ufac"cm", w=10.0*ufac"cm", h=0.5*ufac"cm")
@@ -358,7 +325,7 @@ end
 
 # ╔═╡ 7c6c81db-1920-49af-a101-462228614f95
 #gridplot(prism(nref=1),azim=20,elev=20,linewidth=0.5,outlinealpha=0.3)
-gridplot(prism(nref=1),Plotter=PlutoVista)
+gridplot(prism(nref=1))
 
 # ╔═╡ ed50c2d4-25e9-4159-84c7-e0c70ffa63a1
 md"""
@@ -394,11 +361,14 @@ function main(;nref=0)
     end    
 	
 	function flux(f,u,edge,data)
-		(;Fluid,u0,p)=data
+		(;Fluids,u0,p,X0)=data
 		Tbar=0.5*(u[iT,1]+u[iT,2])
-		ρf=density_idealgas(Fluid, Tbar, p)
-		cf=heatcap_gas(Fluid, Tbar)
-		λf=thermcond_gas(Fluid, Tbar)
+		#ρf=density_idealgas(Fluid, Tbar, p)
+		ρf=density_idealgas(Fluids, Tbar, p, X0)
+		#cf=heatcap_gas(Fluid, Tbar)
+		cf=heatcap_mix(Fluids, Tbar, X0)
+		#λf=thermcond_gas(Fluid, Tbar)
+		_,λf=dynvisc_thermcond_mix(data, Tbar, X0)
 		λbed=kbed(data)*λf
 
 		conv=evelo[edge.index]*ρf*cf/λbed
@@ -415,8 +385,11 @@ function main(;nref=0)
 			flux_rerad = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
 			
 			#flux_convec = data.α_nc*(u[iT]-data.Tamb)
-			ρf=density_idealgas(data.Fluid, u[iT], data.p)
-			cf=heatcap_gas(data.Fluid, u[iT])
+			#ρf=density_idealgas(data.Fluid, u[iT], data.p)
+			ρf=density_idealgas(data.Fluids, u[iT], data.p, data.X0)
+			#cf=heatcap_gas(data.Fluid, u[iT])
+			cf=heatcap_mix(data.Fluids, u[iT], data.X0)
+			
             flux_convec = -bfvelo[bnode.ibnode,bnode.ibface]*ρf*cf*(u[iT]-data.Tamb)
 			
 			f[iT] = -data.Abs_lamp*data.G_lamp + flux_rerad + flux_convec
@@ -465,13 +438,13 @@ function main(;nref=0)
 end
 
 # ╔═╡ e9003129-31db-4f9d-b289-638511c7ec26
-Sim2D=main(nref=1);
+Sim2D=main();
 
 # ╔═╡ f15fd785-010c-4fda-ab4f-7947642556dd
 let
 	sys,sol,data=Sim2D
 	iT=data.iT
-	vis=GridVisualizer(resolution=(800,800))
+	vis=GridVisualizer()
 	solC = copy(sol)
 	@. solC[iT,:] -= 273.15
 
@@ -494,21 +467,26 @@ function main3D(;nref=0)
         return 0,0,-data.u0
     end    
 	
-	function flux(f,u,edge,data)
-		(;Fluid,u0,p)=data
+
+
+		function flux(f,u,edge,data)
+		(;Fluids,u0,p,X0)=data
 		Tbar=0.5*(u[iT,1]+u[iT,2])
-		ρf=density_idealgas(Fluid, Tbar, p)
-		cf=heatcap_gas(Fluid, Tbar)
-		λf=thermcond_gas(Fluid, Tbar)
-		#λf=thermcond_gas(Fluid, Tin)
+		#ρf=density_idealgas(Fluid, Tbar, p)
+		ρf=density_idealgas(Fluids, Tbar, p, X0)
+		#cf=heatcap_gas(Fluid, Tbar)
+		cf=heatcap_mix(Fluids, Tbar, X0)
+		#λf=thermcond_gas(Fluid, Tbar)
+		_,λf=dynvisc_thermcond_mix(data, Tbar, X0)
 		λbed=kbed(data)*λf
-		
+
 		vh=project(edge,(0,0,data.u0))
-		conv=vh*ρf*cf/λbed
+		conv=vh*ρf*cf/λbed	
+		
 		Bp,Bm = fbernoulli_pm(conv)
+		
 		#f[iT]= λbed*(Bm*u[iT,1]-Bp*u[iT,2])
 		f[iT]= λbed*(Bm*(u[iT,1]-data.Tamb)-Bp*(u[iT,2]-data.Tamb))
-		
 		
 		
 	end
@@ -521,14 +499,19 @@ function main3D(;nref=0)
 		end
 	end
 
-	function top(f,u,bnode,data)
+
+
+
+		function top(f,u,bnode,data)
 		if bnode.region==6 # top boundary
-			#flux_rerad = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
-			flux_rerad = 0
+			flux_rerad = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
 			
-			ρf=density_idealgas(data.Fluid, u[iT], data.p)
-			cf=heatcap_gas(data.Fluid, u[iT])
-            flux_convec = data.u0*ρf*cf*(u[iT]-data.Tamb) # flow velocity is normal to top boundary
+			
+			ρf=density_idealgas(data.Fluids, u[iT], data.p, data.X0)
+			cf=heatcap_mix(data.Fluids, u[iT], data.X0)
+			
+			# flow velocity is normal to top boundary
+            flux_convec = data.u0*ρf*cf*(u[iT]-data.Tamb) 
 			
 			f[iT] = -data.Abs_lamp*data.G_lamp + flux_rerad + flux_convec
 		end
@@ -594,7 +577,7 @@ z=$(@bind zplane Slider(range(0.0,data.h,length=20),default=0.0,show_value=true)
 let
 	sys,sol,data,nref=Sim3D
 	iT=data.iT
-	vis=GridVisualizer(resolution=(1000,1000),Plotter=PlutoVista)
+	vis=GridVisualizer()
 	solC=copy(sol)
 	@. solC[iT,:] -= 273.15
 
@@ -616,7 +599,7 @@ Below the difference between 3D and 2D __(3D - 2D)__ calculation is shown for di
 
 # ╔═╡ 641988da-8888-4e0d-b720-4f21a9900aca
 md"""
-Y - cutplane $(@bind ycut Slider(range(0.0,data.wi/2,length=21),default=0.0,show_value=true))
+Y - cutplane $(@bind ycut Slider(range(0.0,data.wi/2,length=11),default=0.0,show_value=true))
 """
 
 # ╔═╡ b4175b62-198d-4605-9cf0-04b0be52c9c0
@@ -655,67 +638,17 @@ let
 		k +=1
 	end
 
-	vis=GridVisualizer(resolution=(800,800))
+	vis=GridVisualizer()
 	#scalarplot!(vis,grid_2D,sol_reorder;colormap=:summer,show=true)
 	scalarplot!(vis,grid_2D,sol_cutplane.-sol_reorder;colormap=:bwr,show=true)
 
 end
 
-# ╔═╡ e148212c-bc7c-4553-8ffa-26e6c20c5f47
-md"""
-# Thermo-physical properties
-"""
-
-# ╔═╡ 6a92c1c7-fb51-4363-b8d0-18eeb24087a8
-let
-	(;Fluid)=data
-	Ts=(273.15:1:573.15)
-	λf = zeros(Float64, length(Ts))
-	for (i,T) in enumerate(Ts)
-		λf[i]=thermcond_gas(Fluid, T)
-	end
-	PlutoVista.plot(Ts.-273.15, λf,xlabel="Temperature / °C",ylabel="Thermal Conductivity / W m⁻¹ K⁻¹", title=Fluid.name )
-end
-
-# ╔═╡ 8310812b-97af-45d9-aff8-234ffbb169af
-md"""
-# Analysis
-"""
-
-# ╔═╡ 909044b9-d40d-4129-bfef-6cd131a932f2
-md"""
-Calculate heat flow ``(\text W)`` into the domain from surface integral over boundaries.
-"""
-
-# ╔═╡ 30f0e723-a5a6-4b49-80d2-a29efb0f417b
-data.Abs_lamp*data.G_lamp*data.Ac
-
-# ╔═╡ a1f5c0c2-290e-418f-b381-4626d61c2bfd
-let
-	# sys,sol,data=main(nref=1)
-	sys,sol,data=Sim3D
-	
-	tff=VoronoiFVM.TestFunctionFactory(sys)
-	
-	# testfunction arguments:
-		# 2nd arg: boundaries, where the test func. value is 0 -> these boundaries are excludes from the surface integral
-		# 3rd arg: boundaries, where the test func. value is 1 -> these boundaries are included in the surface integral
-	
-	# flux integral over top boundary: radiation (abs+emit), convective trans
-	tf=testfunction(tff,[1,2,3,4,5],6)
-	integrate(sys,tf,sol)*4
-end
-
-# ╔═╡ 09632d67-a2cd-4c6f-b390-688e9900fc1e
-gridplot(prism_sq(data,nref=0),)
-
 # ╔═╡ Cell order:
-# ╠═c258e0e6-72cc-4b3e-8f6d-e629e4a0d7fd
 # ╠═7d8eb6f5-3ba6-46ef-8058-1f24a0938ed1
 # ╠═5c3adaa0-9285-11ed-3ef8-1b57dd870d6f
 # ╟─f353e09a-4a61-4def-ab8a-1bd6ce4ed58f
-# ╠═2015c8e8-36cd-478b-88fb-94605283ac29
-# ╠═5136828c-6e88-40fc-b9a5-3c86db2f0879
+# ╟─2015c8e8-36cd-478b-88fb-94605283ac29
 # ╠═98063329-31e1-4d87-ba85-70419beb07e9
 # ╟─03d0c88a-462b-43c4-a589-616a8870be64
 # ╟─6d5a7d83-53f9-43f3-9ccd-dadab08f62c1
@@ -724,18 +657,17 @@ gridplot(prism_sq(data,nref=0),)
 # ╟─fdddb318-831c-4277-a5a3-b4be8f63c430
 # ╠═3b3595c4-f53d-4827-918e-edcb74dd81f8
 # ╟─4bcdb950-ed22-496c-ad70-e0c0fa4d7f52
-# ╠═73b71898-0268-42bd-b2e6-d0c5118700dd
-# ╠═7e83918e-3ba4-4bbb-be8c-839eb32def13
+# ╠═34f73c7e-0cc3-4d42-8b92-b4171c36e54a
 # ╟─13e66a6a-b329-40e8-9098-05f4077d1242
 # ╟─cb6a357f-e244-4725-a04a-3e006dd4b53d
 # ╟─463a9a2b-8437-407f-b31a-dde3165f49ad
 # ╟─387b5b8e-a466-4a65-a360-fa2cf08092e3
 # ╟─b4cee9ac-4d14-4169-90b5-25d12ac9c003
 # ╟─bbd0b076-bcc1-43a1-91cb-d72bb17d3c88
+# ╠═6dac2935-c7bf-457c-b83f-bd757bc3a4bc
 # ╠═7c4d4083-33e2-4b17-8575-214ef458d75d
 # ╟─16f5e0bc-8e3d-40cd-b67b-694eda6b67d9
-# ╠═1459c3db-5ffc-46bd-9c94-8c8964519f39
-# ╠═4eb00d7b-d10e-478d-a1df-9eea3362ef5f
+# ╟─1459c3db-5ffc-46bd-9c94-8c8964519f39
 # ╟─c9f326c1-abc0-412d-8348-8e23a7027661
 # ╟─d7317b2d-e2c7-4114-8985-51979f2205ba
 # ╟─3c75c762-a44c-4328-ae41-a5016ce181f1
@@ -745,28 +677,21 @@ gridplot(prism_sq(data,nref=0),)
 # ╟─a190862c-2251-4110-8274-9960c495a2c4
 # ╠═4d9145f3-06aa-4a7c-82d0-feee0fa01865
 # ╠═61a67079-cb15-4283-ac15-96b49c461b6e
-# ╠═ebe2ed24-e2d6-4652-ae69-1a59747b0c4c
+# ╟─ebe2ed24-e2d6-4652-ae69-1a59747b0c4c
 # ╠═7c6c81db-1920-49af-a101-462228614f95
 # ╟─ed50c2d4-25e9-4159-84c7-e0c70ffa63a1
 # ╟─9d8c6ddc-2662-4055-b636-649565c36287
 # ╠═e9003129-31db-4f9d-b289-638511c7ec26
 # ╟─ba5c2095-4858-444a-99b5-ae6cf40374f9
-# ╟─f15fd785-010c-4fda-ab4f-7947642556dd
+# ╠═f15fd785-010c-4fda-ab4f-7947642556dd
 # ╠═d725f9b9-61c4-4724-a1d9-6a04ba42499d
 # ╟─28a2230f-5a59-4034-86af-e3d58dcceb6c
 # ╠═ea81db48-d02c-4438-a0ba-9c54a3ea0e52
-# ╠═8107492e-fdaf-4a86-96ef-ea34b45c0e67
-# ╠═fb72aede-8997-48ef-9a2d-98acbf372747
 # ╠═f435b4df-9162-42bd-8154-5f3434ea0e2a
+# ╠═8107492e-fdaf-4a86-96ef-ea34b45c0e67
+# ╟─fb72aede-8997-48ef-9a2d-98acbf372747
 # ╟─64dd5097-16aa-4c44-b000-6177cd4be226
 # ╟─bd179765-f996-4f91-ac4e-57d5817a2ed6
-# ╠═3612d83d-a8bc-4c5f-8ea0-a4c975929500
+# ╟─3612d83d-a8bc-4c5f-8ea0-a4c975929500
 # ╟─641988da-8888-4e0d-b720-4f21a9900aca
 # ╠═b4175b62-198d-4605-9cf0-04b0be52c9c0
-# ╟─e148212c-bc7c-4553-8ffa-26e6c20c5f47
-# ╠═6a92c1c7-fb51-4363-b8d0-18eeb24087a8
-# ╟─8310812b-97af-45d9-aff8-234ffbb169af
-# ╟─909044b9-d40d-4129-bfef-6cd131a932f2
-# ╠═30f0e723-a5a6-4b49-80d2-a29efb0f417b
-# ╠═a1f5c0c2-290e-418f-b381-4626d61c2bfd
-# ╠═09632d67-a2cd-4c6f-b390-688e9900fc1e
