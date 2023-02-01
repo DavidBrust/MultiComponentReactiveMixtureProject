@@ -37,7 +37,7 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	ϕ::Float64=0.36 # porosity, class 2
 	k::Float64=2.9e-11*ufac"m^2" # permeability
 	a_s::Float64=0.13*ufac"m^2/g" # specific surface area
-	ρfrit::Float64=(1.0-ϕ)*ρs+ϕ*density_idealgas(Air, 298.15, 1.0*ufac"atm")*ufac"kg/m^3" # density of porous frit
+	ρfrit::Float64=(1.0-ϕ)*ρs*ufac"kg/m^3" # density of porous frit
 	a_v::Float64=a_s*ρfrit # volume specific interface area
 	## END porous filter data
 
@@ -56,13 +56,14 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 end;
 
 # calculate non-dimensional numbers: Reynolds, Prandtl, Peclet
-function RePrPe(data::AbstractModelData,T,p)
+function RePrPe(data::AbstractModelData,T,p,x)
 	d=data.d
 	u0=data.u0
-	ρf = density_idealgas(data.Fluid, T, p)
-	ηf = dynvisc_gas(data.Fluid, T)
-	cf = heatcap_gas(data.Fluid, T)
-	λf = thermcond_gas(data.Fluid, T)
+    Fluids=data.Fluids
+	ρf = density_idealgas(Fluids, T, p, x)
+	ηf, λf = dynvisc_thermcond_mix(data, T, x)
+    
+    cf = heatcap_mix(Fluids, T, x)
 	
 	Re = u0*ρf*d/ηf # Reynolds number
 	Pr = cf*ηf/λf # Prandtl number
@@ -98,9 +99,9 @@ end
 #```
 #
 #"""
-function hsf(data::AbstractModelData,T,p)
-	Re,Pr,_ = RePrPe(data,T,p)
-	λf = thermcond_gas(data.Fluid, T)
+function hsf(data::AbstractModelData,T,p,x)
+	Re,Pr,_ = RePrPe(data,T,p,x)
+	_,λf = dynvisc_thermcond_mix(data, T, x)
 	ϕ = data.ϕ
 	d = data.d
 	λf/d*((1.0 + 4*(1.0-ϕ)/ϕ) + 0.5*(1.0-ϕ)^0.5*Re^0.6*Pr^(1.0/3.0))*ufac"W/(m^2*K)"

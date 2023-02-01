@@ -1,60 +1,108 @@
 #Dynamic viscosity of gases at low pressures, Pa*s
-function dynvisc_gas(data, T)
-	(;A,B,C,D,E) = data.DynVisc
+function dynvisc_gas(Fluid, T)
+	(;A,B,C,D,E) = Fluid.DynVisc
 	# VDI heat atlas 2010 D3.1 Equation (3)
 	A+B*T+C*T^2+D*T^3+E*T^4 * ufac"Pa*s"
 end
 
+# from VDI heat atlas 2010 ch. D
+# mixture dynamic viscosity according to Wilke mixing rule
+# Wilke CR (1950) A viscosity equation for gas mixtures. J Chem Phys 18:517
 function dynvisc_mix(data, T, x)
+    ng = data.ng
+    Fluid = data.Fluids
     mumix = 0
-    for i=1:data.ng
-        mumix += x[i] * dynvisc_gas(data.Fluids[i], T)
+    mu = zeros(Float64, ng)
+    M = zeros(Float64, ng)
+    for i=1:ng
+        mu[i] = dynvisc_gas(Fluid[i], T)
+        M[i] = data.Fluids[i].MW
+    end
+    for i=1:ng
+        sumyFij = 0
+        for j=1:ng
+            Fij = (1+(mu[i]/mu[j])^0.5*(M[j]/M[i])^0.25)^2 / sqrt(8*(1+M[i]/M[j]))
+            sumyFij += x[j]*Fij
+        end
+        if x[i] > 0
+            mumix += x[i] * mu[i] / sumyFij
+        end
     end
     mumix
 end
 
+#combined function returning mixture dynamic viscosity as well as thermal conductivity
+# compute them together because they require the calculation of a common intermediate value
+# from VDI heat atlas 2010 ch. D
+# mixture dynamic viscosity according to Wilke mixing rule
+# mixture thermal conductivity according to mixing rule of Wassiljeva, Mason, and Saxena
+# Poling BE, Prausnitz JM, O’Connell JP (2001) The properties of gases and liquids, 5th ed. McGraw-Hill, New York
+
+function dynvisc_thermcond_mix(data, T, x)
+    ng = data.ng
+    Fluid = data.Fluids
+    mumix = 0
+    lambdamix = 0
+    mu = zeros(Float64, ng)
+    lambda = zeros(Float64, ng)
+    M = zeros(Float64, ng)
+    for i=1:ng
+        mu[i] = dynvisc_gas(Fluid[i], T)
+        lambda[i] = thermcond_gas(Fluid[i], T)
+        M[i] = data.Fluids[i].MW
+    end
+    for i=1:ng
+        sumyFij = 0
+        for j=1:ng
+            Fij = (1+(mu[i]/mu[j])^0.5*(M[j]/M[i])^0.25)^2 / sqrt(8*(1+M[i]/M[j]))
+            sumyFij += x[j]*Fij
+        end
+        if x[i] > 0
+            mumix += x[i] * mu[i] / sumyFij
+            lambdamix += x[i] * lambda[i] / sumyFij
+        end
+    end
+    mumix, lambdamix
+end
+
 #Thermal conductivity of gases at low pressures, W/(m*K)
-function thermcond_gas(data, T)
-	(;A,B,C,D,E) = data.ThermCond
+function thermcond_gas(Fluid, T)
+	(;A,B,C,D,E) = Fluid.ThermCond
 	# VDI heat atlas 2010 D3.1 Equation (5)
 	A+B*T+C*T^2+D*T^3+E*T^4 * ufac"W/(m*K)"
 end
 
-function thermcond_mix(data, T, x)
-    lmix = 0
-    for i=1:data.ng
-        lmix += x[i] * thermcond_gas(data.Fluids[i], T)
-    end
-    lmix
-end
 
-#Molar heat capacity of ideal gases, J/(kg*K)
-function heatcap_gas(data, T)
-	(;A,B,C,D,E,F,G) = data.HeatCap
+
+#Molar heat capacity of ideal gases, J/(mol*K)
+function heatcap_gas(Fluid, T)
+	(;A,B,C,D,E,F,G) = Fluid.HeatCap
 	# VDI heat atlas 2010 D3.1 Equation (10)
 	T_ApT = (T/(A+T))
-	(B+(C-B)*T_ApT^2*(1- (A/(A+T))*(D+E*T_ApT+F*T_ApT^2+G*T_ApT^3) ) ) * ph"R" / data.MW  * ufac"J/(kg*K)"
+	(B+(C-B)*T_ApT^2*(1- (A/(A+T))*(D+E*T_ApT+F*T_ApT^2+G*T_ApT^3) ) ) * ph"R" * ufac"J/(mol*K)"
 end
 
-function heatcap_mix(data, T, x)
+function heatcap_mix(Fluids, T, x)
     cpmix = 0
-    for i=1:data.ng
-        cpmix += x[i] * heatcap_gas(data.Fluids[i], T)
+    ng=length(x)
+    for i=1:ng
+        cpmix += x[i] * heatcap_gas(Fluids[i], T)
     end
     cpmix
 end
 
-function molarweight_mix(data, x)
+function molarweight_mix(Fluids, x)
     wmix =0
-    for i=1:data.ng
-        wmix += x[i] * data.Fluids[i].MW
+    ng = length(x)
+    for i=1:ng
+        wmix += x[i] * Fluids[i].MW
     end
     wmix
 end
 
-function density_idealgas(data, T, p, x)
+function density_idealgas(Fluids, T, p, x)
 	#p/(ph"R"*T)*data.MW*ufac"kg/m^3"
-    p/(ph"R"*T)*molarweight_mix(data, x)*ufac"kg/m^3"
+    p/(ph"R"*T)*molarweight_mix(Fluids, x)*ufac"kg/m^3"
 end
 
 function binary_diff_coeff_gas(gas1, gas2, T, p)
