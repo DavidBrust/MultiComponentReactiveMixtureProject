@@ -386,20 +386,14 @@ function main(;nref=0)
 		conv=evelo[edge.index]*ρf*cf/λbed
 		Bp,Bm = fbernoulli_pm(conv)
 		
-		#f[iT]= λbed*(Bm*u[iT,1]-Bp*u[iT,2])
-		f[iT]= λbed*(Bm*(u[iT,1]-data.Tamb)-Bp*(u[iT,2]-data.Tamb))
-		
-		
+		f[iT]= λbed*(Bm*(u[iT,1]-data.Tamb)-Bp*(u[iT,2]-data.Tamb))		
 	end
 
 	function top(f,u,bnode,data)
 		if bnode.region==3 # top boundary
 			flux_rerad = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
 			
-			#flux_convec = data.α_nc*(u[iT]-data.Tamb)
-			#ρf=density_idealgas(data.Fluid, u[iT], data.p)
 			ρf=density_idealgas(data.Fluids, u[iT], data.p, data.X0)
-			#cf=heatcap_gas(data.Fluid, u[iT])
 			cf=heatcap_mix(data.Fluids, u[iT], data.X0)
 			
             flux_convec = -bfvelo[bnode.ibnode,bnode.ibface]*ρf*cf*(u[iT]-data.Tamb)
@@ -416,13 +410,11 @@ function main(;nref=0)
 
 
 	function bcondition(f,u,bnode,data)
-		#boundary_dirichlet!(f,u,bnode;species=iT,region=1,value=data.Tamb)
-		#boundary_robin!(f,u,bnode;species=iT,region=1, factor=data.α_nc, value=data.Tamb*data.α_nc)
-		bottom(f,u,bnode,data) # bottom boundary
-		
-		boundary_robin!(f,u,bnode;species=iT,region=2, factor=data.α_w, value=data.Tamb*data.α_w)
-		#boundary_dirichlet!(f,u,bnode;species=iT,region=3,value=data.Tamb+300.0)
-		# irradiation boundary condition
+		bottom(f,u,bnode,data)
+
+		# side wall boundary condition
+		boundary_robin!(f,u,bnode;species=iT,region=2, factor=data.α_w, value=data.Tamb*data.α_w)		
+
 		top(f,u,bnode,data)
 	end
 	
@@ -435,12 +427,8 @@ function main(;nref=0)
 	sys=VoronoiFVM.System(grid;
                           data=data,
                           flux=flux,
-    #                      reaction=pnpreaction,
-    #                      #storage=pnpstorage,
                           bcondition,
                           species=[iT],
-	#					  regions=[1,2],
-    #                      kwargs...
                           )
 	inival=unknowns(sys)
 	inival[iT,:] .= map( (r,z)->(data.Tamb+500*z/data.h),grid)
@@ -481,14 +469,12 @@ function main3D(;nref=0)
 	
 
 
-		function flux(f,u,edge,data)
+	function flux(f,u,edge,data)
 		(;Fluids,u0,p,X0)=data
 		Tbar=0.5*(u[iT,1]+u[iT,2])
-		#ρf=density_idealgas(Fluid, Tbar, p)
+		
 		ρf=density_idealgas(Fluids, Tbar, p, X0)
-		#cf=heatcap_gas(Fluid, Tbar)
 		cf=heatcap_mix(Fluids, Tbar, X0)
-		#λf=thermcond_gas(Fluid, Tbar)
 		_,λf=dynvisc_thermcond_mix(data, Tbar, X0)
 		λbed=kbed(data,λf)*λf
 
@@ -497,12 +483,11 @@ function main3D(;nref=0)
 		
 		Bp,Bm = fbernoulli_pm(conv)
 		
-		#f[iT]= λbed*(Bm*u[iT,1]-Bp*u[iT,2])
-		f[iT]= λbed*(Bm*(u[iT,1]-data.Tamb)-Bp*(u[iT,2]-data.Tamb))
-		
-		
+		f[iT]= λbed*(Bm*(u[iT,1]-data.Tamb)-Bp*(u[iT,2]-data.Tamb))		
 	end
 
+
+	
 	function irrad_bc(f,u,bnode,data)
 		if bnode.region==6 # top boundary
 			flux_rerad = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
@@ -513,8 +498,7 @@ function main3D(;nref=0)
 
 
 
-
-		function top(f,u,bnode,data)
+	function top(f,u,bnode,data)
 		if bnode.region==6 # top boundary
 			flux_rerad = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
 			
@@ -529,22 +513,22 @@ function main3D(;nref=0)
 		end
 	end
 
+	
 	function bottom(f,u,bnode,data)
 		if bnode.region==5 # bottom boundary
             f[iT] = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
 		end
 	end
 
+	
 	function bcondition(f,u,bnode,data)
-		#boundary_dirichlet!(f,u,bnode;species=iT,region=1,value=data.Tamb)
-		#boundary_robin!(f,u,bnode;species=iT,region=5, factor=data.α_nc, value=data.Tamb*data.α_nc) # bottom
+		# bottom
 		bottom(f,u,bnode,data)
+		
 		boundary_robin!(f,u,bnode;species=iT,region=2, factor=data.α_w, value=data.Tamb*data.α_w)
 		# for prism of square
 		boundary_robin!(f,u,bnode;species=iT,region=3, factor=data.α_w, value=data.Tamb*data.α_w)
-		#boundary_dirichlet!(f,u,bnode;species=iT,region=2,value=data.Tamb+300.0)
-		# irradiation boundary condition
-		#irrad_bc(f,u,bnode,data)
+	
 		top(f,u,bnode,data)
 	end
 	
@@ -556,13 +540,10 @@ function main3D(;nref=0)
 	sys=VoronoiFVM.System(grid;
                           data=data,
                           flux=flux,
-    #                      reaction=pnpreaction,
-    #                      #storage=pnpstorage,
                           bcondition,
                           species=[iT],
-	#					  regions=[1,2],
-    #                      kwargs...
                           )
+	
 	inival=unknowns(sys)
 	inival[iT,:] .= map( (x,y,z)->(data.Tamb+500*z/data.h),grid)
 	#inival[iT,:] .= data.Tamb
