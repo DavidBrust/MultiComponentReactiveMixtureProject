@@ -55,7 +55,7 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	iT::Int64=1 # index of Temperature variable
 	ng::Int64=1 # number of gas phase components
 	X0::Vector{Float64} = [1.0]
-	Fluids::Vector{AbstractFluidProps} = [Air]
+	Fluids::Vector{AbstractFluidProps} = [N2]
 	
 	Tamb::Float64=298.15*ufac"K" # ambient temperature
 	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
@@ -207,18 +207,33 @@ __Zehner, P., & Schlünder, E. U. (1970).__ Wärmeleitfähigkeit von Schüttunge
 Implementation follows the notation in __VDI Heat Atlas 2010, ch. D6.3 eqs. (5a-5e).__
 """
 
-# ╔═╡ 6dac2935-c7bf-457c-b83f-bd757bc3a4bc
-
+# ╔═╡ 5a39ec45-e934-4f65-bebf-aa81c21fc854
+λf = dynvisc_thermcond_mix(data, data.Tin, data.X0)
 
 # ╔═╡ 7c4d4083-33e2-4b17-8575-214ef458d75d
-function kbed(data)
-	(;ϕ,λs,Fluid,Tin) = data
-	λf=thermcond_gas(Fluid, Tin)
+function kbed(data,λf)
+	(;ϕ,Fluid,λs,Tin) = data
+	#λf=thermcond_gas(Fluid, Tin)
 	B=1.25*((1.0-ϕ)/ϕ)^(10.0/9.0)
 	kp=λs/λf
 	N=1.0-(B/kp)
 	kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
 	1.0-sqrt(1.0-ϕ)+sqrt(1.0-ϕ)*kc
+end
+
+# ╔═╡ 6dac2935-c7bf-457c-b83f-bd757bc3a4bc
+let
+	
+	Ts = range(273.15, 1073.15, length=701)
+	λbed = []
+	for T in Ts
+		_,λf = dynvisc_thermcond_mix(data, T, data.X0)
+		push!(λbed, kbed(data,λf)*λf)
+	end
+	λbed
+
+	PlutoVista.plot(Ts.-273.15, λbed, resolution=(600,400), axisfontsize=18, tickfontsize=18)
+	
 end
 
 # ╔═╡ 16f5e0bc-8e3d-40cd-b67b-694eda6b67d9
@@ -271,7 +286,7 @@ function cylinder(;nref=0, r=5.0*ufac"cm", h=0.5*ufac"cm")
 end
 
 # ╔═╡ 8cd85a0e-3d11-4bcc-8a7d-f30313b31363
-gridplot(cylinder(;r=data.D/2,h=data.h),show=true)
+gridplot(cylinder(;r=data.D/2,h=data.h),resolution=(800,800),show=true)
 
 # ╔═╡ a190862c-2251-4110-8274-9960c495a2c4
 md"""
@@ -363,13 +378,10 @@ function main(;nref=0)
 	function flux(f,u,edge,data)
 		(;Fluids,u0,p,X0)=data
 		Tbar=0.5*(u[iT,1]+u[iT,2])
-		#ρf=density_idealgas(Fluid, Tbar, p)
 		ρf=density_idealgas(Fluids, Tbar, p, X0)
-		#cf=heatcap_gas(Fluid, Tbar)
 		cf=heatcap_mix(Fluids, Tbar, X0)
-		#λf=thermcond_gas(Fluid, Tbar)
 		_,λf=dynvisc_thermcond_mix(data, Tbar, X0)
-		λbed=kbed(data)*λf
+		λbed=kbed(data,λf)*λf
 
 		conv=evelo[edge.index]*ρf*cf/λbed
 		Bp,Bm = fbernoulli_pm(conv)
@@ -438,7 +450,7 @@ function main(;nref=0)
 end
 
 # ╔═╡ e9003129-31db-4f9d-b289-638511c7ec26
-Sim2D=main();
+Sim2D=main(nref=0);
 
 # ╔═╡ f15fd785-010c-4fda-ab4f-7947642556dd
 let
@@ -478,7 +490,7 @@ function main3D(;nref=0)
 		cf=heatcap_mix(Fluids, Tbar, X0)
 		#λf=thermcond_gas(Fluid, Tbar)
 		_,λf=dynvisc_thermcond_mix(data, Tbar, X0)
-		λbed=kbed(data)*λf
+		λbed=kbed(data,λf)*λf
 
 		vh=project(edge,(0,0,data.u0))
 		conv=vh*ρf*cf/λbed	
@@ -552,8 +564,8 @@ function main3D(;nref=0)
     #                      kwargs...
                           )
 	inival=unknowns(sys)
-	#inival[iT,:] .= map( (x,y,z)->(data.Tamb+300*z/data.h),grid)
-	inival[iT,:] .= data.Tamb
+	inival[iT,:] .= map( (x,y,z)->(data.Tamb+500*z/data.h),grid)
+	#inival[iT,:] .= data.Tamb
 	sol=solve(inival,sys)
 	sys,sol,data,nref
 end
@@ -665,6 +677,7 @@ end
 # ╟─b4cee9ac-4d14-4169-90b5-25d12ac9c003
 # ╟─bbd0b076-bcc1-43a1-91cb-d72bb17d3c88
 # ╠═6dac2935-c7bf-457c-b83f-bd757bc3a4bc
+# ╠═5a39ec45-e934-4f65-bebf-aa81c21fc854
 # ╠═7c4d4083-33e2-4b17-8575-214ef458d75d
 # ╟─16f5e0bc-8e3d-40cd-b67b-694eda6b67d9
 # ╟─1459c3db-5ffc-46bd-9c94-8c8964519f39

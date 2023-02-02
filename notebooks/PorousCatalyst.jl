@@ -4,6 +4,16 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+end
+
 # ╔═╡ 11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 begin
 	using Pkg
@@ -208,23 +218,10 @@ md"""
 # ╔═╡ 7da59e27-62b9-4b89-b315-d88a4fd34f56
 function top(f,u,bnode,data)
 	if bnode.region==3 # top boundary
-		ng=data.ng
-		mfluxin=data.mfluxin
-		X=zeros(eltype(u), ng)
-		sump = 0.0
-		for i=1:ng
-			X[i] = u[i]
-			sump += X[i]
-		end
-		X .= X / sump
-		MWmix = molarweight_mix(data.Fluids, X)
-		#MWmix = molarweight_mix(data.Fluids, data.X0)
-		
+		ng=data.ng		
 		# flow velocity is normal to top boundary
 		for i=1:data.ng
-			f[i] = data.u0*u[i]/(ph"R"*data.Tin)
-			#f[i] = X[i] * mfluxin / MWmix
-			#f[i] = data.X0[i] * mfluxin / MWmix
+			f[i] = data.utop*u[i]/(ph"R"*data.Tin)
 		end
 	end
 end
@@ -241,14 +238,16 @@ function bcond(f,u,bnode,data)
 		boundary_dirichlet!(f,u,bnode,i,1,X0[i]*p0)
 	end
 
-	#boundary_dirichlet!(f,u,bnode,ip,1,p0) # total pressure
-	#boundary_dirichlet!(f,u,bnode,ip,3,p0-Δp) # total pressure
-
 	
 
 	top(f,u,bnode,data)
 	
 end
+
+# ╔═╡ d7960eb2-bfd7-4be4-a0ae-552d68892206
+md"""
+Factor for ``u_{\text{top}}`` $(@bind utop_fac Slider(range(0.0,2.0,length=41),default=1.2,show_value=true))
+"""
 
 # ╔═╡ f39dd714-972c-4d29-bfa8-d2c3795d2eef
 function massflow(data, bflux)
@@ -432,20 +431,21 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 
 	## fluid data
 	Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
+	#Qflow::Float64=34000.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
 	# inlet composition
 	X0::Vector{Float64} = [0.5, 0.5, 0.0, 0.0]
 	MWin::Float64 = molarweight_mix(Fluids, X0)
+	mdotin::Float64=MWin*Qflow*1.0*ufac"bar"/(ph"R"*273.15*ufac"K")*ufac"kg/s"
 	# mass flux in kg/(m^2 s)
-	mfluxin::Float64 = MWin*Qflow*1.0*ufac"bar"/(ph"R"*273.15*ufac"K") / Ac 
+	mfluxin::Float64 = mdotin/Ac*ufac"kg/(m^2*s)"
 	
-	#Qflow::Float64=400.0*ufac"ml/minute" # volumetric feed flow rate
 	Tin::Float64=298.15*ufac"K" # inlet temperature
 	#Tin::Float64=600.0*ufac"K" # inlet temperature
 	p::Float64=1.0*ufac"atm" # reactor pressure
 	Δp::Float64=0.1*p # pressure differential over reactor
 	# u0::Float64=Qflow/(Ac*ϕ)*ufac"m/s" # mean superficial velocity
 	u0::Float64=Qflow/(Ac)*ufac"m/s" # mean superficial velocity
-
+	utop::Float64=u0*ufac"m/s" # adjustable parameter to match the outlet mass flow to prescribed inlet mass flow rate
 	
 	## END fluid data
 	
@@ -455,7 +455,7 @@ end;
 data=ModelData()
 
 # ╔═╡ 077d4ede-9e0f-4f94-afb0-01bd36c584fc
-function catcylinder(;nref=2, r=data.D/2, h=data.h)
+function catcylinder(;nref=1, r=data.D/2, h=data.h)
     	
 	hr=r/10.0*2.0^(-nref)
 	
@@ -510,17 +510,18 @@ function main(;data=ModelData())
 end;
 
 # ╔═╡ aa498412-e970-45f2-8b11-249cc5c2b18d
-sol,grid,sys=main();
+sol,grid,sys=main(data=ModelData(utop=ModelData().u0*utop_fac));
 
 # ╔═╡ 3d660986-f6d7-41a6-800b-68ccd920c7ac
 begin
 	tf=VoronoiFVM.TestFunctionFactory(sys);
+	#testfunction(factory::TestFunctionFactory, bc0, bc1) -> Any
 
 	# bottom - inflow
-	Tbot=testfunction(tf,1,[2,3,4])
+	Tbot=testfunction(tf,[2,3,4],1)
 	Ibot=integrate(sys,Tbot,sol)
 	# top - outflow
-	Ttop=testfunction(tf,3,[1,2,4])
+	Ttop=testfunction(tf,[1,2,4],3)
 	Itop=integrate(sys,Ttop,sol)
 end;
 
@@ -588,12 +589,15 @@ let
 
 end
 
+# ╔═╡ 1d8bcb9b-cff4-4868-8dfc-ba2900084645
+data.mdotin*3600
+
 # ╔═╡ 8b1a0902-2542-40ed-9f91-447bffa4290f
 md"""
 Mass flows:
 
-- through __bottom__ boundary __$(round(massflow(data, Ibot),sigdigits=2))__ kg/h
-- through __top__ boundary __$(round(massflow(data, Itop),sigdigits=2))__ kg/h
+- through __bottom__ boundary __$(round(massflow(data, Ibot),sigdigits=3))__ kg/h
+- through __top__ boundary __$(round(massflow(data, Itop),sigdigits=3))__ kg/h
 """
 
 # ╔═╡ a2dd4745-91bf-4f89-aa85-b57ed889f50a
@@ -602,6 +606,21 @@ Flow of $(data.gn[1]):
 
 - through __bottom__ boundary __$(round(Ibot[1],sigdigits=2))__ mol/s
 - through __top__ boundary __$(round(Itop[1],sigdigits=2))__ mol/s
+
+Flow of $(data.gn[2]):
+
+- through __bottom__ boundary __$(round(Ibot[2],sigdigits=2))__ mol/s
+- through __top__ boundary __$(round(Itop[2],sigdigits=2))__ mol/s
+
+Flow of $(data.gn[3]):
+
+- through __bottom__ boundary __$(round(Ibot[3],sigdigits=2))__ mol/s
+- through __top__ boundary __$(round(Itop[3],sigdigits=2))__ mol/s
+
+Flow of $(data.gn[4]):
+
+- through __bottom__ boundary __$(round(Ibot[4],sigdigits=2))__ mol/s
+- through __top__ boundary __$(round(Itop[4],sigdigits=2))__ mol/s
 """
 
 # ╔═╡ 4b41d985-8ebc-4cab-a089-756fce0d3060
@@ -609,7 +628,7 @@ let
 	ngas=data.ng
 	ip=data.ip
 	# visualization
-	vis=GridVisualizer(layout=(2,1))
+	vis=GridVisualizer(layout=(2,1),resolution=(600,800))
 
 	# 2D plot
 	scalarplot!(vis[1,1], grid, sol[1,:], zoom=2.2)
@@ -671,13 +690,15 @@ end
 # ╠═29d66705-3d9f-40b1-866d-dd3392a1a268
 # ╠═333b5c80-259d-47aa-a441-ee7894d6c407
 # ╠═aa498412-e970-45f2-8b11-249cc5c2b18d
+# ╟─d7960eb2-bfd7-4be4-a0ae-552d68892206
+# ╠═1d8bcb9b-cff4-4868-8dfc-ba2900084645
 # ╠═f39dd714-972c-4d29-bfa8-d2c3795d2eef
 # ╟─8b1a0902-2542-40ed-9f91-447bffa4290f
 # ╟─a2dd4745-91bf-4f89-aa85-b57ed889f50a
 # ╠═2a752ef9-8c4b-42df-ab4c-74aec65c6358
-# ╠═3d660986-f6d7-41a6-800b-68ccd920c7ac
+# ╟─3d660986-f6d7-41a6-800b-68ccd920c7ac
 # ╠═358cafd5-1200-4ff7-b56b-fc4bb50afbd7
-# ╟─4b41d985-8ebc-4cab-a089-756fce0d3060
+# ╠═4b41d985-8ebc-4cab-a089-756fce0d3060
 # ╟─8db106cc-c5f1-498b-bf8b-fddd8e21b444
 # ╟─bd7552d2-2c31-4834-97d9-ccdb4652242f
 # ╟─2f24ba85-748a-44a6-bde1-8e320106198d
