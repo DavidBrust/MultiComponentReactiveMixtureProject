@@ -300,7 +300,7 @@ Fluid phase:
 md"""
 Solid phase:
 ```math
-	-\nabla \cdot \left ( k_{\text{eff}}^{\text s} \nabla T_{\text s} \right) = - h_{\text{sf}}A_{\text V} (T_{\text s}-T_{\text f}) + \dot{q}_{\text{chem}} + \dot{q}_{\text{rad}}
+	-\nabla \cdot \left ( k_{\text{eff}}^{\text s} \nabla T_{\text s} \right) = - h_{\text{sf}}A_{\text V} (T_{\text s}-T_{\text f}) + \dot{q}_{\text{chem}}
 ```
 """
 
@@ -486,7 +486,7 @@ end
 # ╟─9198330d-7c05-440a-916e-fca0fe796b7b
 # ╟─16f5e0bc-8e3d-40cd-b67b-694eda6b67d9
 # ╟─1459c3db-5ffc-46bd-9c94-8c8964519f39
-# ╟─641d61ca-448b-4240-95fb-486e83b6b768
+# ╠═641d61ca-448b-4240-95fb-486e83b6b768
 # ╟─d7317b2d-e2c7-4114-8985-51979f2205ba
 # ╟─3c75c762-a44c-4328-ae41-a5016ce181f1
 # ╟─2c31e63a-cf42-45cd-b367-112438a02a97
@@ -501,7 +501,7 @@ end
 # ╟─667c095d-f7c7-4244-806f-a70f1250146e
 # ╟─f0054c8a-921c-4603-9567-fb98beab4b69
 # ╠═186c0b6f-a049-4841-a69c-34b982c3d17c
-# ╟─d0ed3983-5118-479f-855a-1cd3c4778771
+# ╠═d0ed3983-5118-479f-855a-1cd3c4778771
 # ╠═d725f9b9-61c4-4724-a1d9-6a04ba42499d
 # ╟─28a2230f-5a59-4034-86af-e3d58dcceb6c
 # ╟─64dd5097-16aa-4c44-b000-6177cd4be226

@@ -57,6 +57,15 @@ function ki(T,par)
 	@. ki_ref*exp(-1000*Ei/ph"R"*(1/T-1/Tki_ref))
 end
 
+#Species indices:
+#1) CO
+#2) H2
+#3) CH4
+#4) H2O
+#5) CO2
+#6) N2
+
+
 # adsorption constants Kj
 function Kj(T,par)
 	Kj_ref=par[3]
@@ -72,6 +81,13 @@ function DEN(T,p,par)
 	1+sum(Kj(T,par).*p_)
 end
 
+function DEN(data::AbstractModelData,T,p,par)
+	n=data.gni
+    p_=p
+	p_[n["H2O"]]=p_[n["H2O"]]/p_[n["H2"]] # p_H2O/p_H2
+	1+sum(Kj(T,par).*p_)
+end
+
 function ri(T,p,par)
 	K=Ki(T)
 	ki(T,par) .* @views [
@@ -79,4 +95,17 @@ function ri(T,p,par)
 		1/p[2]^3.5*(p[3]*p[4]^2-p[2]^4*p[5]/K[2]),
 		1/p[2]^2.5*(p[3]*p[4]-p[2]^3*p[1]/K[3])
 	] / DEN(T,p,par)^2
+end
+
+
+
+
+function ri(data::AbstractModelData,T,p,par)
+    n=data.gni
+	K=Ki(T)
+	ki(T,par) .* @views [
+		1/p[n["H2"]]*(p[n["CO"]]*p[n["H2O"]]-p[n["H2"]]*p[n["CO2"]]/K[1]),
+		1/p[n["H2"]]^3.5*(p[n["CH4"]]*p[n["H2O"]]^2-p[n["H2"]]^4*p[n["CO2"]]/K[2]),
+		1/p[n["H2"]]^2.5*(p[n["CH4"]]*p[n["H2O"]]-p[n["H2"]]^3*p[n["CO"]]/K[3])
+	] / DEN(data,T,p,par)^2
 end
