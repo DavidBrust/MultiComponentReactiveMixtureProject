@@ -271,17 +271,26 @@ function reaction(f,u,node,data)
 	
 	if node.region == 2 && data.isreactive # catalyst layer
 		RRc=data.RRc
-		n=data.gni
+		ng=data.gni # gas species indices from names
+		nr=data.kinpar.rni # reaction indices from names
 		iT=data.iT
-		RR=RRc*u[n["H2"]]*u[n["CO2"]]
-		#pi = u[1:ngas]./ufac"bar"
-		#RR = ri(data,u[iT],pi,data.kinpar)
-		f[n["H2"]] = RR
-		f[n["CO2"]] = RR
-		f[n["CO"]] = -RR
-		f[n["H2O"]] = -RR
+		#RR=RRc*u[n["H2"]]*u[n["CO2"]]
+		pi = u[1:ngas]./ufac"bar"
+		# negative sign: sign convention of VoronoiFVM: source term < 0 
+		RR = -data.mcats*ri(data.kinpar,u[iT],pi)
+		# reactions
+		# R1: CO + H2O = CO2 + H2
+		# R2: CH4 + 2 H2O = CO2 + 4 H2
+		# R3: CH4 + H2O = CO + 3 H2
+		f[ng["H2"]] = RR[nr["R1"]] + 4*RR[nr["R2"]] + 3*RR[nr["R3"]]
+		f[ng["CO2"]] = RR[nr["R1"]] + RR[nr["R2"]]
+		f[ng["CO"]] = -RR[nr["R1"]] + RR[nr["R3"]]
+		f[ng["H2O"]] = -RR[nr["R1"]] - 2*RR[nr["R2"]] - RR[nr["R3"]]
+		f[ng["CH4"]] = -RR[nr["R2"]] - RR[nr["R3"]]
+		f[ng["N2"]] = 0.0
 		# temperature eq. / heat source
-		#f[iT] = RR*data.ΔHR
+		ΔHi=data.kinpar.ΔHi
+		f[iT] = -(RR[nr["R1"]]*ΔHi["R1"]+RR[nr["R2"]]*ΔHi["R2"] +RR[nr["R3"]]*ΔHi["R3"])
 	end
 	
 	# ∑xi = 1
@@ -413,23 +422,30 @@ The binary diffusion coefficients are then used within the DGM (after correcting
 
 # ╔═╡ 3a35ac76-e1b7-458d-90b7-d59ba4f43367
 Base.@kwdef mutable struct ModelData <:AbstractModelData
-	# number of gas phase species
-	ng::Int64		 		= 4
-	#ng::Int64		 		= 1
-	# names and fluid indices
-	gn::Dict{Int, String} 	= Dict(1=>"H2", 2=>"CO2", 3=>"CO", 4=>"H2O")
-	#gn::Dict{Int, String} 	= Dict(1=>"N2")
-	# inverse names and fluid indices
-	gni::Dict{String, Int}  = Dict(value => key for (key, value) in gn)
-	# fluids and respective properties in system
-	Fluids::Vector{AbstractFluidProps} = [H2,CO2,CO,H2O]
-	#Fluids::Vector{AbstractFluidProps} = [N2]
-	X0::Vector{Float64} = [0.5, 0.5, 0.0, 0.0] # inlet composition
-	#X0::Vector{Float64} = [1.0]
-	
 	# catalyst / chemistry data
 	# kinetic parameters, S3P="simple 3 parameter" kinetics fit to UPV lab scale experimental data
-	kinpar::Vector{Vector{Float64}} = S3P
+	kinpar::AbstractKineticsData = S3P
+	
+	# number of gas phase species
+	ng::Int64		 		= S3P.ng
+	#ng::Int64		 		= 1
+	# names and fluid indices
+	gn::Dict{Int, String} 	= S3P.gn
+	#gn::Dict{Int, String} 	= Dict(1=>"N2")
+	# inverse names and fluid indices
+	gni::Dict{String, Int}  = S3P.gni
+	# fluids and respective properties in system
+	Fluids::Vector{AbstractFluidProps} = S3P.Fluids
+	#Fluids::Vector{AbstractFluidProps} = [N2]
+	X0::Vector{Float64} = let
+		x=zeros(Float64, ng)
+		x[gni["H2"]] = 1.0
+		x[gni["CO2"]] = 1.0
+		x/sum(x)
+	end # inlet composition
+	#X0::Vector{Float64} = [1.0]
+	
+
 	# reaction enthalpy
 	ΔHR::Float64 = 10.0*ufac"kJ/mol"
 	# volume specific cat mass loading, UPV lab scale PC reactor
@@ -561,19 +577,46 @@ function main(;data=ModelData())
 	end
 	inival[iT,:] .= map( (r,z)->(data.Tamb+500*z/data.h),grid)
 
+	sol_=solve(sys;inival,)
 	
 	function pre(sol,par)
+		ng=data.ng
+		iT=data.iT
+		# iteratively adapt top outflow boundary condition
+		function Inttop(f,u,bnode,data)
+			
+			X=zeros(eltype(u), ng)
+			mole_frac!(bnode,data,X,u)
+			if bnode.region==3 # top boundary
+				for i=1:ng
+					f[i] = data.Fluids[i].MW*X[i]
+				end
+				f[iT] = u[iT]
+			end
+		end
+		
+		MWavg=sum(integrate(sys,Inttop,sol; boundary=true)[1:ng,3])/data.Ac
+		ntop=data.mdotin/MWavg
+		Tavg=integrate(sys,Inttop,sol; boundary=true)[data.iT,3]/data.Ac
+		utop_calc=ntop*ph"R"*Tavg/(1.0*ufac"bar")/data.Ac
+		utops=[data.utop, utop_calc]*ufac"m/s"
+		data.utop = minimum(utops) + par*(maximum(utops)-minimum(utops))
+		
 		# embedding parameter: Qflow / ml/minute
-		Qflows = [5000.0,50000.0]*ufac"ml/minute"
-		Qflow = minimum(Qflows) + par*(maximum(Qflows)-minimum(Qflows))
-		data.Qflow=Qflow
-		data.u0=Qflow/(data.Ac)*ufac"m/s" # mean superficial velocity
-		data.utop=data.u0*ufac"m/s" # adjustable parameter to match the outlet mass flow to prescribed inlet mass flow rate
+		#Qflows = [5000.0,50000.0]*ufac"ml/minute"
+		#Qflow = minimum(Qflows) + par*(maximum(Qflows)-minimum(Qflows))
+		#data.Qflow=Qflow
+		#data.u0=Qflow/(data.Ac)*ufac"m/s" # mean superficial velocity
+		#data.utop=data.u0*ufac"m/s" # adjustable parameter to match the outlet mass flow to prescribed inlet mass flow rate
 
-		# embedding parameter: reaction rate constant / -
-		RRcs = [1.0e-5, 1.0e-4]
-		RRc = minimum(RRcs) + par*(maximum(RRcs)-minimum(RRcs))
-		data.RRc=RRc
+		
+		# specific catalyst loading
+		mcats=[10.0, 1300.0]*ufac"kg/m^3"
+		data.mcats= minimum(mcats) + par*(maximum(mcats)-minimum(mcats))
+
+		# irradiation flux density
+		G_lamp=[1.0, 125.0]*ufac"kW/m^2"
+		data.G_lamp= minimum(G_lamp) + par*(maximum(G_lamp)-minimum(G_lamp))
 	end
 	
 	control=SolverControl(;
@@ -585,6 +628,7 @@ function main(;data=ModelData())
 					  )
 	
 	#sol=solve(sys;inival,)
+	
 	sol=solve(sys;inival,embed=[0.0,1.0],pre,control)
 
 	
@@ -650,6 +694,27 @@ function pdrop(data, sol)
 	Δp1 = (sol_1[ip][1]-sol_1[ip][end])
 end
 
+# ╔═╡ 1cb00f28-0617-40be-a695-1a3b833f56d6
+data.kinpar
+
+# ╔═╡ c6e73dfc-eef2-480c-9e61-f3f810e9c60a
+data.X0
+
+# ╔═╡ b0d2f41c-05c9-44ac-8762-a7800a859fbe
+data.p.*data.X0/ufac"bar"
+
+# ╔═╡ bda3b19b-14e0-40d2-a1ad-b9cc1d33de74
+let
+	nr = data.kinpar.rni
+	ΔHi=data.kinpar.ΔHi
+	RR = -data.mcats*ri(data.kinpar,1000.0,data.pn.*data.X0/ufac"bar")
+	-(RR[nr["R1"]]*ΔHi["R1"]+RR[nr["R2"]]*ΔHi["R2"] +RR[nr["R3"]]*ΔHi["R3"])
+
+end
+
+# ╔═╡ 229d36fc-b033-4aa5-a889-fba6ce461b29
+data.mdotin/ufac"kg/hr"
+
 # ╔═╡ 8b1a0902-2542-40ed-9f91-447bffa4290f
 md"""
 Mass flows:
@@ -679,6 +744,16 @@ Flow of $(data.gn[4]):
 
 - through __bottom__ boundary __$(round(Ibot[4],sigdigits=2))__ mol/s
 - through __top__ boundary __$(round(Itop[4],sigdigits=2))__ mol/s
+
+Flow of $(data.gn[5]):
+
+- through __bottom__ boundary __$(round(Ibot[5],sigdigits=2))__ mol/s
+- through __top__ boundary __$(round(Itop[5],sigdigits=2))__ mol/s
+
+Flow of $(data.gn[6]):
+
+- through __bottom__ boundary __$(round(Ibot[6],sigdigits=2))__ mol/s
+- through __top__ boundary __$(round(Itop[6],sigdigits=2))__ mol/s
 """
 
 # ╔═╡ 3bd80c19-0b49-43f6-9daa-0c87c2ea8093
@@ -743,6 +818,10 @@ end
 # ╠═2191bece-e186-4d8e-8a21-3830441baf11
 # ╠═b6381008-0280-404c-a86c-9c9c3c9f82eb
 # ╟─02b76cda-ffae-4243-ab40-8d0fe1325776
+# ╠═1cb00f28-0617-40be-a695-1a3b833f56d6
+# ╠═c6e73dfc-eef2-480c-9e61-f3f810e9c60a
+# ╠═b0d2f41c-05c9-44ac-8762-a7800a859fbe
+# ╠═bda3b19b-14e0-40d2-a1ad-b9cc1d33de74
 # ╠═78cf4646-c373-4688-b1ac-92ed5f922e3c
 # ╟─906ad096-4f0c-4640-ad3e-9632261902e3
 # ╠═7da59e27-62b9-4b89-b315-d88a4fd34f56
@@ -752,6 +831,7 @@ end
 # ╠═333b5c80-259d-47aa-a441-ee7894d6c407
 # ╠═aa498412-e970-45f2-8b11-249cc5c2b18d
 # ╠═f39dd714-972c-4d29-bfa8-d2c3795d2eef
+# ╠═229d36fc-b033-4aa5-a889-fba6ce461b29
 # ╟─8b1a0902-2542-40ed-9f91-447bffa4290f
 # ╟─a2dd4745-91bf-4f89-aa85-b57ed889f50a
 # ╠═33851920-ef27-4041-b67f-face63e1eadb

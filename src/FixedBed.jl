@@ -14,6 +14,5 @@ export AbstractModelData, ModelData, RePrPe, kbed, hsf
 
 
 include("kinetics.jl")
-export ri
-export S3P
+export AbstractKineticsData, ri, S3P
 end
