@@ -386,9 +386,19 @@ function vel_darcy(data, ∇p, T, X)
 	data.k/μ * ∇p # m/s
 end
 
+# ╔═╡ b2df1087-6628-4889-8cd6-c5ee7629cd93
+md"""
+### Temperature Plot
+"""
+
 # ╔═╡ d7960eb2-bfd7-4be4-a0ae-552d68892206
 md"""
 Factor for ``u_{\text{top}}`` $(@bind utop_fac Slider(range(0.0,2.0,length=41),default=1.0,show_value=true))
+"""
+
+# ╔═╡ 2790b550-3105-4fc0-9070-d142c19678db
+md"""
+### Partial Pressure Plots
 """
 
 # ╔═╡ 8db106cc-c5f1-498b-bf8b-fddd8e21b444
@@ -629,7 +639,7 @@ function main(;data=ModelData())
 	
 	#sol=solve(sys;inival,)
 	
-	sol=solve(sys;inival,embed=[0.0,1.0],pre,control)
+	sol=solve(sys;inival,embed=[0.0,0.999,1.0],pre,control)
 
 	
 	sol,grid,sys
@@ -655,10 +665,12 @@ begin
 
 	# bottom - inflow
 	Tbot=testfunction(tf,[2,3,4],1)
-	Ibot=integrate(sys,Tbot,sol)
+	#Ibot=integrate(sys,Tbot,sol)
+	Ibot=integrate(sys,bottom,sol; boundary=true)[:,1]
 	# top - outflow
 	Ttop=testfunction(tf,[1,2,4],3)
-	Itop=integrate(sys,Ttop,sol)
+	#Itop=integrate(sys,Ttop,sol)
+	Itop=integrate(sys,top,sol; boundary=true)[:,3]
 end;
 
 # ╔═╡ bd7552d2-2c31-4834-97d9-ccdb4652242f
@@ -727,40 +739,40 @@ Mass flows:
 md"""
 Flow of $(data.gn[1]):
 
-- through __bottom__ boundary __$(round(Ibot[1],sigdigits=2))__ mol/s
-- through __top__ boundary __$(round(Itop[1],sigdigits=2))__ mol/s
+- through __bottom__ boundary __$(round(Ibot[1]/ufac"mol/hr",sigdigits=2))__ mol/hr
+- through __top__ boundary __$(round(Itop[1]/ufac"mol/hr",sigdigits=2))__ mol/hr
 
 Flow of $(data.gn[2]):
 
-- through __bottom__ boundary __$(round(Ibot[2],sigdigits=2))__ mol/s
-- through __top__ boundary __$(round(Itop[2],sigdigits=2))__ mol/s
+- through __bottom__ boundary __$(round(Ibot[2]/ufac"mol/hr",sigdigits=2))__ mol/hr
+- through __top__ boundary __$(round(Itop[2]/ufac"mol/hr",sigdigits=2))__ mol/hr
 
 Flow of $(data.gn[3]):
 
-- through __bottom__ boundary __$(round(Ibot[3],sigdigits=2))__ mol/s
-- through __top__ boundary __$(round(Itop[3],sigdigits=2))__ mol/s
+- through __bottom__ boundary __$(round(Ibot[3]/ufac"mol/hr",sigdigits=2))__ mol/hr
+- through __top__ boundary __$(round(Itop[3]/ufac"mol/hr",sigdigits=2))__ mol/hr
 
 Flow of $(data.gn[4]):
 
-- through __bottom__ boundary __$(round(Ibot[4],sigdigits=2))__ mol/s
-- through __top__ boundary __$(round(Itop[4],sigdigits=2))__ mol/s
+- through __bottom__ boundary __$(round(Ibot[4]/ufac"mol/hr",sigdigits=2))__ mol/hr
+- through __top__ boundary __$(round(Itop[4]/ufac"mol/hr",sigdigits=2))__ mol/hr
 
 Flow of $(data.gn[5]):
 
-- through __bottom__ boundary __$(round(Ibot[5],sigdigits=2))__ mol/s
-- through __top__ boundary __$(round(Itop[5],sigdigits=2))__ mol/s
+- through __bottom__ boundary __$(round(Ibot[5]/ufac"mol/hr",sigdigits=2))__ mol/hr
+- through __top__ boundary __$(round(Itop[5]/ufac"mol/hr",sigdigits=2))__ mol/hr
 
 Flow of $(data.gn[6]):
 
-- through __bottom__ boundary __$(round(Ibot[6],sigdigits=2))__ mol/s
-- through __top__ boundary __$(round(Itop[6],sigdigits=2))__ mol/s
+- through __bottom__ boundary __$(round(Ibot[6]/ufac"mol/hr",sigdigits=2))__ mol/hr
+- through __top__ boundary __$(round(Itop[6]/ufac"mol/hr",sigdigits=2))__ mol/hr
 """
 
 # ╔═╡ 3bd80c19-0b49-43f6-9daa-0c87c2ea8093
 let
 	iT=data.iT
 	vis=GridVisualizer()
-	scalarplot!(vis, grid, sol[iT,:].- 273.15, resolution=(600,400), show=true)
+	scalarplot!(vis, grid, sol[iT,:].- 273.15, show=true)
 end
 
 # ╔═╡ 4b41d985-8ebc-4cab-a089-756fce0d3060
@@ -770,6 +782,9 @@ let
 	# visualization
 	vis=GridVisualizer(layout=(2,1),resolution=(600,800))
 
+	sol=sol_(sol_.t[18])
+	
+	
 	# 2D plot
 	scalarplot!(vis[1,1], grid, sol[1,:], zoom=1.5)
 	
@@ -838,9 +853,11 @@ end
 # ╠═3d660986-f6d7-41a6-800b-68ccd920c7ac
 # ╠═99638215-3197-492a-8ac3-dcbf16f41fbe
 # ╠═91d8119f-501f-49f2-93e0-88da8d996f7a
-# ╠═3bd80c19-0b49-43f6-9daa-0c87c2ea8093
+# ╟─b2df1087-6628-4889-8cd6-c5ee7629cd93
+# ╟─3bd80c19-0b49-43f6-9daa-0c87c2ea8093
 # ╟─d7960eb2-bfd7-4be4-a0ae-552d68892206
-# ╟─4b41d985-8ebc-4cab-a089-756fce0d3060
+# ╟─2790b550-3105-4fc0-9070-d142c19678db
+# ╠═4b41d985-8ebc-4cab-a089-756fce0d3060
 # ╟─8db106cc-c5f1-498b-bf8b-fddd8e21b444
 # ╟─bd7552d2-2c31-4834-97d9-ccdb4652242f
 # ╟─2f24ba85-748a-44a6-bde1-8e320106198d
