@@ -585,7 +585,7 @@ function main(;data=ModelData())
 	for i=1:ngas
 		inival[i,:] .*= data.X0[i]
 	end
-	inival[iT,:] .= map( (r,z)->(data.Tamb+500*z/data.h),grid)
+	inival[iT,:] .= map( (r,z)->(data.Tamb+25*z/data.h),grid)
 
 	sol_=solve(sys;inival,)
 	

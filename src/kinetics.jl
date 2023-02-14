@@ -87,7 +87,8 @@ end
 
 function Ki(kindata::AbstractKineticsData, T)
     nr=kindata.nr
-    Ki=zeros(Float64, nr)
+    #Ki=zeros(Float64, nr)
+    Ki=zeros(typeof(T), nr)
     Ki_ref = kindata.Ki_ref
     TKi_ref = kindata.TKi_ref
     ΔHi = kindata.ΔHi
@@ -110,7 +111,8 @@ end
 
 function ki(kindata::AbstractKineticsData, T)
     nr=kindata.nr
-    ki=zeros(Float64, nr)
+    #ki=zeros(Float64, nr)
+    ki=zeros(typeof(T), nr)
     ki_ref = kindata.ki_ref
     Tki_ref = kindata.Tki_ref
     Ei = kindata.Ei
@@ -142,7 +144,8 @@ end
 
 function Kj(kindata::AbstractKineticsData, T)
     ng=kindata.ng
-    Kj=zeros(Float64, ng)
+    # Kj=zeros(Float64, ng)
+    Kj=zeros(typeof(T), ng)
     Kj_ref = kindata.Kj_ref
     TKj_ref = kindata.TKj_ref
     ΔHj = kindata.ΔHj
@@ -162,7 +165,8 @@ end
 
 function DEN(kindata::AbstractKineticsData,T,p)
 	n=kindata.gni
-    p_=p
+    # p_=p
+    p_=copy(p)
 	p_[n["H2O"]]=p_[n["H2O"]]/p_[n["H2"]] # p_H2O/p_H2
 	1+sum(Kj(kindata, T).*p_)
 end
