@@ -41,11 +41,25 @@ end;
 # ╔═╡ 863c9da7-ef45-49ad-80d0-3594eca4a189
 PlutoUI.TableOfContents(title="Dusty Gas Model")
 
-# ╔═╡ b659879f-3706-4937-b655-116f1be85069
+# ╔═╡ 2ed3223e-a604-410e-93d4-016580f49093
+md"""
+# Domain / Grid
+"""
+
+# ╔═╡ f9205777-f2af-4192-88f5-a72e193f13df
+md"""
+## 3D
+"""
+
+# ╔═╡ 0a911687-aff4-4c77-8def-084293329f35
 begin
-	const Γ_Bot=1
-	const Γ_Top=2
-	const Γ_Cat=3
+	const Γ_side_front = 1 # symmetry bc
+	const Γ_side_right = 2 # wall bc
+	const Γ_side_back = 3 # wall bc
+	const Γ_side_left = 4 # symmetry bc
+	const Γ_bottom = 5 # inflow bc
+	const Γ_top_frit = 6 # outflow bc, uncoated porous frit 
+	const Γ_top_cat = 7 # outflow bc, catalyst coated porous frit 
 end;
 
 # ╔═╡ 2554b2fc-bf5c-4b8f-b5e9-8bc261fe597b
@@ -193,12 +207,12 @@ function reaction(f,u,node,data)
 		ng=data.gni # gas species indices from names
 		nr=data.kinpar.rni # reaction indices from names
 		iT=data.iT
-		#RR=RRc*u[n["H2"]]*u[n["CO2"]]
+		
 		pi = u[1:ngas]./ufac"bar"
 		# negative sign: sign convention of VoronoiFVM: source term < 0 
 		# ri returns reaction rate in mol/(h gcat)
 		RR = -data.mcats*ri(data.kinpar,u[iT],pi)*ufac"mol/hr"*ufac"1/g"
-		# reactions
+		# reactions in S3P kinetics model
 		# R1: CO + H2O = CO2 + H2
 		# R2: CH4 + 2 H2O = CO2 + 4 H2
 		# R3: CH4 + H2O = CO + 3 H2
@@ -207,12 +221,6 @@ function reaction(f,u,node,data)
 			f[i] = sum(data.kinpar.nuij[i,:] .* RR)
 		end
 		
-		#f[ng["H2"]] = RR[nr["R1"]] + 4*RR[nr["R2"]] + 3*RR[nr["R3"]]
-		#f[ng["CO2"]] = RR[nr["R1"]] + RR[nr["R2"]]
-		#f[ng["CO"]] = -RR[nr["R1"]] + RR[nr["R3"]]
-		#f[ng["H2O"]] = -RR[nr["R1"]] - 2*RR[nr["R2"]] - RR[nr["R3"]]
-		#f[ng["CH4"]] = -RR[nr["R2"]] - RR[nr["R3"]]
-		#f[ng["N2"]] = 0.0
 		# temperature eq. / heat source
 		ΔHi=data.kinpar.ΔHi
 		f[iT] = -(RR[nr["R1"]]*ΔHi["R1"]+RR[nr["R2"]]*ΔHi["R2"] +RR[nr["R3"]]*ΔHi["R3"])
@@ -373,19 +381,26 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 		
 	
 	## porous filter data
-	dp::Float64=50.0*ufac"μm" # average pore size
+	dp::Float64=100.0*ufac"μm" # average pore size
 	#dp::Float64=25.0*ufac"μm" # average pore size
-	#cath::Float64 = 500.0*ufac"μm" # catalyst layer thickness
-	cath::Float64 = 1000.0*ufac"μm" # catalyst layer thickness
-	catD::Float64 = 10.0*ufac"cm" # catalyst layer diameter
+	
+
+	# frit thickness (applies to 2D & 3D)
+	h::Float64=0.5*ufac"cm"
+	# catalyst layer thickness (applies to 2D & 3D)
+	cath::Float64 = 500.0*ufac"μm"
+	
 	# cylindrical disc / 2D
     D::Float64=12.0*ufac"cm" # disc diameter
+	catD::Float64 = 10.0*ufac"cm" # catalyst layer diameter
 	
 
 	# prism / 3D
 	wi::Float64=12.0*ufac"cm" # prism width/side lenght
 	le::Float64=wi # prism width/side lenght
-	h::Float64=0.5*ufac"cm" # frit thickness (applies to 2D & 3D)
+	catwi::Float64=10.0*ufac"cm" # prism width/side lenght
+	
+	
 
 	Ac::Float64=pi*D^2.0/4.0*ufac"m^2" # cross-sectional area, circular
 	#Ac::Float64=wi^2*ufac"m^2" # cross-sectional area, square
@@ -522,8 +537,34 @@ function plane(data,sol)
 	#sol_cutplane, grid_2D	
 end
 
-# ╔═╡ 74f82a3c-ceaf-4782-abec-6ccbe6bb39d4
-data.kinpar.nuij[4,:]
+# ╔═╡ 985718e8-7ed7-4c5a-aa13-29462e52d709
+md"""
+Cutplane at ``z=`` $(@bind zcut Slider(range(0.0,data.h,length=101),default=data.h,show_value=true)) m
+"""
+
+# ╔═╡ ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
+function prism_sq(;nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.catwi)
+	
+	hw=w/2.0/10.0*2.0^(-nref)
+	hh=h/10.0*2.0^(-nref)
+	W=collect(0:hw:(w/2.0))
+    H=collect(0:hh:h)
+	grid=simplexgrid(W,W,H)
+	
+	# catalyst layer region
+	cellmask!(grid,[0.0,0.0,h-cath],[catwi/2,catwi/2,h],2)
+	# catalyst layer boundary
+	bfacemask!(grid,[0.0,0.0,h],[catwi/2,catwi/2,h],Γ_top_cat)	
+end
+
+# ╔═╡ ff58b0b8-2519-430e-8343-af9a5adcb135
+let
+	vis=GridVisualizer(resolution=(600,400), zoom=1.9, )
+	#zcut = data.h-data.cath/2
+	gridplot!(vis, prism_sq(nref=0,cath=2*ufac"mm"), zplane=zcut)
+	reveal(vis)
+	#save("../img/out/domain.svg", vis)
+end
 
 # ╔═╡ 6258c7c7-dbf5-4d5b-a8e3-de2250f5e66a
 md"""
@@ -726,11 +767,8 @@ function flux(f,u,edge,data)
 
 	
 	for i=1:ng
-
 		DK = DK_eff(data,T,i)
-
 		bp,bm=fbernoulli_pm(vh/DK)		
-		
 		F[i] = -(bm*u[i,1]-bp*u[i,2])/(ph"R"*T)
 	end
 	
@@ -1088,9 +1126,14 @@ end
 # ╔═╡ Cell order:
 # ╠═11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 # ╟─863c9da7-ef45-49ad-80d0-3594eca4a189
+# ╟─2ed3223e-a604-410e-93d4-016580f49093
 # ╠═077d4ede-9e0f-4f94-afb0-01bd36c584fc
 # ╠═8d90a6c3-95c5-4076-a3a1-2c01d119edb9
-# ╠═b659879f-3706-4937-b655-116f1be85069
+# ╟─f9205777-f2af-4192-88f5-a72e193f13df
+# ╠═0a911687-aff4-4c77-8def-084293329f35
+# ╠═ff58b0b8-2519-430e-8343-af9a5adcb135
+# ╟─985718e8-7ed7-4c5a-aa13-29462e52d709
+# ╠═ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
 # ╟─2554b2fc-bf5c-4b8f-b5e9-8bc261fe597b
 # ╟─f4dcde90-6d8f-4b17-b4ec-367d2372637f
 # ╟─3703afb0-93c4-4664-affe-b723758fb56b
@@ -1111,7 +1154,6 @@ end
 # ╠═b6381008-0280-404c-a86c-9c9c3c9f82eb
 # ╟─02b76cda-ffae-4243-ab40-8d0fe1325776
 # ╠═78cf4646-c373-4688-b1ac-92ed5f922e3c
-# ╠═74f82a3c-ceaf-4782-abec-6ccbe6bb39d4
 # ╟─906ad096-4f0c-4640-ad3e-9632261902e3
 # ╠═7da59e27-62b9-4b89-b315-d88a4fd34f56
 # ╠═40906795-a4dd-4e4a-a62e-91b4639a48fa
