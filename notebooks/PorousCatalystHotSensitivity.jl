@@ -4,6 +4,16 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+end
+
 # ╔═╡ 11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 begin
 	using Pkg
@@ -180,24 +190,29 @@ function reaction(f,u,node,data)
 	ip=data.ip
 	
 	if node.region == 2 && data.isreactive # catalyst layer
-		RRc=data.RRc
 		ng=data.gni # gas species indices from names
 		nr=data.kinpar.rni # reaction indices from names
 		iT=data.iT
 		#RR=RRc*u[n["H2"]]*u[n["CO2"]]
 		pi = u[1:ngas]./ufac"bar"
 		# negative sign: sign convention of VoronoiFVM: source term < 0 
-		RR = -data.mcats*ri(data.kinpar,u[iT],pi)
+		# ri returns reaction rate in mol/(h gcat)
+		RR = -data.mcats*ri(data.kinpar,u[iT],pi)*ufac"mol/hr"*ufac"1/g"
 		# reactions
 		# R1: CO + H2O = CO2 + H2
 		# R2: CH4 + 2 H2O = CO2 + 4 H2
 		# R3: CH4 + H2O = CO + 3 H2
-		f[ng["H2"]] = RR[nr["R1"]] + 4*RR[nr["R2"]] + 3*RR[nr["R3"]]
-		f[ng["CO2"]] = RR[nr["R1"]] + RR[nr["R2"]]
-		f[ng["CO"]] = -RR[nr["R1"]] + RR[nr["R3"]]
-		f[ng["H2O"]] = -RR[nr["R1"]] - 2*RR[nr["R2"]] - RR[nr["R3"]]
-		f[ng["CH4"]] = -RR[nr["R2"]] - RR[nr["R3"]]
-		f[ng["N2"]] = 0.0
+
+		for i=1:ngas
+			f[i] = sum(data.kinpar.nuij[i,:] .* RR)
+		end
+		
+		#f[ng["H2"]] = RR[nr["R1"]] + 4*RR[nr["R2"]] + 3*RR[nr["R3"]]
+		#f[ng["CO2"]] = RR[nr["R1"]] + RR[nr["R2"]]
+		#f[ng["CO"]] = -RR[nr["R1"]] + RR[nr["R3"]]
+		#f[ng["H2O"]] = -RR[nr["R1"]] - 2*RR[nr["R2"]] - RR[nr["R3"]]
+		#f[ng["CH4"]] = -RR[nr["R2"]] - RR[nr["R3"]]
+		#f[ng["N2"]] = 0.0
 		# temperature eq. / heat source
 		ΔHi=data.kinpar.ΔHi
 		f[iT] = -(RR[nr["R1"]]*ΔHi["R1"]+RR[nr["R2"]]*ΔHi["R2"] +RR[nr["R3"]]*ΔHi["R3"])
@@ -316,7 +331,8 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	
 	# catalyst / chemistry data
 	# kinetic parameters, S3P="simple 3 parameter" kinetics fit to UPV lab scale experimental data
-	kinpar::AbstractKineticsData = S3P
+	# kinpar::AbstractKineticsData = S3P
+	kinpar::AbstractKineticsData = XuFroment1989
 	
 	# number of gas phase species
 	ng::Int64		 		= S3P.ng
@@ -337,9 +353,6 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	end # inlet composition
 	#X0::Vector{Float64} = [1.0]
 	
-
-	# reaction enthalpy
-	ΔHR::Float64 = 10.0*ufac"kJ/mol"
 	# volume specific cat mass loading, UPV lab scale PC reactor
 	mcats::Float64 =1234.568*ufac"kg/m^3"
 	isreactive::Bool = 1
@@ -348,8 +361,6 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	ip::Int64=ng+1 # index of total pressure variable
 	iT::Int64=ip+1 # index of Temperature variable
 
-	
-	RRc::Float64 = 1.0e-5 # reaction rate constant	
 		
 	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
 	
@@ -364,7 +375,8 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	## porous filter data
 	dp::Float64=50.0*ufac"μm" # average pore size
 	#dp::Float64=25.0*ufac"μm" # average pore size
-	cath::Float64 = 500.0*ufac"μm" # catalyst layer thickness
+	#cath::Float64 = 500.0*ufac"μm" # catalyst layer thickness
+	cath::Float64 = 1000.0*ufac"μm" # catalyst layer thickness
 	catD::Float64 = 10.0*ufac"cm" # catalyst layer diameter
 	# cylindrical disc / 2D
     D::Float64=12.0*ufac"cm" # disc diameter
@@ -404,14 +416,13 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 
 	MWin::Float64 = molarweight_mix(Fluids, X0)
 	mdotin::Float64=MWin*Qflow*pn/(ph"R"*Tn)*ufac"kg/s"
-	# mass flux in kg/(m^2 s)
-	mfluxin::Float64 = mdotin/Ac*ufac"kg/(m^2*s)"
+
 	
 	Tin::Float64=298.15*ufac"K" # inlet temperature
 	Tamb::Float64=Tin # ambient temperature
 	#Tin::Float64=600.0*ufac"K" # inlet temperature
 	p::Float64=1.0*ufac"atm" # reactor pressure
-	Δp::Float64=0.1*p # pressure differential over reactor
+
 	# u0::Float64=Qflow/(Ac*ϕ)*ufac"m/s" # mean superficial velocity
 	u0::Float64=Qflow/(Ac)*ufac"m/s" # mean superficial velocity
 	utop::Float64=u0*ufac"m/s" # adjustable parameter to match the outlet mass flow to prescribed inlet mass flow rate
@@ -427,7 +438,7 @@ function catcylinder(;nref=0, r=data.D/2, h=data.h, catr=data.catD/2,cath=data.c
 	hr=r/10.0*2.0^(-nref)
 	
 	hh=h/10.0*2.0^(-nref)
-	#hhf=h/50.0*2.0^(-nref)
+	#hhf=h/20.0*2.0^(-nref)
 	
 	
 	#Z=geomspace(0,h,hh,hhf)
@@ -511,14 +522,20 @@ function plane(data,sol)
 	#sol_cutplane, grid_2D	
 end
 
+# ╔═╡ 74f82a3c-ceaf-4782-abec-6ccbe6bb39d4
+data.kinpar.nuij[4,:]
+
 # ╔═╡ 6258c7c7-dbf5-4d5b-a8e3-de2250f5e66a
 md"""
 # Sensitivity
 """
 
+# ╔═╡ 2abbe557-9869-4861-9c3b-208f1f2edf59
+@bind RunSensitivity CheckBox()
+
 # ╔═╡ ec3dce96-a6df-4ff5-aa7b-ee8631555b67
-#SensPar = :Abs_lamp_cat
-SensPar = :mcats
+SensPar = :Abs_lamp_cat
+#SensPar = :mcats
 
 # ╔═╡ cd2547b4-0e2f-4618-8cca-3e02ab7cb236
 md"""
@@ -537,12 +554,12 @@ Base.@kwdef mutable struct ModelDataSens{Tv} <:AbstractModelData
 	# BEGIN SENSITIVITY PARAMETERS
 	S::Tv = 1.0
 	# cat avg absorptivity of irradiation from lamp
-	#Abs_lamp_cat::Tv=S
-	Abs_lamp_cat::Float64=0.7 # cat avg absorptivity of irradiation from lamp
+	Abs_lamp_cat::Tv=S
+	#Abs_lamp_cat::Float64=0.7 # cat avg absorptivity of irradiation from lamp
 	
 	# volume specific cat mass loading, UPV lab scale PC reactor
-	mcats::Tv=S
-	#mcats::Float64 =1234.568*ufac"kg/m^3"
+	#mcats::Tv=S
+	mcats::Float64 =1234.568*ufac"kg/m^3"
 	
 	# frit avg absorptivity of irradiation from lamp
 	#Abs_lamp_frit::Tv=S
@@ -574,11 +591,8 @@ Base.@kwdef mutable struct ModelDataSens{Tv} <:AbstractModelData
 		x[gni["CO2"]] = 1.0
 		x/sum(x)
 	end # inlet composition
-	#X0::Vector{Float64} = [1.0]
-	
 
-	# reaction enthalpy
-	ΔHR::Float64 = 10.0*ufac"kJ/mol"
+
 	# mcats::Float64 =1234.568*ufac"kg/m^3"
 	isreactive::Bool = 1
 	#isreactive::Bool = 0
@@ -587,7 +601,6 @@ Base.@kwdef mutable struct ModelDataSens{Tv} <:AbstractModelData
 	iT::Int64=ip+1 # index of Temperature variable
 
 	
-	RRc::Float64 = 1.0e-5 # reaction rate constant	
 		
 	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
 	
@@ -642,14 +655,12 @@ Base.@kwdef mutable struct ModelDataSens{Tv} <:AbstractModelData
 
 	MWin::Float64 = molarweight_mix(Fluids, X0)
 	mdotin::Float64=MWin*Qflow*pn/(ph"R"*Tn)*ufac"kg/s"
-	# mass flux in kg/(m^2 s)
-	mfluxin::Float64 = mdotin/Ac*ufac"kg/(m^2*s)"
 	
 	Tin::Float64=298.15*ufac"K" # inlet temperature
 	Tamb::Float64=Tin # ambient temperature
 	#Tin::Float64=600.0*ufac"K" # inlet temperature
 	p::Float64=1.0*ufac"atm" # reactor pressure
-	Δp::Float64=0.1*p # pressure differential over reactor
+	
 	# u0::Float64=Qflow/(Ac*ϕ)*ufac"m/s" # mean superficial velocity
 	u0::Float64=Qflow/(Ac)*ufac"m/s" # mean superficial velocity
 	utop::Float64=u0*ufac"m/s" # adjustable parameter to match the outlet mass flow to prescribed inlet mass flow rate
@@ -828,7 +839,8 @@ end
 # ╔═╡ 47161886-9a5c-41ac-abf5-bbea82096d5a
 function STCefficiency(sol,sys,data)
 	_,ndot_top = MoleFlows(sol,sys,data)
-	ndot_top[data.gni["CO"]] * -data.kinpar.ΔHi["R1"] / (data.G_lamp*data.Ac)
+	# R2 = RWGS in Xu & Froment kinetic model
+	ndot_top[data.gni["CO"]] * -data.kinpar.ΔHi["R2"] / (data.G_lamp*data.Ac)
 end
 
 # ╔═╡ 333b5c80-259d-47aa-a441-ee7894d6c407
@@ -902,7 +914,7 @@ function main(;data=ModelData())
 	
 	control=SolverControl(;
 					  handle_exceptions=true,
-					  Δp_min=5.0e-3,
+					  Δp_min=5.0e-3,					  
 					  Δp=0.1,
 					  Δp_grow=1.2,
 					  Δu_opt=10000.0, # large value, due to unit Pa of pressure?
@@ -1011,9 +1023,6 @@ let
 
 end
 
-# ╔═╡ ef8437cd-02a6-4dcb-a6eb-9f4606447d00
-data_embed.Abs_lamp_cat
-
 # ╔═╡ b66d9a7f-3023-4780-9999-5e07862fc583
 	function simSens(P)
 		Tv = eltype(P)
@@ -1035,28 +1044,30 @@ data_embed.Abs_lamp_cat
 
 # ╔═╡ 7530df59-03e7-4bb6-83f2-86369edc13ee
 begin
-
-	# specify sensitivity parameter (α_cat, ϵ_cat, λ_eff, mcats)
-	P = getfield(data_embed, SensPar)
-	P *= 1.0 .+ [-0.5,-0.2,-0.1,0.0,0.1,0.2,0.5]
+	if RunSensitivity
+		# specify sensitivity parameter (α_cat, ϵ_cat, λ_eff, mcats)
+		P = getfield(data_embed, SensPar)
+		P *= 1.0 .+ [-0.5,-0.2,-0.1,0.0,0.1,0.2,0.5]
+		
+		dresult = DiffResults.JacobianResult(ones(3))
+	    Tca = zeros(0)
+	    DTca = zeros(0)
+		YCO = zeros(0)
+		DYCO = zeros(0)
+		STC = zeros(0)
+		DSTC = zeros(0)
 	
-	dresult = DiffResults.JacobianResult(ones(3))
-    Tca = zeros(0)
-    DTca = zeros(0)
-	YCO = zeros(0)
-	DYCO = zeros(0)
-	STC = zeros(0)
-	DSTC = zeros(0)
+	    for p ∈ P
+			ForwardDiff.jacobian!(dresult, simSens, [p,p,p])
+	        push!(Tca, DiffResults.value(dresult)[1])
+	        push!(DTca, DiffResults.jacobian(dresult)[1])
+			push!(YCO, DiffResults.value(dresult)[2])
+	        push!(DYCO, DiffResults.jacobian(dresult)[2])
+			push!(STC, DiffResults.value(dresult)[3])
+	        push!(DSTC, DiffResults.jacobian(dresult)[3])
+	    end
 
-    for p ∈ P
-		ForwardDiff.jacobian!(dresult, simSens, [p,p,p])
-        push!(Tca, DiffResults.value(dresult)[1])
-        push!(DTca, DiffResults.jacobian(dresult)[1])
-		push!(YCO, DiffResults.value(dresult)[2])
-        push!(DYCO, DiffResults.jacobian(dresult)[2])
-		push!(STC, DiffResults.value(dresult)[3])
-        push!(DSTC, DiffResults.jacobian(dresult)[3])
-    end
+	end
 
 end
 
@@ -1100,6 +1111,7 @@ end
 # ╠═b6381008-0280-404c-a86c-9c9c3c9f82eb
 # ╟─02b76cda-ffae-4243-ab40-8d0fe1325776
 # ╠═78cf4646-c373-4688-b1ac-92ed5f922e3c
+# ╠═74f82a3c-ceaf-4782-abec-6ccbe6bb39d4
 # ╟─906ad096-4f0c-4640-ad3e-9632261902e3
 # ╠═7da59e27-62b9-4b89-b315-d88a4fd34f56
 # ╠═40906795-a4dd-4e4a-a62e-91b4639a48fa
@@ -1134,11 +1146,11 @@ end
 # ╠═3a35ac76-e1b7-458d-90b7-d59ba4f43367
 # ╠═e73a3dfb-740e-4a20-9101-47cf18bcb9be
 # ╟─6258c7c7-dbf5-4d5b-a8e3-de2250f5e66a
+# ╠═2abbe557-9869-4861-9c3b-208f1f2edf59
 # ╠═ec3dce96-a6df-4ff5-aa7b-ee8631555b67
 # ╠═7530df59-03e7-4bb6-83f2-86369edc13ee
 # ╠═b66d9a7f-3023-4780-9999-5e07862fc583
 # ╠═4042a8de-8df8-4c9d-b1c9-6323afe20d95
-# ╠═ef8437cd-02a6-4dcb-a6eb-9f4606447d00
 # ╠═db16ecbe-cb69-46b6-8ac8-9ffa51c11dac
 # ╟─cd2547b4-0e2f-4618-8cca-3e02ab7cb236
 # ╟─1046820c-777f-4180-a570-1efe90924ec9
