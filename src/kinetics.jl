@@ -36,34 +36,12 @@
 
 abstract type AbstractKineticsData end
 
-# reaction rate expression for kinetic models of Vazquez2017 / S3P
-function RRS3P(kindata::AbstractKineticsData,T,p)
-    n=kindata.gni
-    r=kindata.rni
-	K=Ki(kindata, T)
-	ki(kindata,T) .* @views [
-		1/p[n["H2"]]*(p[n["CO"]]*p[n["H2O"]]-p[n["H2"]]*p[n["CO2"]]/K[r["R1"]]),
-		1/p[n["H2"]]^3.5*(p[n["CH4"]]*p[n["H2O"]]^2-p[n["H2"]]^4*p[n["CO2"]]/K[r["R2"]]),
-		1/p[n["H2"]]^2.5*(p[n["CH4"]]*p[n["H2O"]]-p[n["H2"]]^3*p[n["CO"]]/K[r["R3"]])
-	] / DEN(kindata,T,p)^2
-end
 
-# reaction rate expression for kinetic model of Xu & Froment 1989 (different order of reaction compared to S3P)
-function RRXuFroment(kindata::AbstractKineticsData,T,p)
-    n=kindata.gni
-    r=kindata.rni
-	K=Ki(kindata, T)
-	ki(kindata,T) .* @views [
-        1/p[n["H2"]]^2.5*(p[n["CH4"]]*p[n["H2O"]]-p[n["H2"]]^3*p[n["CO"]]/K[r["R1"]]),
-		1/p[n["H2"]]*(p[n["CO"]]*p[n["H2O"]]-p[n["H2"]]*p[n["CO2"]]/K[r["R2"]]),
-		1/p[n["H2"]]^3.5*(p[n["CH4"]]*p[n["H2O"]]^2-p[n["H2"]]^4*p[n["CO2"]]/K[r["R3"]]),		
-	] / DEN(kindata,T,p)^2
-end
 
 Base.@kwdef mutable struct KineticsData{F<:Function} <:AbstractKineticsData
     ng::Int64=6 # number of gas phase species
     gnames::Vector{String} = ["CO", "H2", "CH4", "H2O", "CO2", "N2"]
-    Fluids::Vector{AbstractFluidProps} = [CO,H2,CH4,H2O,CO2,N2]
+    Fluids::Vector{FluidProps} = [CO,H2,CH4,H2O,CO2,N2]
     gn::Dict{Int, String} 	= Dict(1:ng .=> gnames)
 	# inverse names and fluid indices
 	gni::Dict{String, Int}  = Dict(value => key for (key, value) in gn)
@@ -100,6 +78,29 @@ Base.@kwdef mutable struct KineticsData{F<:Function} <:AbstractKineticsData
     ΔHj::Dict{String,Float64} = Dict( gnames .=> [-70.65, -82.9, -38.28, 88.68, 0, 0]*ufac"kJ/mol")
 end
 
+# reaction rate expression for kinetic models of Vazquez2017 / S3P
+function RRS3P(kindata::AbstractKineticsData,T,p)
+    n=kindata.gni
+    r=kindata.rni
+	K=Ki(kindata, T)
+	ki(kindata,T) .* @views [
+		1/p[n["H2"]]*(p[n["CO"]]*p[n["H2O"]]-p[n["H2"]]*p[n["CO2"]]/K[r["R1"]]),
+		1/p[n["H2"]]^3.5*(p[n["CH4"]]*p[n["H2O"]]^2-p[n["H2"]]^4*p[n["CO2"]]/K[r["R2"]]),
+		1/p[n["H2"]]^2.5*(p[n["CH4"]]*p[n["H2O"]]-p[n["H2"]]^3*p[n["CO"]]/K[r["R3"]])
+	] / DEN(kindata,T,p)^2
+end
+
+# reaction rate expression for kinetic model of Xu & Froment 1989 (different order of reaction compared to S3P)
+function RRXuFroment(kindata::KineticsData,T,p)
+    n=kindata.gni
+    r=kindata.rni
+	K=Ki(kindata, T)
+	ki(kindata,T) .* @views [
+        1/p[n["H2"]]^2.5*(p[n["CH4"]]*p[n["H2O"]]-p[n["H2"]]^3*p[n["CO"]]/K[r["R1"]]),
+		1/p[n["H2"]]*(p[n["CO"]]*p[n["H2O"]]-p[n["H2"]]*p[n["CO2"]]/K[r["R2"]]),
+		1/p[n["H2"]]^3.5*(p[n["CH4"]]*p[n["H2O"]]^2-p[n["H2"]]^4*p[n["CO2"]]/K[r["R3"]]),		
+	] / DEN(kindata,T,p)^2
+end
 
 S3P = KineticsData{typeof(RRS3P)}()
 

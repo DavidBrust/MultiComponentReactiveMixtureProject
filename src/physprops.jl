@@ -5,6 +5,8 @@ function dynvisc_gas(Fluid, T)
 	A+B*T+C*T^2+D*T^3+E*T^4 * ufac"Pa*s"
 end
 
+
+
 # from VDI heat atlas 2010 ch. D
 # mixture dynamic viscosity according to Wilke mixing rule
 # Wilke CR (1950) A viscosity equation for gas mixtures. J Chem Phys 18:517
@@ -70,12 +72,60 @@ function dynvisc_thermcond_mix(data, T, x)
     mumix, lambdamix
 end
 
+function dynvisc_gas!(muf, i, Fluid, T)
+	(;A,B,C,D,E) = Fluid.DynVisc
+	# VDI heat atlas 2010 D3.1 Equation (3)
+	muf[i] = A+B*T+C*T^2+D*T^3+E*T^4 * ufac"Pa*s"
+    nothing
+end
+
+#Thermal conductivity of gases at low pressures, W/(m*K)
+function thermcond_gas!(lambdaf, i, Fluid, T)
+	(;A,B,C,D,E) = Fluid.ThermCond
+	# VDI heat atlas 2010 D3.1 Equation (5)
+	lambdaf[i] = A+B*T+C*T^2+D*T^3+E*T^4 * ufac"W/(m*K)"
+    nothing
+end
+
+function dynvisc_thermcond_mix!(mumix, muf, lambdamix, lambdaf, Fluids, T, x)
+    ng = length(x)
+    # Fluid = data.Fluids
+    mumix[1] = zero(eltype(mumix))
+    lambdamix[1] = zero(eltype(lambdamix))
+    # mu = zeros(Float64, ng)
+    # lambda = zeros(Float64, ng)
+    # M = zeros(Float64, ng)
+    # mu = zeros(typeof(T), ng)
+    # lambda = zeros(typeof(T), ng)
+    # M = zeros(typeof(T), ng)
+    for i=1:ng
+        # mu[i] = dynvisc_gas(Fluid[i], T)
+        dynvisc_gas!(muf, i, Fluids[i], T)
+        # lambda[i] = thermcond_gas(Fluid[i], T)
+        thermcond_gas!(lambdaf, i, Fluids[i], T)
+    end
+    for i=1:ng
+        sumyFij = 0
+        for j=1:ng
+            Mi, Mj = Fluids[i].MW, Fluids[j].MW
+            Fij = (1+(muf[i]/muf[j])^0.5*(Mj/Mi)^0.25)^2 / sqrt(8*(1+Mi/Mj))
+            sumyFij += x[j]*Fij
+        end
+        if x[i] > 0
+            mumix[1] += x[i] * muf[i] / sumyFij
+            lambdamix[1] += x[i] * lambdaf[i] / sumyFij
+        end
+    end
+    nothing
+end
+
 #Thermal conductivity of gases at low pressures, W/(m*K)
 function thermcond_gas(Fluid, T)
 	(;A,B,C,D,E) = Fluid.ThermCond
 	# VDI heat atlas 2010 D3.1 Equation (5)
 	A+B*T+C*T^2+D*T^3+E*T^4 * ufac"W/(m*K)"
 end
+
 
 
 
@@ -94,6 +144,24 @@ function heatcap_mix(Fluids, T, x)
         cpmix += x[i] * heatcap_gas(Fluids[i], T)
     end
     cpmix
+end
+
+function heatcap_gas!(cf, i, Fluid, T)
+	(;A,B,C,D,E,F,G) = Fluid.HeatCap
+	# VDI heat atlas 2010 D3.1 Equation (10)
+	T_ApT = (T/(A+T))
+	cf[i] = (B+(C-B)*T_ApT^2*(1- (A/(A+T))*(D+E*T_ApT+F*T_ApT^2+G*T_ApT^3) ) ) * ph"R" * ufac"J/(mol*K)"
+	nothing
+end
+
+function heatcap_mix!(cmix, cf, Fluids, T, x)
+    cmix[1] = zero(eltype(cmix))
+    ng=length(x)
+    for i=1:ng
+        heatcap_gas!(cf, i, Fluids[i], T)
+        cmix[1] += x[i] * cf[i]
+    end
+    nothing
 end
 
 function molarweight_mix(Fluids, x)
@@ -116,7 +184,7 @@ end
 
 abstract type AbstractPropsCoeffs end
 
-Base.@kwdef mutable struct PropsCoeffs <: AbstractPropsCoeffs
+Base.@kwdef struct PropsCoeffs
     A::Float64=1.0
 	B::Float64=1.0
 	C::Float64=1.0
@@ -130,12 +198,12 @@ end
 
 abstract type AbstractFluidProps end
 
-Base.@kwdef mutable struct FluidProps <: AbstractFluidProps
+Base.@kwdef struct FluidProps
 	name::String="Air"
 	MW::Float64=28.96*ufac"g/mol"
     # Group contributions for the diffusion volumes in the Fuller method from VDI heat atlas 2010, D1 Table 9 (p.150)
     ΔvF::Float64=19.7 
-	HeatCap::AbstractPropsCoeffs=PropsCoeffs(
+	HeatCap::PropsCoeffs=PropsCoeffs(
 	A=2548.9320,
 	B=3.5248,
 	C=-0.6366,
@@ -144,14 +212,14 @@ Base.@kwdef mutable struct FluidProps <: AbstractFluidProps
 	F=-120.3466,
 	G=98.8658
 	)
-	ThermCond::AbstractPropsCoeffs=PropsCoeffs( 
+	ThermCond::PropsCoeffs=PropsCoeffs( 
 	A=-0.908e-3,
 	B=0.112e-3,
 	C=-0.084333e-6,
 	D=0.056964e-9,
 	E=-0.015631e-12
 	)
-	DynVisc::AbstractPropsCoeffs=PropsCoeffs(
+	DynVisc::PropsCoeffs=PropsCoeffs(
 	A=-0.01702e-5,
 	B=0.79965e-7,
 	C=-0.72183e-10,
