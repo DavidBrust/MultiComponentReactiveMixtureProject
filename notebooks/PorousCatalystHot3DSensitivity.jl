@@ -269,9 +269,12 @@ md"""
 """
 
 # ╔═╡ b93ddd9d-9a35-477e-b069-b07b25d09e50
+# ╠═╡ disabled = true
+#=╠═╡
 md"""
 ### Volumetric Average Catalyst Temperature
 """
+  ╠═╡ =#
 
 # ╔═╡ 808e5a71-572f-4b0c-aeb3-9513d969dada
 function CatDims(grid)
@@ -304,7 +307,8 @@ function Tcatavg(sol,sys,grid,data)
 	
 	Tcat_avg_surf=integrate(sys,Tcat_,sol; boundary=true)[data.iT,Γ_top_cat] / catA - 273.15
 	Tcat_avg_vol=integrate(sys,Tcat_,sol; )[data.iT,2] / catV - 273.15
-	Tcat_avg_surf, Tcat_avg_vol
+	#Tcat_avg_surf, Tcat_avg_vol
+	Tcat_avg_surf
 end
 
 # ╔═╡ 4cde8752-bbdf-4b83-869e-46b78bb4adb5
@@ -582,16 +586,6 @@ function SolAlongLine(data,sol)
 		
 	grid=prism_sq()
 	mid_xy=data.wi/5*2
-
-	
-	#bid = maximum(grid[BFaceRegions])+1
-	# bfacemask!(grid, [mid_xy,mid_xy,0],[mid_xy,mid_xy,data.h],bid)
-	#bedgemask!(grid, [0.0,mid_xy,0],[0.0,mid_xy,data.h],bid)
-	#bedgemask!(grid, [mid_xy,mid_xy,0],[mid_xy,mid_xy,data.h],bid,tol=0.01)
-	
-	#idx = findall(x -> x==bid, grid[BEdgeRegions])
-	#Nodes = grid[BEdgeNodes][:,idx]
-	#Nodes = unique(reshape(Nodes, 1, :))
 
 	Nodes = findall(x->x[1] == mid_xy && x[2] == mid_xy, eachcol(grid[Coordinates]))
 	
@@ -1034,9 +1028,12 @@ let
 end
 
 # ╔═╡ 9952c815-5459-44ff-b1f8-07ab24ce0c53
+# ╠═╡ disabled = true
+#=╠═╡
 md"""
 Volumetric average Catalyst layer temperature: $(round(Tcatavg(sol,sys,grid,data_embed)[2])) °C
 """
+  ╠═╡ =#
 
 # ╔═╡ 0f7cce89-3add-4316-bcc2-a924064af884
 md"""
@@ -1137,10 +1134,11 @@ end
 		
 		solSens,sysSens=runSensitivity(grid, sol, dataSens, Tv)
 		
-		Tca=Tcatavg(solSens,sysSens,dataSens)
+		Tca=Tcatavg(solSens,sysSens,grid,dataSens)
 		YCO=Yield_CO(solSens,sysSens,dataSens)
 		STC=STCefficiency(solSens,sysSens,dataSens)
-		[Tca, YCO, STC]
+		#[Tca, YCO, STC]
+		[Tca, YCO]
 	end
 
 # ╔═╡ 7530df59-03e7-4bb6-83f2-86369edc13ee
@@ -1150,22 +1148,18 @@ begin
 		P = getfield(data_embed, SensPar)
 		P *= 1.0 .+ [-0.5,-0.2,-0.1,0.0,0.1,0.2,0.5]
 		
-		dresult = DiffResults.JacobianResult(ones(3))
+		dresult = DiffResults.JacobianResult(ones(2))
 	    Tca = zeros(0)
 	    DTca = zeros(0)
 		YCO = zeros(0)
 		DYCO = zeros(0)
-		STC = zeros(0)
-		DSTC = zeros(0)
 	
 	    for p ∈ P
-			ForwardDiff.jacobian!(dresult, simSens, [p,p,p])
+			ForwardDiff.jacobian!(dresult, simSens, [p,p])
 	        push!(Tca, DiffResults.value(dresult)[1])
 	        push!(DTca, DiffResults.jacobian(dresult)[1])
 			push!(YCO, DiffResults.value(dresult)[2])
-	        push!(DYCO, DiffResults.jacobian(dresult)[2])
-			push!(STC, DiffResults.value(dresult)[3])
-	        push!(DSTC, DiffResults.jacobian(dresult)[3])
+	        push!(DYCO, DiffResults.jacobian(dresult)[2])			
 	    end
 
 	end
@@ -1174,7 +1168,7 @@ end
 
 # ╔═╡ db16ecbe-cb69-46b6-8ac8-9ffa51c11dac
 let
-	vis = GridVisualizer(layout=(3,1), legend = :rb, xlabel=string(SensPar), markershape=:circle, markevery=1)
+	vis = GridVisualizer(layout=(2,1), legend = :rb, xlabel=string(SensPar), markershape=:circle, markevery=1)
 	
     scalarplot!(vis[1,1], P, Tca; color = :red, label = "Tcat")
     scalarplot!(vis[1,1], P, DTca; color = :blue, label = "dTcat/d($(string(SensPar)))", clear = false, show = true)
@@ -1182,8 +1176,6 @@ let
 	scalarplot!(vis[2,1], P, YCO; color = :red, label = "YCO")
     scalarplot!(vis[2,1], P, DYCO; color = :blue, label = "dYCO/d($(string(SensPar)))", clear = false, show = true)
 
-	scalarplot!(vis[3,1], P, STC; color = :red, label = "STC")
-    scalarplot!(vis[3,1], P, DSTC; color = :blue, label = "dSTC/d($(string(SensPar)))", clear = false, show = true)
 end
 
 # ╔═╡ Cell order:
@@ -1228,8 +1220,8 @@ end
 # ╟─a6e61592-7958-4094-8614-e77446eb2223
 # ╟─2739bcff-3fb0-4169-8a1a-2b0a14998cec
 # ╠═30393c90-298c-412d-86ce-e36106613d35
-# ╟─b93ddd9d-9a35-477e-b069-b07b25d09e50
-# ╟─9952c815-5459-44ff-b1f8-07ab24ce0c53
+# ╠═b93ddd9d-9a35-477e-b069-b07b25d09e50
+# ╠═9952c815-5459-44ff-b1f8-07ab24ce0c53
 # ╠═68e2628a-056a-4ec3-827f-2654f49917d9
 # ╟─fec9ca6d-d815-4b50-bec7-f8fb3d8195ba
 # ╟─808e5a71-572f-4b0c-aeb3-9513d969dada
