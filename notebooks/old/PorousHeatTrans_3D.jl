@@ -55,7 +55,7 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	iT::Int64=1 # index of Temperature variable
 	ng::Int64=1 # number of gas phase components
 	X0::Vector{Float64} = [1.0]
-	Fluids::Vector{AbstractFluidProps} = [N2]
+	Fluids::Vector{FluidProps} = [N2]
 	
 	Tamb::Float64=298.15*ufac"K" # ambient temperature
 	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
