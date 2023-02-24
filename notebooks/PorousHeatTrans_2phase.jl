@@ -4,16 +4,6 @@
 using Markdown
 using InteractiveUtils
 
-# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
-macro bind(def, element)
-    quote
-        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
-        local el = $(esc(element))
-        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
-        el
-    end
-end
-
 # ╔═╡ 5c3adaa0-9285-11ed-3ef8-1b57dd870d6f
 begin
 	using Pkg
@@ -50,6 +40,11 @@ $(LocalResource("../img/filter2.png", :width => 1000))
 $(LocalResource("../img/filter3.png", :width => 1000))
 """
 
+# ╔═╡ a49d599d-9b14-4d27-a5af-1732719ff12e
+md"""
+# Model Data
+"""
+
 # ╔═╡ 98063329-31e1-4d87-ba85-70419beb07e9
 Base.@kwdef mutable struct ModelData <:AbstractModelData
 	#iT::Int64=1 # index of Temperature variable
@@ -57,7 +52,7 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	iTf::Int64=2
 	ng::Int64=1 # number of gas phase components
 	X0::Vector{Float64} = [1.0]
-	Fluids::Vector{AbstractFluidProps} = [N2]
+	Fluids::Vector{FluidProps} = [N2]
 	
 	
 	Tamb::Float64=298.15*ufac"K" # ambient temperature
@@ -65,13 +60,13 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	α_nc::Float64=15.0*ufac"W/(m^2*K)" # natural convection heat transfer coefficient
 
 	## irradiation data
-	G_lamp::Float64=50.0*ufac"kW/m^2" # solar simulator irradiation flux
+	G_lamp::Float64=100.0*ufac"kW/m^2" # solar simulator irradiation flux
 	Abs_lamp::Float64=0.7 # avg absorptivity of cat. of irradiation coming from lamp
 	Eps_ir::Float64=0.7 # avg absorptivity/emissivity of cat. of IR irradiation coming from surroundings / emitted
 	
 	
 	## porous filter data
-	d::Float64=100.0*ufac"μm" # average pore size
+	d::Float64=200.0*ufac"μm" # average pore size, por class 0
 	# cylindrical disc / 2D
     D::Float64=10.0*ufac"cm" # disc diameter
 	Ac::Float64=pi*D^2.0/4.0*ufac"m^2" # cross-sectional area
@@ -85,16 +80,21 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	λs::Float64=1.4*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2 	
 	cs::Float64=0.8e3*ufac"J/(kg*K)" # heat capacity of non-porous SiO2
 	
-	ϕ::Float64=0.36 # porosity, class 2
-	k::Float64=2.9e-11*ufac"m^2" # permeability
-	a_s::Float64=0.13*ufac"m^2/g" # specific surface area
+	#ϕ::Float64=0.36 # porosity, por class 2
+	ϕ::Float64=0.33 # porosity, por class 0
+	#k::Float64=2.9e-11*ufac"m^2" # permeability, por class 2
+	k::Float64=1.23e-10*ufac"m^2" # permeability, por class 0
+
+	
+	#a_s::Float64=0.13*ufac"m^2/g" # specific surface area, por class 2
+	a_s::Float64=0.02*ufac"m^2/g" # specific surface area, por class 0
 	ρfrit::Float64=(1.0-ϕ)*ρs*ufac"kg/m^3" # density of porous frit
 	a_v::Float64=a_s*ρfrit # volume specific interface area
 	#a_v::Float64=a_s*ρfrit*1.0e-3 # volume specific interface area
 	## END porous filter data
 
 	## fluid data
-	Qflow::Float64=2000.0*ufac"ml/minute" # volumetric feed flow rate
+	Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate
 	Tin::Float64=298.15*ufac"K" # inlet temperature
 	p::Float64=1.0*ufac"atm" # reactor pressure		
 	u0::Float64=Qflow/(Ac*ϕ)*ufac"m/s" # mean superficial velocity
@@ -211,7 +211,7 @@ __Kuwahara, F., Shirota, M., & Nakayama, A. (2001).__ A numerical study of inter
 
 # ╔═╡ 641d61ca-448b-4240-95fb-486e83b6b768
 md"""
-For the given porous medium with very fine pore and particle sizes (__$(round(data.d/ufac"μm",sigdigits=2)) μm__), the volume specific interfacial area ``A_{\text v} = `` $(round(data.a_v,sigdigits=4)) `` \text{m}^2`` and interfacial heat transfer coefficient ``h_{\text{sf}} = `` $(round(hsf(data,data.Tin,data.p,data.X0),sigdigits=4)) ``\text W/ \text m^2 \text K`` take on very large values. Therefore the solid and gas phases are in thermal equilibrium. This justifies the use of a quasi-homogeneous model, describing both phases by a single temperature.
+For the given porous medium with very fine pore and particle sizes (__$(round(data.d/ufac"μm",sigdigits=2)) μm__), the volume specific interfacial area ``A_{\text v} = `` $(round(data.a_v,sigdigits=4)) `` \frac{\text{m}^2}{\text{m}^3}`` and interfacial heat transfer coefficient ``h_{\text{sf}} = `` $(round(hsf(data,data.Tin,data.p,data.X0))) ``\text W/ \text m^2 \text K`` take on very large values. Therefore the solid and gas phases are in thermal equilibrium. This justifies the use of a quasi-homogeneous model, describing both phases by a single temperature.
 """
 
 # ╔═╡ d7317b2d-e2c7-4114-8985-51979f2205ba
@@ -242,57 +242,18 @@ function cylinder(;nref=0, r=5.0*ufac"cm", h=0.5*ufac"cm")
 end
 
 # ╔═╡ 8cd85a0e-3d11-4bcc-8a7d-f30313b31363
-gridplot(cylinder(;r=data.D/2,h=data.h))
-
-# ╔═╡ a190862c-2251-4110-8274-9960c495a2c4
-md"""
-## 3D
-"""
-
-# ╔═╡ 4d9145f3-06aa-4a7c-82d0-feee0fa01865
-function prism_sq(;nref=0, l=10.0*ufac"cm", w=10.0*ufac"cm", h=0.5*ufac"cm")
-	
-	hw=w/2.0/10.0*2.0^(-nref)
-	hl=l/2.0/10.0*2.0^(-nref)
-	hh=h/10.0*2.0^(-nref)
-	W=collect(0:hw:(w/2.0))
-    L=collect(0:hl:(l/2.0))
-    H=collect(0:hh:h)
-	
-	simplexgrid(W,L,H)	
-end
-
-# ╔═╡ 61a67079-cb15-4283-ac15-96b49c461b6e
-gridplot(prism_sq(nref=0))
-
-# ╔═╡ ed50c2d4-25e9-4159-84c7-e0c70ffa63a1
-md"""
-Using symmetry, it is sufficient to include 1/4 of the square prismatic domain. (in principle 1/8 would be sufficient, but that would preclude the application of a simple grid)
-
-The 3D geomtry has 6 outer facets, whose boundary conditions need to be specified:
-- facet 1: symmetry (no flux)
-- facet 4: symmetry (no flux)
-- facet 2: convective heat transfer to the wall, air gab between porous frit and Al reactor wall (robin bc.)
-- facet 3: convective heat transfer to the wall, air gab between porous frit and Al reactor wall (robin bc.)
-- facet 5: convective heat transfer to inflowing gas stream (robin bc.)
-- facet 6: radiation + convection (outflow of gas stream) 
-"""
+gridplot(cylinder(;r=data.D/2,h=data.h),resolution=(600,400))
 
 # ╔═╡ 9d8c6ddc-2662-4055-b636-649565c36287
 md"""
 # Simulation
 """
 
-# ╔═╡ ba5c2095-4858-444a-99b5-ae6cf40374f9
-md"""
-## 2D
-"""
-
 # ╔═╡ 667c095d-f7c7-4244-806f-a70f1250146e
 md"""
 Fluid phase:
 ```math
-	-\nabla \cdot \left ( k^{\text f} \nabla T_{\text f} - \phi \rho_{\text f} c_{p, \text f} \vec{u} T_{\text f} \right) =  h_{\text{sf}}A_{\text V} (T_{\text s}-T_{\text f}) 
+	-\nabla \cdot \left ( k^{\text f} \nabla T_{\text f} - \phi \frac{p}{RT} c_{p, \text f} (T_{\text f} - T_{\text{ref}}) \vec{u} \right) =  h_{\text{sf}}A_{\text V} (T_{\text s}-T_{\text f}) 
 ```
 """
 
@@ -318,36 +279,22 @@ function main2phase(;nref=0,p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
 	
 	function flux(f,u,edge,data)
 		(;Fluids,p,ϕ,X0)=data
+		
 		# Fluid phase
-		
-		#ρf=density_idealgas(Fluid, Tbar, p)
-		#cf=heatcap_gas(Fluid, Tbar)
-		#λf=thermcond_gas(Fluid, Tbar)
+		Tf=0.5*(u[iTf,1]+u[iTf,2])
+		cf=heatcap_mix(Fluids, Tf, X0)
+		_,λf=dynvisc_thermcond_mix(data, Tf, X0)
 
-		Tbar=0.5*(u[iTf,1]+u[iTf,2])
-		ρf=density_idealgas(Fluids, Tbar, p, X0)
-		cf=heatcap_mix(Fluids, Tbar, X0)
-		_,λf=dynvisc_thermcond_mix(data, Tbar, X0)
-
-		
-		#λbed=kbed(data)*λf
-		λbed=kbed(data,λf)*λf
-
-		#conv=ϕ*evelo[edge.index]*ρf*cf/λf
-		#Bp,Bm = fbernoulli_pm(conv)
-		#f[iTf]= λf*(Bm*u[iTf,1]-Bp*u[iTf,2])
-		conv=evelo[edge.index]*ρf*cf/λbed
+		conv=evelo[edge.index]*p/(ph"R"*Tf)*cf/λf		
 		Bp,Bm = fbernoulli_pm(conv)
-		f[iTf]= λbed*(Bm*u[iTf,1]-Bp*u[iTf,2])
+		
+		f[iTf]= λf*(Bm*(u[iTf,1]-data.Tamb)-Bp*(u[iTf,2]-data.Tamb))		
+
 		
 		# Solid phase		
-		#λf0=thermcond_gas(Fluid, data.Tin)
-		#λbed=kbed(data)*λf0
-		
-		#f[iTs]= λbed*(u[iTs,1]-u[iTs,2])
-		f[iTs]= λbed*(Bm*u[iTs,1]-Bp*u[iTs,2])
+		λbed=kbed(data,λf)*λf
 
-		
+		f[iTs]= λbed*(u[iTs,1]-u[iTs,2])	
 	end
 
 	function reaction(f,u,edge,data)
@@ -355,8 +302,7 @@ function main2phase(;nref=0,p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
 		hsf_=hsf(data,u[iTf],data.p,data.X0)
 		ip_htx = a_v*hsf_*(u[iTs]-u[iTf]) # heat exchange between solid and gas phase
 		f[iTs] = ip_htx
-		f[iTf] = -ip_htx
-		
+		f[iTf] = -ip_htx		
 	end
 
 	function irrad_bc(f,u,bnode,data)
@@ -402,7 +348,7 @@ function main2phase(;nref=0,p=1.0*ufac"atm",Qflow=3400*ufac"ml/minute")
 	inival[iTs,:] .= map( (r,z)->(data.Tamb+500*z/data.h),grid)
 	inival[iTf,:] .= map( (r,z)->(data.Tamb+500*z/data.h),grid)
 	#inival[iT,:] .= data.Tamb
-	sol=solve(inival,sys)
+	sol=solve(sys;inival)
 	sys,sol,data
 end
 
@@ -414,7 +360,7 @@ let
 	sys,sol,data=Sim2Dhet
 	iTs=data.iTs
 	iTf=data.iTf
-	vis=GridVisualizer(layout=(2,1))
+	vis=GridVisualizer(layout=(2,1), Plotter=PyPlot)
 	solC = copy(sol)
 	@. solC[iTs,:] -= 273.15
 	@. solC[iTf,:] -= 273.15
@@ -425,51 +371,12 @@ let
 
 end
 
-# ╔═╡ 28a2230f-5a59-4034-86af-e3d58dcceb6c
-md"""
-## 3D
-"""
-
-# ╔═╡ 64dd5097-16aa-4c44-b000-6177cd4be226
-md"""
-### Cut planes
-"""
-
-# ╔═╡ bd179765-f996-4f91-ac4e-57d5817a2ed6
-md"""
-Analyse 2D slices of the 3D solution to be able to compare with the 2D axisymmetric solution. The goal is to show, that the geometry can be treated as 2D with sufficient accuracy.
-Below the difference between 3D and 2D __(3D - 2D)__ calculation is shown for different cross-sections:
-"""
-
-# ╔═╡ 641988da-8888-4e0d-b720-4f21a9900aca
-md"""
-Y - cutplane $(@bind ycut Slider(range(0.0,data.wi/2,length=21),default=0.0,show_value=true))
-"""
-
-# ╔═╡ b4175b62-198d-4605-9cf0-04b0be52c9c0
-function plane(ypos,sol,data,nref)
-	grid=prism_sq(;nref=nref, w=data.wi, l=data.le, h=data.h)
-	
-	bfacemask!(grid, [0,ypos,0],[data.wi/2.0,ypos,data.h],7)
-
-	# transform z coordinate of parent grid into y coordinate of subgrid
-	function _3to2(a,b)
-		a[1]=b[1]
-		a[2]=b[3]
-	end
-	grid_2D  = subgrid(grid, [7], boundary=true, transform=_3to2) 
-	
-	sol_cutplane = view(sol[data.iT, :], grid_2D)
-		
-	collect(sol_cutplane), grid_2D	
-	#sol_cutplane, grid_2D	
-end
-
 # ╔═╡ Cell order:
 # ╠═7d8eb6f5-3ba6-46ef-8058-1f24a0938ed1
 # ╠═5c3adaa0-9285-11ed-3ef8-1b57dd870d6f
 # ╟─f353e09a-4a61-4def-ab8a-1bd6ce4ed58f
 # ╟─2015c8e8-36cd-478b-88fb-94605283ac29
+# ╟─a49d599d-9b14-4d27-a5af-1732719ff12e
 # ╠═98063329-31e1-4d87-ba85-70419beb07e9
 # ╟─03d0c88a-462b-43c4-a589-616a8870be64
 # ╟─6d5a7d83-53f9-43f3-9ccd-dadab08f62c1
@@ -486,25 +393,15 @@ end
 # ╟─9198330d-7c05-440a-916e-fca0fe796b7b
 # ╟─16f5e0bc-8e3d-40cd-b67b-694eda6b67d9
 # ╟─1459c3db-5ffc-46bd-9c94-8c8964519f39
-# ╠═641d61ca-448b-4240-95fb-486e83b6b768
+# ╟─641d61ca-448b-4240-95fb-486e83b6b768
 # ╟─d7317b2d-e2c7-4114-8985-51979f2205ba
 # ╟─3c75c762-a44c-4328-ae41-a5016ce181f1
 # ╟─2c31e63a-cf42-45cd-b367-112438a02a97
 # ╠═2fe11550-683d-4c4b-b940-3e63a4f8a87d
-# ╠═8cd85a0e-3d11-4bcc-8a7d-f30313b31363
-# ╟─a190862c-2251-4110-8274-9960c495a2c4
-# ╠═4d9145f3-06aa-4a7c-82d0-feee0fa01865
-# ╠═61a67079-cb15-4283-ac15-96b49c461b6e
-# ╟─ed50c2d4-25e9-4159-84c7-e0c70ffa63a1
+# ╟─8cd85a0e-3d11-4bcc-8a7d-f30313b31363
 # ╟─9d8c6ddc-2662-4055-b636-649565c36287
-# ╟─ba5c2095-4858-444a-99b5-ae6cf40374f9
 # ╟─667c095d-f7c7-4244-806f-a70f1250146e
 # ╟─f0054c8a-921c-4603-9567-fb98beab4b69
 # ╠═186c0b6f-a049-4841-a69c-34b982c3d17c
 # ╠═d0ed3983-5118-479f-855a-1cd3c4778771
 # ╠═d725f9b9-61c4-4724-a1d9-6a04ba42499d
-# ╟─28a2230f-5a59-4034-86af-e3d58dcceb6c
-# ╟─64dd5097-16aa-4c44-b000-6177cd4be226
-# ╟─bd179765-f996-4f91-ac4e-57d5817a2ed6
-# ╟─641988da-8888-4e0d-b720-4f21a9900aca
-# ╠═b4175b62-198d-4605-9cf0-04b0be52c9c0
