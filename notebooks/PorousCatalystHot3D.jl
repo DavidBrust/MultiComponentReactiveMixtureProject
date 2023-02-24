@@ -390,7 +390,7 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	# inverse names and fluid indices
 	gni::Dict{String, Int}  = S3P.gni
 	# fluids and respective properties in system
-	Fluids::Vector{AbstractFluidProps} = S3P.Fluids
+	Fluids::Vector{FluidProps} = S3P.Fluids
 	#Fluids::Vector{AbstractFluidProps} = [N2]
 	X0::Vector{Float64} = let
 		x=zeros(Float64, ng)
@@ -428,7 +428,7 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	# frit thickness (applies to 2D & 3D)
 	h::Float64=0.5*ufac"cm"
 	# catalyst layer thickness (applies to 2D & 3D)
-	cath::Float64 = 500.0*ufac"μm"
+	cath::Float64 = 1000.0*ufac"μm"
 	
 	# cylindrical disc / 2D
     D::Float64=12.0*ufac"cm" # disc diameter
@@ -529,8 +529,8 @@ Cutplane at ``z=`` $(@bind zcut Slider(range(0.0,data.h,length=101),default=data
 # ╔═╡ ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
 function prism_sq(;nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.catwi)
 	
-	hw=w/2.0/10.0*2.0^(-nref)
-	hh=h/10.0*2.0^(-nref)
+	hw=w/2.0/5.0*2.0^(-nref)
+	hh=h/5.0*2.0^(-nref)
 	W=collect(0:hw:(w/2.0))
     H=collect(0:hh:h)
 	grid=simplexgrid(W,W,H)
@@ -580,7 +580,7 @@ end
 function SolAlongLine(data,sol)
 		
 	grid=prism_sq()
-	mid_xy=data.wi/4
+	mid_xy=data.wi/5*2
 
 	
 	#bid = maximum(grid[BFaceRegions])+1
@@ -606,6 +606,9 @@ function SolAlongLine(data,sol)
 	sol_p,grid1D
 end
 
+# ╔═╡ a9ec34cb-5c01-423f-a9b1-027cba13dca3
+data.mdotin/ufac"kg/hr"
+
 # ╔═╡ 6258c7c7-dbf5-4d5b-a8e3-de2250f5e66a
 md"""
 # Sensitivity
@@ -617,74 +620,6 @@ md"""
 # ╔═╡ ec3dce96-a6df-4ff5-aa7b-ee8631555b67
 SensPar = :Abs_lamp_cat
 #SensPar = :mcats
-
-# ╔═╡ 7530df59-03e7-4bb6-83f2-86369edc13ee
-#=╠═╡
-begin
-	if RunSensitivity
-		# specify sensitivity parameter (α_cat, ϵ_cat, λ_eff, mcats)
-		P = getfield(data_embed, SensPar)
-		P *= 1.0 .+ [-0.5,-0.2,-0.1,0.0,0.1,0.2,0.5]
-		
-		dresult = DiffResults.JacobianResult(ones(3))
-	    Tca = zeros(0)
-	    DTca = zeros(0)
-		YCO = zeros(0)
-		DYCO = zeros(0)
-		STC = zeros(0)
-		DSTC = zeros(0)
-	
-	    for p ∈ P
-			ForwardDiff.jacobian!(dresult, simSens, [p,p,p])
-	        push!(Tca, DiffResults.value(dresult)[1])
-	        push!(DTca, DiffResults.jacobian(dresult)[1])
-			push!(YCO, DiffResults.value(dresult)[2])
-	        push!(DYCO, DiffResults.jacobian(dresult)[2])
-			push!(STC, DiffResults.value(dresult)[3])
-	        push!(DSTC, DiffResults.jacobian(dresult)[3])
-	    end
-
-	end
-
-end
-  ╠═╡ =#
-
-# ╔═╡ b66d9a7f-3023-4780-9999-5e07862fc583
-#=╠═╡
-	function simSens(P)
-		Tv = eltype(P)
-		dataSens=ModelDataSens{Tv}(S=P[1])
-		for n in fieldnames(typeof(data_embed))
-	   		if !(getfield(dataSens,n) isa Tv)
-				v = getfield(data_embed,n)
-				setfield!(dataSens, n, v)
-			end
-		end
-		
-		solSens,sysSens=runSensitivity(grid, sol, dataSens, Tv)
-		
-		Tca=Tcatavg(solSens,sysSens,dataSens)
-		YCO=Yield_CO(solSens,sysSens,dataSens)
-		STC=STCefficiency(solSens,sysSens,dataSens)
-		[Tca, YCO, STC]
-	end
-  ╠═╡ =#
-
-# ╔═╡ db16ecbe-cb69-46b6-8ac8-9ffa51c11dac
-#=╠═╡
-let
-	vis = GridVisualizer(layout=(3,1), legend = :rb, xlabel=string(SensPar), markershape=:circle, markevery=1)
-	
-    scalarplot!(vis[1,1], P, Tca; color = :red, label = "Tcat")
-    scalarplot!(vis[1,1], P, DTca; color = :blue, label = "dTcat/d($(string(SensPar)))", clear = false, show = true)
-
-	scalarplot!(vis[2,1], P, YCO; color = :red, label = "YCO")
-    scalarplot!(vis[2,1], P, DYCO; color = :blue, label = "dYCO/d($(string(SensPar)))", clear = false, show = true)
-
-	scalarplot!(vis[3,1], P, STC; color = :red, label = "STC")
-    scalarplot!(vis[3,1], P, DSTC; color = :blue, label = "dSTC/d($(string(SensPar)))", clear = false, show = true)
-end
-  ╠═╡ =#
 
 # ╔═╡ cd2547b4-0e2f-4618-8cca-3e02ab7cb236
 md"""
@@ -762,9 +697,9 @@ Base.@kwdef mutable struct ModelDataSens{Tv} <:AbstractModelData
 		
 	
 	## porous filter data
-	dp::Float64=50.0*ufac"μm" # average pore size
+	dp::Float64=200.0*ufac"μm" # average pore size
 	#dp::Float64=25.0*ufac"μm" # average pore size
-	cath::Float64 = 500.0*ufac"μm" # catalyst layer thickness
+	cath::Float64 = 1000.0*ufac"μm" # catalyst layer thickness
 	catD::Float64 = 10.0*ufac"cm" # catalyst layer diameter
 	# cylindrical disc / 2D
     D::Float64=12.0*ufac"cm" # disc diameter
@@ -775,21 +710,23 @@ Base.@kwdef mutable struct ModelDataSens{Tv} <:AbstractModelData
 	le::Float64=wi # prism width/side lenght
 	h::Float64=0.5*ufac"cm" # frit thickness (applies to 2D & 3D)
 
-	Ac::Float64=pi*D^2.0/4.0*ufac"m^2" # cross-sectional area, circular
+	#Ac::Float64=pi*D^2.0/4.0*ufac"m^2" # cross-sectional area, circular
 	#Ac::Float64=wi^2*ufac"m^2" # cross-sectional area, square
+	Ac::Float64=wi*le*ufac"m^2" # cross-sectional area, square
+
 	
 	ρs::Float64=2.23e3*ufac"kg/m^3" # density of non-porous Boro-Solikatglas 3.3
 	λs::Float64=1.4*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2 	
 	cs::Float64=0.8e3*ufac"J/(kg*K)" # heat capacity of non-porous SiO2
 	
-	ϕ::Float64=0.36 # porosity, class 2
+	ϕ::Float64=0.33 # porosity, class 2
 	# approximation from Wesselingh, J. A., & Krishna, R. (2006). Mass Transfer in Multicomponent Mixtures
 	γ_τ::Float64=ϕ^1.5 # constriction/tourtuosity factor
 
-	k::Float64=2.9e-11*ufac"m^2" # permeability
-	#k::Float64=2.9e-14*ufac"m^2" # permeability
-	#k::Float64=2.9e-6*ufac"m^2" # permeability
-	a_s::Float64=0.13*ufac"m^2/g" # specific surface area
+	#k::Float64=2.9e-11*ufac"m^2" # permeability
+	k::Float64=1.23e-10*ufac"m^2" # permeability , por class 0
+
+	a_s::Float64=0.02*ufac"m^2/g" # specific surface area
 	ρfrit::Float64=(1.0-ϕ)*ρs*ufac"kg/m^3" # density of porous frit
 	a_v::Float64=a_s*ρfrit # volume specific interface area
 	## END porous filter data
@@ -1001,62 +938,66 @@ function main(;data=ModelData())
 	# inival[iT,:] .= map( (r,z)->(data.Tamb+25.0*z/data.h),grid)
 	inival[iT,:] .= data.Tamb
 
-	sol_=solve(sys;inival,)
+	sol=solve(sys;inival,)
 	
-	function pre(sol,par)
-		ng=data.ng
-		iT=data.iT
-		# iteratively adapt top outflow boundary condition
-		function Inttop(f,u,bnode,data)
+	 function pre(sol,par)
+	 	ng=data.ng
+	 	iT=data.iT
+	 	# iteratively adapt top outflow boundary condition
+	 	function Inttop(f,u,bnode,data)
 			
-			X=zeros(eltype(u), ng)
-			mole_frac!(bnode,data,X,u)
-			# top boundary(cat/frit)
-			if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat  
-				for i=1:ng
-					f[i] = data.Fluids[i].MW*X[i]
-				end
-				f[iT] = u[iT]
-			end
-		end
+	 		X=zeros(eltype(u), ng)
+	 		mole_frac!(bnode,data,X,u)
+	 		# top boundary(cat/frit)
+	 		if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat  
+	 			for i=1:ng
+	 				f[i] = data.Fluids[i].MW*X[i]
+	 			end
+	 			f[iT] = u[iT]
+	 		end
+	 	end
 		
-		MWavg=sum(integrate(sys,Inttop,sol; boundary=true)[1:ng,[Γ_top_frit,Γ_top_cat]])/data.Ac		
-		ntop=data.mdotin/MWavg
+	 	MWavg=sum(integrate(sys,Inttop,sol; boundary=true)[1:ng,[Γ_top_frit,Γ_top_cat]])/(data.Ac/4)
+	 	ntop=data.mdotin/MWavg
+		@show MWavg
+		 
+	 	Tavg=sum(integrate(sys,Inttop,sol; boundary=true)[data.iT,[Γ_top_frit,Γ_top_cat]])/(data.Ac/4)
+		 @show Tavg
 		
-		Tavg=sum(integrate(sys,Inttop,sol; boundary=true)[data.iT,[Γ_top_frit,Γ_top_cat]])/data.Ac
+	 	utop_calc=ntop*ph"R"*Tavg/(1.0*ufac"bar")/data.Ac
+	 	utops=[data.utop, utop_calc]*ufac"m/s"
+	 	data.utop = minimum(utops) + par*(maximum(utops)-minimum(utops))
+
+		  @show data.utop
 		
-		utop_calc=ntop*ph"R"*Tavg/(1.0*ufac"bar")/data.Ac
-		utops=[data.utop, utop_calc]*ufac"m/s"
-		data.utop = minimum(utops) + par*(maximum(utops)-minimum(utops))
-		
-		# embedding parameter: Qflow / ml/minute
-		#Qflows = [5000.0,50000.0]*ufac"ml/minute"
-		#Qflow = minimum(Qflows) + par*(maximum(Qflows)-minimum(Qflows))
-		#data.Qflow=Qflow
-		#data.u0=Qflow/(data.Ac)*ufac"m/s" # mean superficial velocity
-		#data.utop=data.u0*ufac"m/s" # adjustable parameter to match the outlet mass flow to prescribed inlet mass flow rate
+	# 	# embedding parameter: Qflow / ml/minute
+	# 	#Qflows = [5000.0,50000.0]*ufac"ml/minute"
+	# 	#Qflow = minimum(Qflows) + par*(maximum(Qflows)-minimum(Qflows))
+	# 	#data.Qflow=Qflow
+	# 	#data.u0=Qflow/(data.Ac)*ufac"m/s" # mean superficial velocity
+	# 	#data.utop=data.u0*ufac"m/s" # adjustable parameter to match the outlet mass flow to prescribed inlet mass flow rate
 
 		
-		# specific catalyst loading
-		mcats=[10.0, 1300.0]*ufac"kg/m^3"
-		data.mcats= minimum(mcats) + par*(maximum(mcats)-minimum(mcats))
+	 	# specific catalyst loading
+	 	mcats=[10.0, 1300.0]*ufac"kg/m^3"
+	 	data.mcats= minimum(mcats) + par*(maximum(mcats)-minimum(mcats))
 
-		# irradiation flux density
-		G_lamp=[1.0, 125.0]*ufac"kW/m^2"
-		data.G_lamp= minimum(G_lamp) + par*(maximum(G_lamp)-minimum(G_lamp))
-	end
+	 	# irradiation flux density
+	 	G_lamp=[1.0, 125.0]*ufac"kW/m^2"
+	 	data.G_lamp= minimum(G_lamp) + par*(maximum(G_lamp)-minimum(G_lamp))
+	 end
 	
-	control=SolverControl(;
-					  handle_exceptions=true,
-					  Δp_min=5.0e-3,					  
-					  Δp=0.1,
-					  Δp_grow=1.2,
-					  Δu_opt=10000.0, # large value, due to unit Pa of pressure?
-					  )
+	 control=SolverControl(;
+	 				  handle_exceptions=true,
+	 				  Δp_min=5.0e-4,					  
+	 				  Δp=0.1,
+	 				  Δp_grow=1.2,
+	 				  Δu_opt=100000.0, # large value, due to unit Pa of pressure?
+	 				  )
 	
-	#sol=solve(sys;inival,)
+	# #sol=solve(sys;inival,)
 	
-	sol=solve(sys;inival,embed=[0.0,1.0],pre,control)
+	 sol=solve(sys;inival,embed=[0.0,1.0],pre,control)
 
 	
 	sol,grid,sys,data
@@ -1143,8 +1084,7 @@ Chemical species flows through porous frit from bottom and top:
 # ╔═╡ 3bd80c19-0b49-43f6-9daa-0c87c2ea8093
 let
 	iT=data.iT
-	#vis=GridVisualizer(resolution=(600,400), Plotter=PyPlot)
-	vis=GridVisualizer(resolution=(600,400),)
+	vis=GridVisualizer(Plotter=PyPlot)
 	scalarplot!(vis, grid, sol[iT,:].- 273.15, show=true)
 
 	#reveal(vis)
@@ -1177,6 +1117,68 @@ let
 	#save("../img/out/pi_pt.svg", vis)
 end
 
+# ╔═╡ b66d9a7f-3023-4780-9999-5e07862fc583
+	function simSens(P)
+		Tv = eltype(P)
+		dataSens=ModelDataSens{Tv}(S=P[1])
+		for n in fieldnames(typeof(data_embed))
+	   		if !(getfield(dataSens,n) isa Tv)
+				v = getfield(data_embed,n)
+				setfield!(dataSens, n, v)
+			end
+		end
+		
+		solSens,sysSens=runSensitivity(grid, sol, dataSens, Tv)
+		
+		Tca=Tcatavg(solSens,sysSens,dataSens)
+		YCO=Yield_CO(solSens,sysSens,dataSens)
+		STC=STCefficiency(solSens,sysSens,dataSens)
+		[Tca, YCO, STC]
+	end
+
+# ╔═╡ 7530df59-03e7-4bb6-83f2-86369edc13ee
+begin
+	if RunSensitivity
+		# specify sensitivity parameter (α_cat, ϵ_cat, λ_eff, mcats)
+		P = getfield(data_embed, SensPar)
+		P *= 1.0 .+ [-0.5,-0.2,-0.1,0.0,0.1,0.2,0.5]
+		
+		dresult = DiffResults.JacobianResult(ones(3))
+	    Tca = zeros(0)
+	    DTca = zeros(0)
+		YCO = zeros(0)
+		DYCO = zeros(0)
+		STC = zeros(0)
+		DSTC = zeros(0)
+	
+	    for p ∈ P
+			ForwardDiff.jacobian!(dresult, simSens, [p,p,p])
+	        push!(Tca, DiffResults.value(dresult)[1])
+	        push!(DTca, DiffResults.jacobian(dresult)[1])
+			push!(YCO, DiffResults.value(dresult)[2])
+	        push!(DYCO, DiffResults.jacobian(dresult)[2])
+			push!(STC, DiffResults.value(dresult)[3])
+	        push!(DSTC, DiffResults.jacobian(dresult)[3])
+	    end
+
+	end
+
+end
+
+# ╔═╡ db16ecbe-cb69-46b6-8ac8-9ffa51c11dac
+let
+	vis = GridVisualizer(layout=(3,1), legend = :rb, xlabel=string(SensPar), markershape=:circle, markevery=1)
+	
+    scalarplot!(vis[1,1], P, Tca; color = :red, label = "Tcat")
+    scalarplot!(vis[1,1], P, DTca; color = :blue, label = "dTcat/d($(string(SensPar)))", clear = false, show = true)
+
+	scalarplot!(vis[2,1], P, YCO; color = :red, label = "YCO")
+    scalarplot!(vis[2,1], P, DYCO; color = :blue, label = "dYCO/d($(string(SensPar)))", clear = false, show = true)
+
+	scalarplot!(vis[3,1], P, STC; color = :red, label = "STC")
+    scalarplot!(vis[3,1], P, DSTC; color = :blue, label = "dSTC/d($(string(SensPar)))", clear = false, show = true)
+end
+
 # ╔═╡ Cell order:
 # ╠═11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 # ╟─863c9da7-ef45-49ad-80d0-3594eca4a189
@@ -1185,7 +1187,7 @@ end
 # ╠═8d90a6c3-95c5-4076-a3a1-2c01d119edb9
 # ╟─f9205777-f2af-4192-88f5-a72e193f13df
 # ╠═ff58b0b8-2519-430e-8343-af9a5adcb135
-# ╟─985718e8-7ed7-4c5a-aa13-29462e52d709
+# ╠═985718e8-7ed7-4c5a-aa13-29462e52d709
 # ╠═ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
 # ╟─2554b2fc-bf5c-4b8f-b5e9-8bc261fe597b
 # ╟─f4dcde90-6d8f-4b17-b4ec-367d2372637f
@@ -1234,6 +1236,7 @@ end
 # ╟─428afb22-55ab-4f64-805f-7e15ad4cf23f
 # ╠═47161886-9a5c-41ac-abf5-bbea82096d5a
 # ╟─b34c1d1b-a5b8-4de9-bea9-3f2d0503c1c0
+# ╠═a9ec34cb-5c01-423f-a9b1-027cba13dca3
 # ╟─8b1a0902-2542-40ed-9f91-447bffa4290f
 # ╟─b06a7955-6c91-444f-9bf3-72cfb4a011ec
 # ╠═f39dd714-972c-4d29-bfa8-d2c3795d2eef

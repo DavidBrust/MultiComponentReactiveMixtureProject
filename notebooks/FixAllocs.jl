@@ -4,6 +4,16 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+end
+
 # ╔═╡ 404e4e80-b28d-11ed-3de7-d77a058a4923
 begin
 	using Pkg
@@ -109,6 +119,272 @@ function M_matrix(data,T,p,x)
 	M
 end
 
+# ╔═╡ 684c526d-25bc-4dcf-85a1-2434e5d185dc
+function project!(vh, edge::VoronoiFVM.Edge, vec)
+    vh[1]=zero(eltype(vec))
+    for i=1:size(edge.coord)[1]
+        vh[1]+=(edge.coord[i,edge.node[2]]-edge.coord[i,edge.node[1]])*vec[i]
+    end
+    nothing
+end
+
+# ╔═╡ caf7503f-eb32-4132-957e-0d024c14fbf5
+function DK_eff!(DK_eff,i,ϕ,dp,Fluid,T,)
+	DK_eff[i]=dp*ϕ^1.5/(1.0-ϕ)*sqrt(8.0*ph"R"*T/(9.0*π*Fluid.MW))
+	nothing
+end
+
+# ╔═╡ 6185cf12-879d-455e-8462-54bf5f37c34a
+function reaction(f,u,node,data)
+	(;ng,ip,pt) = data	
+	
+	if node.region == 2 && data.isreactive # catalyst layer
+		(;ng,iT,kinpar,mcats) = data
+		
+		nr=kinpar.rni # reaction indices from names
+		
+		pi = u[1:ng]./ufac"bar"
+		# negative sign: sign convention of VoronoiFVM: source term < 0 
+		# ri returns reaction rate in mol/(h gcat)
+		RR = -mcats*ri(kinpar,u[iT],pi)*ufac"mol/hr"*ufac"1/g"
+		# reactions in S3P kinetics model
+		# R1: CO + H2O = CO2 + H2
+		# R2: CH4 + 2 H2O = CO2 + 4 H2
+		# R3: CH4 + H2O = CO + 3 H2
+
+		for i=1:ng
+			f[i] = sum(kinpar.nuij[i,:] .* RR)
+		end
+		
+		# temperature eq. / heat source
+		ΔHi=kinpar.ΔHi
+		f[iT] = -(RR[nr["R1"]]*ΔHi["R1"]+RR[nr["R2"]]*ΔHi["R2"] +RR[nr["R3"]]*ΔHi["R3"])
+	end
+	
+	# ∑xi = 1
+	pt[1]=zero(eltype(u))
+	for i=1:ng
+		pt[1] += u[i]
+	end
+	f[ip]=u[ip]-pt[1]
+	
+end
+
+# ╔═╡ 1d07dbba-ed06-418b-a12f-6697120b5a87
+function bottom(f,u,bnode,data)
+	if bnode.region==Γ_bottom # bottom boundary
+		(;ng,iT,Eps_ir,Tamb,u0,X0,pn,Tn) = data
+
+		f[iT] = Eps_ir*ph"σ"*(u[iT]^4 - Tamb^4)
+		
+		for i=1:ng
+			# specify flux at boundary: flow velocity is normal to bot boundary	
+			f[i] = -u0*X0[i]*pn/(ph"R"*Tn)
+			
+		end
+	end
+end
+
+# ╔═╡ 6cf7645b-9e1a-4b42-87ba-8d46f3a4456f
+function side(f,u,bnode,data)
+	# side wall boundary condition
+	(;iT,α_w,Tamb) = data
+	boundary_robin!(f,u,bnode;species=iT,region=[Γ_side_back,Γ_side_right], factor=α_w, value=Tamb*α_w)	
+end
+
+# ╔═╡ 8d1eba03-242f-4423-8d4b-838234fb32b1
+md"""
+let
+function pre(sol,par)
+		ng=data.ng
+		iT=data.iT
+		# iteratively adapt top outflow boundary condition
+		function Inttop(f,u,bnode,data)
+			
+			X=zeros(eltype(u), ng)
+			mole_frac!(bnode,data,X,u)
+			# top boundary(cat/frit)
+			if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat  
+				for i=1:ng
+					f[i] = data.Fluids[i].MW*X[i]
+				end
+				f[iT] = u[iT]
+			end
+		end
+		
+		MWavg=sum(integrate(sys,Inttop,sol; boundary=true)[1:ng,[Γ_top_frit,Γ_top_cat]])/(data.Ac/4.0)
+		ntop=data.mdotin/MWavg
+		
+		Tavg=sum(integrate(sys,Inttop,sol; boundary=true)[data.iT,[Γ_top_frit,Γ_top_cat]])/(data.Ac/4.0)
+		
+		utop_calc=ntop*ph"R"*Tavg/(1.0*ufac"bar")/(data.Ac/4.0)
+		utops=[data.utop, utop_calc]*ufac"m/s"
+		data.utop = minimum(utops) + par*(maximum(utops)-minimum(utops))
+		
+		# embedding parameter: Qflow / ml/minute
+		#Qflows = [5000.0,50000.0]*ufac"ml/minute"
+		#Qflow = minimum(Qflows) + par*(maximum(Qflows)-minimum(Qflows))
+		#data.Qflow=Qflow
+		#data.u0=Qflow/(data.Ac)*ufac"m/s" # mean superficial velocity
+		#data.utop=data.u0*ufac"m/s" # adjustable parameter to match the outlet mass flow to prescribed inlet mass flow rate
+
+		
+		# specific catalyst loading
+		mcats=[10.0, 1300.0]*ufac"kg/m^3"
+		data.mcats= minimum(mcats) + par*(maximum(mcats)-minimum(mcats))
+
+		# irradiation flux density
+		G_lamp=[1.0, 125.0]*ufac"kW/m^2"
+		data.G_lamp= minimum(G_lamp) + par*(maximum(G_lamp)-minimum(G_lamp))
+	end
+	
+	control=SolverControl(;
+					  handle_exceptions=true,
+					  Δp_min=1.0e-3,					  
+					  Δp=0.1,
+					  Δp_grow=1.2,
+					  Δu_opt=100000.0, # large value, due to unit Pa of pressure?
+					  )
+	
+	#sol=solve(sys;inival,)
+	
+	sol=solve(sys;inival,embed=[0.0,1.0],pre,control)
+end
+"""
+
+# ╔═╡ 2ec69cd6-2614-473a-b7ad-3840085a430b
+Base.@kwdef mutable struct ModelData <:AbstractModelData
+	#S::Tv = 1.0
+	
+	# catalyst / chemistry data
+	# kinetic parameters, S3P="simple 3 parameter" kinetics fit to UPV lab scale experimental data
+	# kinpar::AbstractKineticsData = S3P
+	kinpar::AbstractKineticsData = XuFroment1989
+	
+	# number of gas phase species
+	ng::Int64		 		= kinpar.ng
+	#ng::Int64		 		= 1
+	# names and fluid indices
+	gn::Dict{Int, String} 	= kinpar.gn
+	#gn::Dict{Int, String} 	= Dict(1=>"N2")
+	# inverse names and fluid indices
+	gni::Dict{String, Int}  = kinpar.gni
+	# fluids and respective properties in system
+	Fluids::Vector{FluidProps} = kinpar.Fluids
+	#Fluids::Vector{AbstractFluidProps} = [N2]
+	X0::Vector{Float64} = let
+		x=zeros(Float64, ng)
+		x[gni["H2"]] = 1.0
+		x[gni["CO2"]] = 1.0
+		x/sum(x)
+	end # inlet composition
+	#X0::Vector{Float64} = [1.0]
+	
+	# volume specific cat mass loading, UPV lab scale PC reactor
+	mcats::Float64 =1234.568*ufac"kg/m^3"
+	isreactive::Bool = 1
+	#isreactive::Bool = 0
+
+	ip::Int64=ng+1 # index of total pressure variable
+	iT::Int64=ip+1 # index of Temperature variable
+	#iT::Int64=1 # index of Temperature variable
+
+		
+	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
+	
+	## irradiation data
+	Tau_quartz::Float64=0.9 # transmission coefficient of quartz window
+	G_lamp::Float64=1.0*ufac"kW/m^2" # solar simulator irradiation flux
+	Abs_lamp_cat::Float64=0.7 # cat avg absorptivity of irradiation from lamp
+	Abs_lamp_frit::Float64=0.7 # frit avg absorptivity of irradiation from lamp
+	Eps_ir::Float64=0.7 # avg absorptivity/emissivity of cat. of IR irradiation coming from surroundings / emitted
+		
+	
+	## porous filter data
+	dp::Float64=200.0*ufac"μm" # average pore size, por class 0
+	#dp::Float64=100.0*ufac"μm" # average pore size, por class 2
+	#dp::Float64=25.0*ufac"μm" # average pore size
+	
+
+	# frit thickness (applies to 2D & 3D)
+	h::Float64=0.5*ufac"cm"
+	# catalyst layer thickness (applies to 2D & 3D)
+	cath::Float64 = 1000.0*ufac"μm"
+	
+	# cylindrical disc / 2D
+    D::Float64=12.0*ufac"cm" # disc diameter
+	catD::Float64 = 10.0*ufac"cm" # catalyst layer diameter
+	
+
+	# prism / 3D
+	wi::Float64=12.0*ufac"cm" # prism width/side lenght
+	le::Float64=wi # prism width/side lenght
+	catwi::Float64=10.0*ufac"cm" # prism width/side lenght
+	
+	
+
+	#Ac::Float64=pi*D^2.0/4.0*ufac"m^2" # cross-sectional area, circular
+	Ac::Float64=wi*le*ufac"m^2" # cross-sectional area, square
+	
+	ρs::Float64=2.23e3*ufac"kg/m^3" # density of non-porous Boro-Solikatglas 3.3
+	λs::Float64=1.4*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2 	
+	cs::Float64=0.8e3*ufac"J/(kg*K)" # heat capacity of non-porous SiO2
+	
+	#ϕ::Float64=0.36 # porosity, class 2
+	ϕ::Float64=0.33 # porosity, class 0
+	# approximation from Wesselingh, J. A., & Krishna, R. (2006). Mass Transfer in Multicomponent Mixtures
+	γ_τ::Float64=ϕ^1.5 # constriction/tourtuosity factor
+
+	#k::Float64=2.9e-11*ufac"m^2" # permeability , por class 2
+	k::Float64=1.23e-10*ufac"m^2" # permeability , por class 0
+	
+	# a_s::Float64=0.13*ufac"m^2/g" # specific surface area, por class 2
+	a_s::Float64=0.02*ufac"m^2/g" # specific surface area, por class 0
+
+	
+	ρfrit::Float64=(1.0-ϕ)*ρs*ufac"kg/m^3" # density of porous frit
+	a_v::Float64=a_s*ρfrit # volume specific interface area
+	## END porous filter data
+
+
+	## Flow data
+	#norm conditions
+	pn::Float64 = 1.0*ufac"bar"
+	Tn::Float64 = 273.15*ufac"K"
+	
+	Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
+
+	MWin::Float64 = molarweight_mix(Fluids, X0)
+	mdotin::Float64=MWin*Qflow*pn/(ph"R"*Tn)*ufac"kg/s"
+
+	
+	Tin::Float64=298.15*ufac"K" # inlet temperature
+	Tamb::Float64=Tin # ambient temperature
+	#Tin::Float64=600.0*ufac"K" # inlet temperature
+	p::Float64=1.0*ufac"atm" # reactor pressure
+
+	# u0::Float64=Qflow/(Ac*ϕ)*ufac"m/s" # mean superficial velocity
+	u0::Float64=Qflow/(Ac)*ufac"m/s" # mean superficial velocity
+	utop::Float64=u0*ufac"m/s" # adjustable parameter to match the outlet mass flow to prescribed inlet mass flow rate
+
+	# intermediate variables to avoid allocations
+	X::Vector{Float64} = ones(Float64, ng)
+	cmix::Vector{Float64} = ones(Float64, 1)*ufac"J/mol"
+	cf::Vector{Float64} = ones(Float64, ng)*ufac"J/mol"
+	μmix::Vector{Float64} = ones(Float64, 1)*ufac"Pa*s"
+	μf::Vector{Float64} = ones(Float64, ng)*ufac"Pa*s"
+	λmix::Vector{Float64} = ones(Float64, 1)*ufac"W/(m*K)"
+	λf::Vector{Float64} = ones(Float64, ng)*ufac"W/(m*K)"
+	kbed::Vector{Float64} = ones(Float64, 1)
+	uvec::Vector{Float64} = zeros(Float64,3)
+	vh::Vector{Float64} = ones(Float64, 1)*ufac"m/s"
+	DK_eff::Vector{Float64} = ones(Float64, ng)*ufac"m^2/s"
+	Dmatrix::Matrix{Float64}=ones(Float64,ng,ng)*ufac"m^2/s"
+	Mmatrix::Matrix{Float64}=ones(Float64,ng,ng)*ufac"m^2/s"
+	
+	pt::Vector{Float64} = ones(Float64, 1)*ufac"Pa"
+end;
+
 # ╔═╡ 273ea122-3adb-42db-89c0-b85ca5c16756
 function mole_frac!(node,data::ModelData,X,u::VoronoiFVM.EdgeUnknowns)
 	n=data.ng
@@ -134,21 +410,6 @@ function mole_frac!(node,data::ModelData,X,u::VoronoiFVM.BNodeUnknowns)
 		X[i] = u[i]/sump
 	end
 	#X .= X / sump
-	nothing
-end
-
-# ╔═╡ 684c526d-25bc-4dcf-85a1-2434e5d185dc
-function project!(vh, edge::VoronoiFVM.Edge, vec)
-    vh[1]=zero(eltype(vec))
-    for i=1:size(edge.coord)[1]
-        vh[1]+=(edge.coord[i,edge.node[2]]-edge.coord[i,edge.node[1]])*vec[i]
-    end
-    nothing
-end
-
-# ╔═╡ caf7503f-eb32-4132-957e-0d024c14fbf5
-function DK_eff!(DK_eff,i,ϕ,dp,Fluid,T,)
-	DK_eff[i]=dp*ϕ^1.5/(1.0-ϕ)*sqrt(8.0*ph"R"*T/(9.0*π*Fluid.MW))
 	nothing
 end
 
@@ -249,42 +510,6 @@ function flux(f,u,edge,data)
 	#f[ip] via reaction: ∑pi = p
 end
 
-# ╔═╡ 6185cf12-879d-455e-8462-54bf5f37c34a
-function reaction(f,u,node,data)
-	(;ng,ip,pt) = data	
-	
-	if node.region == 2 && data.isreactive # catalyst layer
-		ng=data.gni # gas species indices from names
-		nr=data.kinpar.rni # reaction indices from names
-		iT=data.iT
-		
-		pi = u[1:ngas]./ufac"bar"
-		# negative sign: sign convention of VoronoiFVM: source term < 0 
-		# ri returns reaction rate in mol/(h gcat)
-		RR = -data.mcats*ri(data.kinpar,u[iT],pi)*ufac"mol/hr"*ufac"1/g"
-		# reactions in S3P kinetics model
-		# R1: CO + H2O = CO2 + H2
-		# R2: CH4 + 2 H2O = CO2 + 4 H2
-		# R3: CH4 + H2O = CO + 3 H2
-
-		for i=1:ngas
-			f[i] = sum(data.kinpar.nuij[i,:] .* RR)
-		end
-		
-		# temperature eq. / heat source
-		ΔHi=data.kinpar.ΔHi
-		f[iT] = -(RR[nr["R1"]]*ΔHi["R1"]+RR[nr["R2"]]*ΔHi["R2"] +RR[nr["R3"]]*ΔHi["R3"])
-	end
-	
-	# ∑xi = 1
-	pt[1]=zero(eltype(u))
-	for i=1:ng
-		pt[1] += u[i]
-	end
-	f[ip]=u[ip]-pt[1]
-	
-end
-
 # ╔═╡ 17ae8bd5-b948-46a9-8f88-d7a016f6f4ba
 function top(f,u,bnode,data)
 	# top boundaries (cat layer & frit)
@@ -317,28 +542,6 @@ function top(f,u,bnode,data)
 	end
 end
 
-# ╔═╡ 1d07dbba-ed06-418b-a12f-6697120b5a87
-function bottom(f,u,bnode,data)
-	if bnode.region==Γ_bottom # bottom boundary
-		(;ng,iT,Eps_ir,Tamb,u0,X0,pn,Tn) = data
-
-		f[iT] = Eps_ir*ph"σ"*(u[iT]^4 - Tamb^4)
-		
-		for i=1:ng
-			# specify flux at boundary: flow velocity is normal to bot boundary	
-			f[i] = -u0*X0[i]*pn/(ph"R"*Tn)
-			
-		end
-	end
-end
-
-# ╔═╡ 6cf7645b-9e1a-4b42-87ba-8d46f3a4456f
-function side(f,u,bnode,data)
-	# side wall boundary condition
-	(;iT,α_w,Tamb) = data
-	boundary_robin!(f,u,bnode;species=iT,region=[Γ_side_back,Γ_side_right], factor=α_w, value=Tamb*α_w)	
-end
-
 # ╔═╡ 98175d54-b6db-4eb5-bcad-be67a060ff61
 function bcond(f,u,bnode,data)
 	top(f,u,bnode,data)
@@ -348,6 +551,11 @@ end
 
 # ╔═╡ b7b0361e-cfc3-43c3-b6ba-e429a8aee40d
 data=ModelData();
+
+# ╔═╡ 53d678aa-ecc4-41b1-9ba9-26fc0c006603
+md"""
+Cutplane at ``z=`` $(@bind zcut Slider(range(0.0,data.h,length=101),default=data.h,show_value=true)) m
+"""
 
 # ╔═╡ fcd5cd1b-8b10-4326-b177-ee703dd030dd
 function prism_sq(;nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.catwi)
@@ -367,7 +575,7 @@ end
 # ╔═╡ 7b4aab28-0cd6-4615-9e29-e9110766db98
 let
 	vis=GridVisualizer()
-	gridplot!(vis, prism_sq(), show=true)
+	gridplot!(vis, prism_sq(), zplane=zcut,show=true)
 end
 
 # ╔═╡ 0e23757f-81ca-4145-bd81-44bedca2cd4c
@@ -393,8 +601,7 @@ function main()
 	end
 	inival[iT,:] .= data.Tamb
 
-	sol_=solve(sys;inival,)
-
+	sol=solve(sys;inival,)
 
 	function pre(sol,par)
 		ng=data.ng
@@ -413,43 +620,41 @@ function main()
 			end
 		end
 		
-		MWavg=sum(integrate(sys,Inttop,sol; boundary=true)[1:ng,[Γ_top_frit,Γ_top_cat]])/data.Ac		
+		MWavg=sum(integrate(sys,Inttop,sol; boundary=true)[1:ng,[Γ_top_frit,Γ_top_cat]])/(data.Ac/4)
 		ntop=data.mdotin/MWavg
+		@show MWavg
 		
-		Tavg=sum(integrate(sys,Inttop,sol; boundary=true)[data.iT,[Γ_top_frit,Γ_top_cat]])/data.Ac
+		Tavg=sum(integrate(sys,Inttop,sol; boundary=true)[data.iT,[Γ_top_frit,Γ_top_cat]])/(data.Ac/4)
+		@show Tavg
 		
-		utop_calc=ntop*ph"R"*Tavg/(1.0*ufac"bar")/data.Ac
+		utop_calc=ntop*ph"R"*Tavg/(1.0*ufac"bar")/(data.Ac)
 		utops=[data.utop, utop_calc]*ufac"m/s"
 		data.utop = minimum(utops) + par*(maximum(utops)-minimum(utops))
-		
-		# embedding parameter: Qflow / ml/minute
-		#Qflows = [5000.0,50000.0]*ufac"ml/minute"
-		#Qflow = minimum(Qflows) + par*(maximum(Qflows)-minimum(Qflows))
-		#data.Qflow=Qflow
-		#data.u0=Qflow/(data.Ac)*ufac"m/s" # mean superficial velocity
-		#data.utop=data.u0*ufac"m/s" # adjustable parameter to match the outlet mass flow to prescribed inlet mass flow rate
-
+		@show data.utop
 		
 		# specific catalyst loading
 		mcats=[10.0, 1300.0]*ufac"kg/m^3"
 		data.mcats= minimum(mcats) + par*(maximum(mcats)-minimum(mcats))
 
 		# irradiation flux density
-		G_lamp=[1.0, 125.0]*ufac"kW/m^2"
+		G_lamp=[1.0, 10.0]*ufac"kW/m^2"
 		data.G_lamp= minimum(G_lamp) + par*(maximum(G_lamp)-minimum(G_lamp))
 	end
 	
 	control=SolverControl(;
 					  handle_exceptions=true,
-					  Δp_min=5.0e-3,					  
-					  Δp=0.2,
+					  Δp_min=5.0e-4,					  
+					  Δp=0.1,
 					  Δp_grow=1.2,
-					  Δu_opt=10000.0, # large value, due to unit Pa of pressure?
+					  Δu_opt=100000.0, # large value, due to unit Pa of pressure?
 					  )
 	
-	#sol=solve(sys;inival,)
+
 	
 	sol=solve(sys;inival,embed=[0.0,1.0],pre,control)
+
+
+	
 
 	sol,sys,grid,data
 end
@@ -466,149 +671,70 @@ end;
 
 # ╔═╡ 4dc8b256-3725-4dce-ae6c-e251f0c35d37
 let
-	vis=GridVisualizer()
+	vis=GridVisualizer(Plotter=PyPlot)
 	scalarplot!(vis, grid, sol[data.iT,:].- 273.15, show=true,)
 end
 
-# ╔═╡ 2ec69cd6-2614-473a-b7ad-3840085a430b
-Base.@kwdef mutable struct ModelData <:AbstractModelData
-	#S::Tv = 1.0
-	
-	# catalyst / chemistry data
-	# kinetic parameters, S3P="simple 3 parameter" kinetics fit to UPV lab scale experimental data
-	# kinpar::AbstractKineticsData = S3P
-	kinpar::AbstractKineticsData = XuFroment1989
-	
-	# number of gas phase species
-	ng::Int64		 		= kinpar.ng
-	#ng::Int64		 		= 1
-	# names and fluid indices
-	gn::Dict{Int, String} 	= kinpar.gn
-	#gn::Dict{Int, String} 	= Dict(1=>"N2")
-	# inverse names and fluid indices
-	gni::Dict{String, Int}  = kinpar.gni
-	# fluids and respective properties in system
-	Fluids::Vector{FluidProps} = kinpar.Fluids
-	#Fluids::Vector{AbstractFluidProps} = [N2]
-	X0::Vector{Float64} = let
-		x=zeros(Float64, ng)
-		x[gni["H2"]] = 1.0
-		x[gni["CO2"]] = 1.0
-		x/sum(x)
-	end # inlet composition
-	#X0::Vector{Float64} = [1.0]
-	
-	# volume specific cat mass loading, UPV lab scale PC reactor
-	mcats::Float64 =1234.568*ufac"kg/m^3"
-	isreactive::Bool = 1
-	#isreactive::Bool = 0
+# ╔═╡ 130c2db5-a737-4a62-8d06-88895f1b5c86
+md"""
+# Post-Processing
+"""
 
-	ip::Int64=ng+1 # index of total pressure variable
-	iT::Int64=ip+1 # index of Temperature variable
-	#iT::Int64=1 # index of Temperature variable
+# ╔═╡ 2da23aff-2da4-4a15-aec8-5850fbf0ece9
+function massflow(data, bflux)
+	mdot=0.0
+	for i=1:data.ng
+		mdot += bflux[i] * data.Fluids[i].MW
+	end
+	mdot/ufac"kg/hr"
+end
 
-		
-	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
-	
-	## irradiation data
-	Tau_quartz::Float64=0.9 # transmission coefficient of quartz window
-	G_lamp::Float64=1.0*ufac"kW/m^2" # solar simulator irradiation flux
-	Abs_lamp_cat::Float64=0.7 # cat avg absorptivity of irradiation from lamp
-	Abs_lamp_frit::Float64=0.7 # frit avg absorptivity of irradiation from lamp
-	Eps_ir::Float64=0.7 # avg absorptivity/emissivity of cat. of IR irradiation coming from surroundings / emitted
-		
-	
-	## porous filter data
-	dp::Float64=200.0*ufac"μm" # average pore size, por class 0
-	#dp::Float64=100.0*ufac"μm" # average pore size, por class 2
-	#dp::Float64=25.0*ufac"μm" # average pore size
-	
+# ╔═╡ ae98a006-40ff-47a1-86c0-6837048a92b8
+function MoleFlows(sol,sys,data)
+	# bottom - inflow
+	Ibot=integrate(sys,bottom,sol; boundary=true)[:,Γ_bottom]
+	# top: outflow
+	# uncoated outer frit area, inner cat coated area
+	Itop=integrate(sys,top,sol; boundary=true)[:,[Γ_top_frit,Γ_top_cat]] 
+	Itop=sum(Itop, dims=2)
+	Ibot[1:data.ng],Itop[1:data.ng]
+end
 
-	# frit thickness (applies to 2D & 3D)
-	h::Float64=0.5*ufac"cm"
-	# catalyst layer thickness (applies to 2D & 3D)
-	cath::Float64 = 500.0*ufac"μm"
-	
-	# cylindrical disc / 2D
-    D::Float64=12.0*ufac"cm" # disc diameter
-	catD::Float64 = 10.0*ufac"cm" # catalyst layer diameter
-	
-
-	# prism / 3D
-	wi::Float64=12.0*ufac"cm" # prism width/side lenght
-	le::Float64=wi # prism width/side lenght
-	catwi::Float64=10.0*ufac"cm" # prism width/side lenght
-	
-	
-
-	#Ac::Float64=pi*D^2.0/4.0*ufac"m^2" # cross-sectional area, circular
-	Ac::Float64=wi*le*ufac"m^2" # cross-sectional area, square
-	
-	ρs::Float64=2.23e3*ufac"kg/m^3" # density of non-porous Boro-Solikatglas 3.3
-	λs::Float64=1.4*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2 	
-	cs::Float64=0.8e3*ufac"J/(kg*K)" # heat capacity of non-porous SiO2
-	
-	#ϕ::Float64=0.36 # porosity, class 2
-	ϕ::Float64=0.33 # porosity, class 0
-	# approximation from Wesselingh, J. A., & Krishna, R. (2006). Mass Transfer in Multicomponent Mixtures
-	γ_τ::Float64=ϕ^1.5 # constriction/tourtuosity factor
-
-	#k::Float64=2.9e-11*ufac"m^2" # permeability , por class 2
-	k::Float64=1.23e-10*ufac"m^2" # permeability , por class 0
-	
-	# a_s::Float64=0.13*ufac"m^2/g" # specific surface area, por class 2
-	a_s::Float64=0.02*ufac"m^2/g" # specific surface area, por class 0
-
-	
-	ρfrit::Float64=(1.0-ϕ)*ρs*ufac"kg/m^3" # density of porous frit
-	a_v::Float64=a_s*ρfrit # volume specific interface area
-	## END porous filter data
-
-
-	## Flow data
-	#norm conditions
-	pn::Float64 = 1.0*ufac"bar"
-	Tn::Float64 = 273.15*ufac"K"
-	
-	Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
-
-	MWin::Float64 = molarweight_mix(Fluids, X0)
-	mdotin::Float64=MWin*Qflow*pn/(ph"R"*Tn)*ufac"kg/s"
-
-	
-	Tin::Float64=298.15*ufac"K" # inlet temperature
-	Tamb::Float64=Tin # ambient temperature
-	#Tin::Float64=600.0*ufac"K" # inlet temperature
-	p::Float64=1.0*ufac"atm" # reactor pressure
-
-	# u0::Float64=Qflow/(Ac*ϕ)*ufac"m/s" # mean superficial velocity
-	u0::Float64=Qflow/(Ac)*ufac"m/s" # mean superficial velocity
-	utop::Float64=u0*ufac"m/s" # adjustable parameter to match the outlet mass flow to prescribed inlet mass flow rate
-
-	# intermediate variables to avoid allocations
-	X::Vector{Float64} = ones(Float64, ng)
-	cmix::Vector{Float64} = ones(Float64, 1)*ufac"J/mol"
-	cf::Vector{Float64} = ones(Float64, ng)*ufac"J/mol"
-	μmix::Vector{Float64} = ones(Float64, 1)*ufac"Pa*s"
-	μf::Vector{Float64} = ones(Float64, ng)*ufac"Pa*s"
-	λmix::Vector{Float64} = ones(Float64, 1)*ufac"W/(m*K)"
-	λf::Vector{Float64} = ones(Float64, ng)*ufac"W/(m*K)"
-	kbed::Vector{Float64} = ones(Float64, 1)
-	uvec::Vector{Float64} = zeros(Float64,3)
-	vh::Vector{Float64} = ones(Float64, 1)*ufac"m/s"
-	DK_eff::Vector{Float64} = ones(Float64, ng)*ufac"m^2/s"
-	Dmatrix::Matrix{Float64}=ones(Float64,ng,ng)*ufac"m^2/s"
-	Mmatrix::Matrix{Float64}=ones(Float64,ng,ng)*ufac"m^2/s"
-	Mmatrix_::MArray{Tuple{6,6}}=@MArray ones(Float64,6,6)
-
-	F::DiffCache=DiffCache(ones(Float64, ng), 2*(ng+2)) # vector of driving forces
-	pt::Vector{Float64} = ones(Float64, 1)*ufac"Pa"
+# ╔═╡ 3c9338f0-6f5c-4c87-b733-0a7030b0f439
+begin
+	ndot_bot, ndot_top = MoleFlows(sol,sys,data_embed)
 end;
+
+# ╔═╡ b8ebe63a-1dbd-44fb-8081-4e9eddf2c026
+md"""
+Mass flows:
+
+- through __bottom__ boundary __$(round(massflow(data, ndot_bot),sigdigits=3))__ kg/h
+- through __top__ boundary __$(round(massflow(data, ndot_top),sigdigits=3))__ kg/h
+"""
+
+# ╔═╡ da332e95-0819-4957-a6d4-480a0f78d510
+md"""
+
+Chemical species flows through porous frit from bottom and top:
+
+|    | Bottom     | Top     |    |
+|----|-------|-------|-------|
+| $(data.gn[1]) | $(abs(round(ndot_bot[1]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_top[1]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
+| $(data.gn[2]) | $(abs(round(ndot_bot[2]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_top[2]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
+| $(data.gn[3]) | $(abs(round(ndot_bot[3]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_top[3]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
+| $(data.gn[4]) | $(abs(round(ndot_bot[4]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_top[4]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
+| $(data.gn[5]) | $(abs(round(ndot_bot[5]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_top[5]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
+| $(data.gn[6]) | $(abs(round(ndot_bot[6]/ufac"mol/hr")))  |   $(round(ndot_top[6]/ufac"mol/hr"))   |  mol/hr  |
+
+
+"""
 
 # ╔═╡ Cell order:
 # ╠═404e4e80-b28d-11ed-3de7-d77a058a4923
 # ╠═d7bb0f6d-48b2-4a51-bbcf-151081cd8da9
 # ╠═7b4aab28-0cd6-4615-9e29-e9110766db98
+# ╟─53d678aa-ecc4-41b1-9ba9-26fc0c006603
 # ╠═fcd5cd1b-8b10-4326-b177-ee703dd030dd
 # ╠═1f1bdae4-b7c4-4b8f-bf59-8030c67ce686
 # ╠═253dd8ea-cc65-438b-992e-9f40ae10b138
@@ -627,7 +753,14 @@ end;
 # ╠═6cf7645b-9e1a-4b42-87ba-8d46f3a4456f
 # ╠═98175d54-b6db-4eb5-bcad-be67a060ff61
 # ╠═0e23757f-81ca-4145-bd81-44bedca2cd4c
+# ╠═8d1eba03-242f-4423-8d4b-838234fb32b1
 # ╠═c6552a92-c4eb-4d3a-84fc-5518ea0ad48f
 # ╠═4dc8b256-3725-4dce-ae6c-e251f0c35d37
 # ╠═b7b0361e-cfc3-43c3-b6ba-e429a8aee40d
 # ╠═2ec69cd6-2614-473a-b7ad-3840085a430b
+# ╟─130c2db5-a737-4a62-8d06-88895f1b5c86
+# ╟─b8ebe63a-1dbd-44fb-8081-4e9eddf2c026
+# ╟─da332e95-0819-4957-a6d4-480a0f78d510
+# ╠═2da23aff-2da4-4a15-aec8-5850fbf0ece9
+# ╠═ae98a006-40ff-47a1-86c0-6837048a92b8
+# ╠═3c9338f0-6f5c-4c87-b733-0a7030b0f439
