@@ -192,65 +192,21 @@ function side(f,u,bnode,data)
 	boundary_robin!(f,u,bnode;species=iT,region=[Γ_side_back,Γ_side_right], factor=α_w, value=Tamb*α_w)	
 end
 
-# ╔═╡ 8d1eba03-242f-4423-8d4b-838234fb32b1
+# ╔═╡ 825e6eac-7f14-4dd8-aa10-03afc65f1d77
 md"""
-let
-function pre(sol,par)
-		ng=data.ng
-		iT=data.iT
-		# iteratively adapt top outflow boundary condition
-		function Inttop(f,u,bnode,data)
-			
-			X=zeros(eltype(u), ng)
-			mole_frac!(bnode,data,X,u)
-			# top boundary(cat/frit)
-			if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat  
-				for i=1:ng
-					f[i] = data.Fluids[i].MW*X[i]
-				end
-				f[iT] = u[iT]
-			end
-		end
-		
-		MWavg=sum(integrate(sys,Inttop,sol; boundary=true)[1:ng,[Γ_top_frit,Γ_top_cat]])/(data.Ac/4.0)
-		ntop=data.mdotin/MWavg
-		
-		Tavg=sum(integrate(sys,Inttop,sol; boundary=true)[data.iT,[Γ_top_frit,Γ_top_cat]])/(data.Ac/4.0)
-		
-		utop_calc=ntop*ph"R"*Tavg/(1.0*ufac"bar")/(data.Ac/4.0)
-		utops=[data.utop, utop_calc]*ufac"m/s"
-		data.utop = minimum(utops) + par*(maximum(utops)-minimum(utops))
-		
-		# embedding parameter: Qflow / ml/minute
-		#Qflows = [5000.0,50000.0]*ufac"ml/minute"
-		#Qflow = minimum(Qflows) + par*(maximum(Qflows)-minimum(Qflows))
-		#data.Qflow=Qflow
-		#data.u0=Qflow/(data.Ac)*ufac"m/s" # mean superficial velocity
-		#data.utop=data.u0*ufac"m/s" # adjustable parameter to match the outlet mass flow to prescribed inlet mass flow rate
-
-		
-		# specific catalyst loading
-		mcats=[10.0, 1300.0]*ufac"kg/m^3"
-		data.mcats= minimum(mcats) + par*(maximum(mcats)-minimum(mcats))
-
-		# irradiation flux density
-		G_lamp=[1.0, 125.0]*ufac"kW/m^2"
-		data.G_lamp= minimum(G_lamp) + par*(maximum(G_lamp)-minimum(G_lamp))
-	end
-	
-	control=SolverControl(;
-					  handle_exceptions=true,
-					  Δp_min=1.0e-3,					  
-					  Δp=0.1,
-					  Δp_grow=1.2,
-					  Δu_opt=100000.0, # large value, due to unit Pa of pressure?
-					  )
-	
-	#sol=solve(sys;inival,)
-	
-	sol=solve(sys;inival,embed=[0.0,1.0],pre,control)
-end
+## Activate / Deactivate Chemistry
 """
+
+# ╔═╡ 714addba-0c07-4ee3-8f14-bed0ef2ec7e1
+md"""
+Upon activating the chemical reaction, the solver fails to solve the system with "Converge Error".
+"""
+
+# ╔═╡ 0f1771f7-cafc-4d7d-ba35-b9c172daf001
+md"Turn on chemical reactions $(@bind isreactive CheckBox())"
+
+# ╔═╡ f9906982-cbba-494a-9c42-f74ab0f9db6e
+isreactive
 
 # ╔═╡ 2ec69cd6-2614-473a-b7ad-3840085a430b
 Base.@kwdef mutable struct ModelData <:AbstractModelData
@@ -581,6 +537,7 @@ end
 # ╔═╡ 0e23757f-81ca-4145-bd81-44bedca2cd4c
 function main()
 	data = ModelData()
+	data.isreactive = isreactive
 	grid = prism_sq()
 	iT = data.iT
 	ng = data.ng
@@ -622,15 +579,12 @@ function main()
 		
 		MWavg=sum(integrate(sys,Inttop,sol; boundary=true)[1:ng,[Γ_top_frit,Γ_top_cat]])/(data.Ac/4)
 		ntop=data.mdotin/MWavg
-		@show MWavg
 		
 		Tavg=sum(integrate(sys,Inttop,sol; boundary=true)[data.iT,[Γ_top_frit,Γ_top_cat]])/(data.Ac/4)
-		@show Tavg
-		
+
 		utop_calc=ntop*ph"R"*Tavg/(1.0*ufac"bar")/(data.Ac)
 		utops=[data.utop, utop_calc]*ufac"m/s"
 		data.utop = minimum(utops) + par*(maximum(utops)-minimum(utops))
-		@show data.utop
 		
 		# specific catalyst loading
 		mcats=[10.0, 1300.0]*ufac"kg/m^3"
@@ -675,61 +629,6 @@ let
 	scalarplot!(vis, grid, sol[data.iT,:].- 273.15, show=true,)
 end
 
-# ╔═╡ 130c2db5-a737-4a62-8d06-88895f1b5c86
-md"""
-# Post-Processing
-"""
-
-# ╔═╡ 2da23aff-2da4-4a15-aec8-5850fbf0ece9
-function massflow(data, bflux)
-	mdot=0.0
-	for i=1:data.ng
-		mdot += bflux[i] * data.Fluids[i].MW
-	end
-	mdot/ufac"kg/hr"
-end
-
-# ╔═╡ ae98a006-40ff-47a1-86c0-6837048a92b8
-function MoleFlows(sol,sys,data)
-	# bottom - inflow
-	Ibot=integrate(sys,bottom,sol; boundary=true)[:,Γ_bottom]
-	# top: outflow
-	# uncoated outer frit area, inner cat coated area
-	Itop=integrate(sys,top,sol; boundary=true)[:,[Γ_top_frit,Γ_top_cat]] 
-	Itop=sum(Itop, dims=2)
-	Ibot[1:data.ng],Itop[1:data.ng]
-end
-
-# ╔═╡ 3c9338f0-6f5c-4c87-b733-0a7030b0f439
-begin
-	ndot_bot, ndot_top = MoleFlows(sol,sys,data_embed)
-end;
-
-# ╔═╡ b8ebe63a-1dbd-44fb-8081-4e9eddf2c026
-md"""
-Mass flows:
-
-- through __bottom__ boundary __$(round(massflow(data, ndot_bot),sigdigits=3))__ kg/h
-- through __top__ boundary __$(round(massflow(data, ndot_top),sigdigits=3))__ kg/h
-"""
-
-# ╔═╡ da332e95-0819-4957-a6d4-480a0f78d510
-md"""
-
-Chemical species flows through porous frit from bottom and top:
-
-|    | Bottom     | Top     |    |
-|----|-------|-------|-------|
-| $(data.gn[1]) | $(abs(round(ndot_bot[1]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_top[1]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
-| $(data.gn[2]) | $(abs(round(ndot_bot[2]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_top[2]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
-| $(data.gn[3]) | $(abs(round(ndot_bot[3]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_top[3]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
-| $(data.gn[4]) | $(abs(round(ndot_bot[4]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_top[4]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
-| $(data.gn[5]) | $(abs(round(ndot_bot[5]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_top[5]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
-| $(data.gn[6]) | $(abs(round(ndot_bot[6]/ufac"mol/hr")))  |   $(round(ndot_top[6]/ufac"mol/hr"))   |  mol/hr  |
-
-
-"""
-
 # ╔═╡ Cell order:
 # ╠═404e4e80-b28d-11ed-3de7-d77a058a4923
 # ╠═d7bb0f6d-48b2-4a51-bbcf-151081cd8da9
@@ -752,15 +651,12 @@ Chemical species flows through porous frit from bottom and top:
 # ╠═1d07dbba-ed06-418b-a12f-6697120b5a87
 # ╠═6cf7645b-9e1a-4b42-87ba-8d46f3a4456f
 # ╠═98175d54-b6db-4eb5-bcad-be67a060ff61
+# ╟─825e6eac-7f14-4dd8-aa10-03afc65f1d77
+# ╟─714addba-0c07-4ee3-8f14-bed0ef2ec7e1
+# ╠═0f1771f7-cafc-4d7d-ba35-b9c172daf001
+# ╠═f9906982-cbba-494a-9c42-f74ab0f9db6e
 # ╠═0e23757f-81ca-4145-bd81-44bedca2cd4c
-# ╠═8d1eba03-242f-4423-8d4b-838234fb32b1
 # ╠═c6552a92-c4eb-4d3a-84fc-5518ea0ad48f
 # ╠═4dc8b256-3725-4dce-ae6c-e251f0c35d37
 # ╠═b7b0361e-cfc3-43c3-b6ba-e429a8aee40d
 # ╠═2ec69cd6-2614-473a-b7ad-3840085a430b
-# ╟─130c2db5-a737-4a62-8d06-88895f1b5c86
-# ╟─b8ebe63a-1dbd-44fb-8081-4e9eddf2c026
-# ╟─da332e95-0819-4957-a6d4-480a0f78d510
-# ╠═2da23aff-2da4-4a15-aec8-5850fbf0ece9
-# ╠═ae98a006-40ff-47a1-86c0-6837048a92b8
-# ╠═3c9338f0-6f5c-4c87-b733-0a7030b0f439
