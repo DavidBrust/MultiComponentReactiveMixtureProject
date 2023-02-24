@@ -648,16 +648,18 @@ Base.@kwdef mutable struct ModelDataSens{Tv} <:AbstractModelData
 	
 	# frit avg absorptivity of irradiation from lamp
 	#Abs_lamp_frit::Tv=S
+	Abs_lamp_frit::Float64=0.7
 	
 	# avg absorptivity/emissivity of cat. of IR irradiation coming from surroundings / emitted
 	#Eps_ir::Tv=S
+	Eps_ir::Float64=0.7
 
 	# END SENSITIVITY PARAMETERS
 	##############################################################################
 	
 	# catalyst / chemistry data
 	# kinetic parameters, S3P="simple 3 parameter" kinetics fit to UPV lab scale experimental data
-	kinpar::AbstractKineticsData = S3P
+	kinpar::AbstractKineticsData = XuFroment1989
 	
 	# number of gas phase species
 	ng::Int64		 		= S3P.ng
@@ -668,7 +670,7 @@ Base.@kwdef mutable struct ModelDataSens{Tv} <:AbstractModelData
 	# inverse names and fluid indices
 	gni::Dict{String, Int}  = S3P.gni
 	# fluids and respective properties in system
-	Fluids::Vector{AbstractFluidProps} = S3P.Fluids
+	Fluids::Vector{FluidProps} = S3P.Fluids
 	#Fluids::Vector{AbstractFluidProps} = [N2]
 	X0::Vector{Float64} = let
 		x=zeros(Float64, ng)
@@ -676,58 +678,64 @@ Base.@kwdef mutable struct ModelDataSens{Tv} <:AbstractModelData
 		x[gni["CO2"]] = 1.0
 		x/sum(x)
 	end # inlet composition
-
-
-	# mcats::Float64 =1234.568*ufac"kg/m^3"
+	#X0::Vector{Float64} = [1.0]
+	
+	
+	
 	isreactive::Bool = 1
 	#isreactive::Bool = 0
 
 	ip::Int64=ng+1 # index of total pressure variable
 	iT::Int64=ip+1 # index of Temperature variable
 
-	
 		
 	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
 	
 	## irradiation data
 	Tau_quartz::Float64=0.9 # transmission coefficient of quartz window
 	G_lamp::Float64=1.0*ufac"kW/m^2" # solar simulator irradiation flux
-	# Abs_lamp_cat::Float64=0.7 # cat avg absorptivity of irradiation from lamp	
-	Abs_lamp_frit::Float64=0.7 # frit avg absorptivity of irradiation from lamp
-	Eps_ir::Float64=0.7 # avg absorptivity/emissivity of cat. of IR irradiation coming from surroundings / emitted
-		
-	
+
 	## porous filter data
-	dp::Float64=200.0*ufac"μm" # average pore size
-	#dp::Float64=25.0*ufac"μm" # average pore size
-	cath::Float64 = 1000.0*ufac"μm" # catalyst layer thickness
-	catD::Float64 = 10.0*ufac"cm" # catalyst layer diameter
+	dp::Float64=200.0*ufac"μm" # average pore size, por class 0
+
+	
+
+	# frit thickness (applies to 2D & 3D)
+	h::Float64=0.5*ufac"cm"
+	# catalyst layer thickness (applies to 2D & 3D)
+	cath::Float64 = 1000.0*ufac"μm"
+	
 	# cylindrical disc / 2D
     D::Float64=12.0*ufac"cm" # disc diameter
+	catD::Float64 = 10.0*ufac"cm" # catalyst layer diameter
 	
 
 	# prism / 3D
 	wi::Float64=12.0*ufac"cm" # prism width/side lenght
 	le::Float64=wi # prism width/side lenght
-	h::Float64=0.5*ufac"cm" # frit thickness (applies to 2D & 3D)
+	catwi::Float64=10.0*ufac"cm" # prism width/side lenght
+	
+	
 
 	#Ac::Float64=pi*D^2.0/4.0*ufac"m^2" # cross-sectional area, circular
-	#Ac::Float64=wi^2*ufac"m^2" # cross-sectional area, square
 	Ac::Float64=wi*le*ufac"m^2" # cross-sectional area, square
-
 	
 	ρs::Float64=2.23e3*ufac"kg/m^3" # density of non-porous Boro-Solikatglas 3.3
 	λs::Float64=1.4*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2 	
 	cs::Float64=0.8e3*ufac"J/(kg*K)" # heat capacity of non-porous SiO2
 	
-	ϕ::Float64=0.33 # porosity, class 2
+	#ϕ::Float64=0.36 # porosity, class 2
+	ϕ::Float64=0.33 # porosity, class 0
 	# approximation from Wesselingh, J. A., & Krishna, R. (2006). Mass Transfer in Multicomponent Mixtures
 	γ_τ::Float64=ϕ^1.5 # constriction/tourtuosity factor
 
-	#k::Float64=2.9e-11*ufac"m^2" # permeability
+	#k::Float64=2.9e-11*ufac"m^2" # permeability , por class 2
 	k::Float64=1.23e-10*ufac"m^2" # permeability , por class 0
+	
+	# a_s::Float64=0.13*ufac"m^2/g" # specific surface area, por class 2
+	a_s::Float64=0.02*ufac"m^2/g" # specific surface area, por class 0
 
-	a_s::Float64=0.02*ufac"m^2/g" # specific surface area
+	
 	ρfrit::Float64=(1.0-ϕ)*ρs*ufac"kg/m^3" # density of porous frit
 	a_v::Float64=a_s*ρfrit # volume specific interface area
 	## END porous filter data
@@ -739,15 +747,17 @@ Base.@kwdef mutable struct ModelDataSens{Tv} <:AbstractModelData
 	Tn::Float64 = 273.15*ufac"K"
 	
 	Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
+	#Qflow::Float64=20000.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
 
 	MWin::Float64 = molarweight_mix(Fluids, X0)
 	mdotin::Float64=MWin*Qflow*pn/(ph"R"*Tn)*ufac"kg/s"
+
 	
 	Tin::Float64=298.15*ufac"K" # inlet temperature
 	Tamb::Float64=Tin # ambient temperature
 	#Tin::Float64=600.0*ufac"K" # inlet temperature
 	p::Float64=1.0*ufac"atm" # reactor pressure
-	
+
 	# u0::Float64=Qflow/(Ac*ϕ)*ufac"m/s" # mean superficial velocity
 	u0::Float64=Qflow/(Ac)*ufac"m/s" # mean superficial velocity
 	utop::Float64=u0*ufac"m/s" # adjustable parameter to match the outlet mass flow to prescribed inlet mass flow rate

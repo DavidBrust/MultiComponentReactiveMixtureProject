@@ -139,25 +139,25 @@ function reaction(f,u,node,data)
 	(;ng,ip,pt) = data	
 	
 	if node.region == 2 && data.isreactive # catalyst layer
-		(;ng,iT,kinpar,mcats) = data
-		
-		nr=kinpar.rni # reaction indices from names
+		#ng=data.gni # gas species indices from names
+		nr=data.kinpar.rni # reaction indices from names
+		iT=data.iT
 		
 		pi = u[1:ng]./ufac"bar"
 		# negative sign: sign convention of VoronoiFVM: source term < 0 
 		# ri returns reaction rate in mol/(h gcat)
-		RR = -mcats*ri(kinpar,u[iT],pi)*ufac"mol/hr"*ufac"1/g"
+		RR = -data.mcats*ri(data.kinpar,u[iT],pi)*ufac"mol/hr"*ufac"1/g"
 		# reactions in S3P kinetics model
 		# R1: CO + H2O = CO2 + H2
 		# R2: CH4 + 2 H2O = CO2 + 4 H2
 		# R3: CH4 + H2O = CO + 3 H2
 
 		for i=1:ng
-			f[i] = sum(kinpar.nuij[i,:] .* RR)
+			f[i] = sum(data.kinpar.nuij[i,:] .* RR)
 		end
 		
 		# temperature eq. / heat source
-		ΔHi=kinpar.ΔHi
+		ΔHi=data.kinpar.ΔHi
 		f[iT] = -(RR[nr["R1"]]*ΔHi["R1"]+RR[nr["R2"]]*ΔHi["R2"] +RR[nr["R3"]]*ΔHi["R3"])
 	end
 	
@@ -637,7 +637,7 @@ function main()
 		data.mcats= minimum(mcats) + par*(maximum(mcats)-minimum(mcats))
 
 		# irradiation flux density
-		G_lamp=[1.0, 10.0]*ufac"kW/m^2"
+		G_lamp=[1.0, 125.0]*ufac"kW/m^2"
 		data.G_lamp= minimum(G_lamp) + par*(maximum(G_lamp)-minimum(G_lamp))
 	end
 	
