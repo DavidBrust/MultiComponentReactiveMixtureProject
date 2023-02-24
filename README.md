@@ -1,7 +1,7 @@
 # FixedBed
 Project package for implementation of a catalytic reactor model.
 
-A 2D (axisymmetric) or 3D (prismatic) domoain of porous material is modelled.
+A 2D (axisymmetric) or 3D (prismatic) domain of porous material is modelled.
 Steady state is considered as well as heat and mass transfer through the porous material.
 Model equations and correlations for effective properties of heat transfer through the porous
 material are taken from 
