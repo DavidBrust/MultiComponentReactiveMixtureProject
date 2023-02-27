@@ -18,3 +18,4 @@ The simulation will utilize the finite volume method as implemented in the
 
 The code development takes place in Pluto notebooks, located in the notebooks 
 subfolder.
+The __main reactor model__ is in [PorousCatalystHot3D.jl](https://github.com/DavidBrust/FixedBed/blob/main/notebooks/PorousCatalystHot3D.jl)
