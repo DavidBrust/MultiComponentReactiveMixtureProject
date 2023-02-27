@@ -241,6 +241,13 @@ function bottom(f,u,bnode,data)
 	end
 end
 
+# ╔═╡ edd9fdd1-a9c4-4f45-8f63-9681717d417f
+function side(f,u,bnode,data)
+	# side wall boundary condition
+	iT=data.iT
+	boundary_robin!(f,u,bnode;species=iT,region=[Γ_side_back,Γ_side_right], factor=data.α_w, value=data.Tamb*data.α_w)	
+end
+
 # ╔═╡ 02b76cda-ffae-4243-ab40-8d0fe1325776
 md"""
 ##### Auxiliary functions
@@ -301,11 +308,11 @@ function top(f,u,bnode,data)
 	end
 end
 
-# ╔═╡ edd9fdd1-a9c4-4f45-8f63-9681717d417f
-function side(f,u,bnode,data)
-	# side wall boundary condition
-	iT=data.iT
-	boundary_robin!(f,u,bnode;species=iT,region=[Γ_side_back,Γ_side_right], factor=data.α_w, value=data.Tamb*data.α_w)	
+# ╔═╡ 29d66705-3d9f-40b1-866d-dd3392a1a268
+function bcond(f,u,bnode,data)
+	top(f,u,bnode,data)
+	bottom(f,u,bnode,data)
+	side(f,u,bnode,data)	
 end
 
 # ╔═╡ 2191bece-e186-4d8e-8a21-3830441baf11
@@ -386,13 +393,6 @@ function flux(f,u,edge,data)
 	
 	f[1:ng] = J	
 	#f[ip] via reaction: ∑pi = p
-end
-
-# ╔═╡ 29d66705-3d9f-40b1-866d-dd3392a1a268
-function bcond(f,u,bnode,data)
-	top(f,u,bnode,data)
-	bottom(f,u,bnode,data)
-	side(f,u,bnode,data)	
 end
 
 # ╔═╡ 44aa5b49-d595-4982-bbc8-100d2f199415
@@ -706,12 +706,6 @@ let
 	#save("../img/out/pi_pt.svg", vis)
 end
 
-# ╔═╡ 95e7a705-8615-4bf6-b90d-ba4139570537
-argmin(abs.(grid[Coordinates][1,:] .-data.wi/4))
-
-# ╔═╡ 6f36b32e-2495-4e1d-a922-a7021fcc1058
-grid[Coordinates][1,3]
-
 # ╔═╡ e81e803a-d831-4d62-939c-1e4a4fdec74f
 md"""
 # Post-Processing
@@ -819,7 +813,7 @@ end
 let
 	sol_, grid_ =TopPlane(data,sol)
 
-	vis=GridVisualizer(resolution=(400,300), Plotter=PyPlot)
+	vis=GridVisualizer(resolution=(400,300), title="Temperature at z= $(data.h) (top surface)", Plotter=PyPlot)
 	scalarplot!(vis, grid_, sol_[data.iT].- 273.15, show=true)
 end
 
@@ -957,13 +951,13 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╟─44d91c2e-8082-4a90-89cc-81aba783d5ac
 # ╠═7da59e27-62b9-4b89-b315-d88a4fd34f56
 # ╠═40906795-a4dd-4e4a-a62e-91b4639a48fa
+# ╠═edd9fdd1-a9c4-4f45-8f63-9681717d417f
+# ╠═29d66705-3d9f-40b1-866d-dd3392a1a268
 # ╟─02b76cda-ffae-4243-ab40-8d0fe1325776
 # ╠═c0de2aff-8f7f-439c-b931-8eb8fbfcd45d
 # ╠═51b03d3b-3c7c-4019-8ed8-bf1aaa0b1ddb
-# ╠═edd9fdd1-a9c4-4f45-8f63-9681717d417f
 # ╠═2191bece-e186-4d8e-8a21-3830441baf11
 # ╠═b6381008-0280-404c-a86c-9c9c3c9f82eb
-# ╠═29d66705-3d9f-40b1-866d-dd3392a1a268
 # ╟─44aa5b49-d595-4982-bbc8-100d2f199415
 # ╠═333b5c80-259d-47aa-a441-ee7894d6c407
 # ╠═aa498412-e970-45f2-8b11-249cc5c2b18d
@@ -975,8 +969,6 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╟─2790b550-3105-4fc0-9070-d142c19678db
 # ╠═bea97fb3-9854-411c-8363-15cbef13d033
 # ╠═bd7552d2-2c31-4834-97d9-ccdb4652242f
-# ╠═95e7a705-8615-4bf6-b90d-ba4139570537
-# ╠═6f36b32e-2495-4e1d-a922-a7021fcc1058
 # ╟─e81e803a-d831-4d62-939c-1e4a4fdec74f
 # ╟─c4521a0c-c5af-43cd-97bc-a4a7a42d27b1
 # ╟─b34c1d1b-a5b8-4de9-bea9-3f2d0503c1c0
