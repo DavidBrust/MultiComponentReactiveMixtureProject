@@ -22,6 +22,7 @@ begin
 	using VoronoiFVM
 	using ExtendableGrids, GridVisualize
 	using LinearAlgebra
+	using LinearSolve,LinearSolvePardiso
 	using LessUnitful
 	
 	using PlutoVista,PyPlot
@@ -591,17 +592,20 @@ function main(;data=ModelData())
 	 	data.G_lamp= minimum(G_lamp) + par*(maximum(G_lamp)-minimum(G_lamp))
 	 end
 	
-	 control=SolverControl(;
-	 				  handle_exceptions=true,
-	 				  Δp_min=1.0e-4,					  
-	 				  Δp=0.1,
-	 				  Δp_grow=1.2,
-	 				  Δu_opt=100000.0, # large value, due to unit Pa of pressure?
-	 				  )
+	 control=SolverControl( ;
+	 						method_linear=MKLPardisoFactorize(),
+	 						#method_linear=UMFPACKFactorization(),
+	 						#method_linear=SparspakFactorization(),
+	 				  		handle_exceptions=true,
+							Δp_min=1.0e-4,					  
+	 				  		Δp=0.1,
+	 				  		Δp_grow=1.2,
+	 				  		Δu_opt=100000.0, # large value, due to unit Pa of pressure?
+	 				  		)
 	
 	# #sol=solve(sys;inival,)
 	
-	 sol=solve(sys;inival,embed=[0.0,1.0],pre,control)
+	 sol=solve(sys;inival, embed=[0.0,1.0],pre,control)
 
 	
 	sol,grid,sys,data
@@ -649,7 +653,8 @@ md"""
 # ╔═╡ 3bd80c19-0b49-43f6-9daa-0c87c2ea8093
 let
 	iT=data.iT
-	vis=GridVisualizer(resolution=(600,400), title="Temperature °C", Plotter=PyPlot)
+	# vis=GridVisualizer(resolution=(600,400), title="Temperature °C", Plotter=PyPlot)
+    vis=GridVisualizer(resolution=(600,400), title="Temperature °C")
 	scalarplot!(vis, grid, sol[iT,:].- 273.15, show=true)
 
 	#reveal(vis)
@@ -813,7 +818,8 @@ end
 let
 	sol_, grid_ =TopPlane(data,sol)
 
-	vis=GridVisualizer(resolution=(400,300), title="Temperature at z= $(data.h) (top surface)", Plotter=PyPlot)
+	# vis=GridVisualizer(resolution=(400,300), title="Temperature at z= $(data.h) (top surface)", Plotter=PyPlot)
+    vis=GridVisualizer(resolution=(400,300), title="Temperature at z= $(data.h) (top surface)")
 	scalarplot!(vis, grid_, sol_[data.iT].- 273.15, show=true)
 end
 
