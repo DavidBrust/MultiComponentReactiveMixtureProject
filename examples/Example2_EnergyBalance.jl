@@ -1,133 +1,126 @@
-module Example1_HeatFluxCalc
+module Example2_EnergyBalance
 
-using FixedBed
-using VoronoiFVM
-using ExtendableGrids, GridVisualize
-using LessUnitful
-using Plots
-
-function prism_sq(data;nref=0, w=data.wi, h=data.h)
-	
-	hw=w/2.0/10.0*2.0^(-nref)
-	#hl=l/2.0/10.0*2.0^(-nref)
-	hh=h/10.0*2.0^(-nref)
-	W=collect(0:hw:(w/2.0))
-    #L=collect(0:hl:(l/2.0))
-    H=collect(0:hh:h)
-	
-	simplexgrid(W,W,H)	
-end
+using Plots, DataFrames, CSV
 
 
-function main3D(data;nref=0)
+include("../notebooks/PorousCatalystHot3D.jl")
+
+function RunSim(Qflow,C;data=ModelData(Qflow=Qflow))
+
+	grid=prism_sq(data)
+
+	ngas=data.ng
 	iT=data.iT
-
-	# function return 3D velocity vector: flow upward in z-direction
-    function fup(x,y,z)
-        return 0,0,-data.u0
-    end    
 	
-	function flux(f,u,edge,data)
-		(;Fluid,u0,p)=data
-		Tbar=0.5*(u[iT,1]+u[iT,2])
-		ρf=density_idealgas(Fluid, Tbar, p)
-		cf=heatcap_gas(Fluid, Tbar)
-		λf=thermcond_gas(Fluid, Tbar)
-		λbed=kbed(data)*λf
-		
-		vh=project(edge,(0,0,u0))
-		conv=vh*ρf*cf/λbed
-		Bp,Bm = fbernoulli_pm(conv)
-		#f[iT]= λbed*(Bm*u[iT,1]-Bp*u[iT,2])
-		f[iT]= λbed*(Bm*(u[iT,1]-data.Tamb)-Bp*(u[iT,2]-data.Tamb))		
-	end
-
-    function flux_rerad_top(f,u,bnode,data)
-        if bnode.region==6 # top boundary
-            f[iT] = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
-        end
-    end
-
-    function flux_lamp_abs(f,u,bnode,data)
-        if bnode.region==6 # top boundary
-            f[iT] = -data.Abs_lamp*data.G_lamp
-        end
-    end
-
-    function flux_convec_top(f,u,bnode,data)
-        if bnode.region==6 # top boundary
-            ρf=density_idealgas(data.Fluid, u[iT], data.p)
-            cf=heatcap_gas(data.Fluid, u[iT])
-            f[iT] = data.u0*ρf*cf*(u[iT]-data.Tamb)
-        end
-    end
-
-	function top(f,u,bnode,data)
-		if bnode.region==6 # top boundary
-			flux_rerad = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
-			#flux_rerad = 0
-			
-			ρf=density_idealgas(data.Fluid, u[iT], data.p)
-			cf=heatcap_gas(data.Fluid, u[iT])
-            flux_convec = data.u0*ρf*cf*(u[iT]-data.Tamb) # flow velocity is normal to top boundary
-			
-			f[iT] = -data.Abs_lamp*data.G_lamp + flux_rerad + flux_convec
-		end
-	end
-
-	function bottom(f,u,bnode,data)
-		if bnode.region==5 # bottom boundary
-            f[iT] = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
-		end
-	end
-
-    function sidewalls(f,u,bnode,data)
-        # boundary conditions at side walls
-        #if bnode.region==2
-            boundary_robin!(f,u,bnode;species=iT,region=2, factor=data.α_w, value=data.Tamb*data.α_w)
-        #elseif bnode.region==3
-            boundary_robin!(f,u,bnode;species=iT,region=3, factor=data.α_w, value=data.Tamb*data.α_w)
-        #end
-    end
-
-	function bcondition(f,u,bnode,data)
-		bottom(f,u,bnode,data)
-		boundary_robin!(f,u,bnode;species=iT,region=2, factor=data.α_w, value=data.Tamb*data.α_w)
-		boundary_robin!(f,u,bnode;species=iT,region=3, factor=data.α_w, value=data.Tamb*data.α_w)
-		top(f,u,bnode,data)
-	end
+	sys=VoronoiFVM.System( 	grid;
+							data=data,
+							flux=flux,
+							reaction=reaction,
+							bcondition=bcond
+							)
+	enable_species!(sys; species=collect(1:(ngas+2))) # gas phase species + p + T
 	
-
-	
-	#grid=prism(;nref=nref, w=data.wi, l=data.le, h=data.h)
-	grid=prism_sq(data;nref=nref,)
-	
-	sys=VoronoiFVM.System(grid;
-                          data=data,
-                          flux=flux,
-                          breaction=bcondition,
-                          species=[iT],
-                          )
 	inival=unknowns(sys)
-	inival[iT,:] .= map( (x,y,z)->(data.Tamb+500*z/data.h),grid)
-	#inival[iT,:] .= data.Tamb
-	sol=solve(inival,sys)
-	sys,sol,data,nref
+	inival[:,:].=1.0*data.p
+	for i=1:ngas
+		inival[i,:] .*= data.X0[i]
+	end
+	inival[iT,:] .= data.Tamb
 
+	sol=solve(sys;inival,)
+	
+	 function pre(sol,par)
+	 	ng=data.ng
+	 	iT=data.iT
+	 	# iteratively adapt top outflow boundary condition
+	 	function Inttop(f,u,bnode,data)
+			
+	 		X=zeros(eltype(u), ng)
+	 		mole_frac!(bnode,data,X,u)
+	 		# top boundary(cat/frit)
+	 		if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat  
+	 			for i=1:ng
+	 				f[i] = data.Fluids[i].MW*X[i]
+	 			end
+	 			f[iT] = u[iT]
+	 		end
+	 	end
+		
+	 	MWavg=sum(integrate(sys,Inttop,sol; boundary=true)[1:ng,[Γ_top_frit,Γ_top_cat]])/(data.Ac/4)
+	 	ntop=data.mdotin/MWavg
+		 
+	 	Tavg=sum(integrate(sys,Inttop,sol; boundary=true)[data.iT,[Γ_top_frit,Γ_top_cat]])/(data.Ac/4)
+		
+	 	utop_calc=ntop*ph"R"*Tavg/(1.0*ufac"bar")/data.Ac
+	 	utops=[data.utop, utop_calc]*ufac"m/s"
+	 	data.utop = minimum(utops) + par*(maximum(utops)-minimum(utops))
+		
+		
+	 	# specific catalyst loading
+	 	mcats=[10.0, 1300.0]*ufac"kg/m^3"
+	 	data.mcats= minimum(mcats) + par*(maximum(mcats)-minimum(mcats))
 
+	 	# irradiation flux density
+	 	G_lamp=[1.0, C]*ufac"kW/m^2"
+	 	data.G_lamp= minimum(G_lamp) + par*(maximum(G_lamp)-minimum(G_lamp))
+	 end
+	
+	 control=SolverControl( ;
+	 				  		handle_exceptions=true,
+							Δp_min=1.0e-4,					  
+	 				  		Δp=0.1,
+	 				  		Δp_grow=1.2,
+	 				  		Δu_opt=1.0e7, # large value, due to unit Pa of pressure?
+	 				  		)
+	
+	# #sol=solve(sys;inival,)
+	
+	 sol=solve(sys;inival, embed=[0.0,1.0],pre,control)
 
-    ############################################################################
-    ## analysis    
-    # q_full=integrate(sys,sys.physics.breaction,sol; boundary=true)
+	
+	sol,grid,sys,data
+end;
 
-    # q_lamp_abs=integrate(sys,flux_lamp_abs,sol; boundary=true)[6]
-    # q_rerad_top=integrate(sys,flux_rerad_top,sol; boundary=true)[6]
-    # q_convec_top=integrate(sys,flux_convec_top,sol; boundary=true)[6]
-    # q_sidewalls=integrate(sys,sidewalls,sol; boundary=true)[1,[2,3]]
+function ParSweep()
+    Qflow =3400.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
+    C = 25.0
+    #fact = [0.25,0.5,0.75,1.0,1.25,1.5,1.75,2.0,2.25,2.5]
+    fact = [2.0,3.0]
+    l=length(fact)
+    Qflows = Qflow * fact
+    Cs = C * fact
 
-    # q_lamp_abs,q_rerad_top,q_convec_top,q_sidewalls,q_full
+    STCs = []
+    datas = []
+    sols = []
+    grid_ = []
+    sys_ = []
+    for Qflow in Qflows
+        for C in Cs
+            sol,grid,sys,data = RunSim(Qflow, C)
+            solf = sol(sol.t[end])
+            push!(STCs, STCefficiency(solf,sys,data,grid)[1])
+            push!(datas,data)
+            push!(sols,solf)
+            if Qflow==Qflows[end] && C ==Cs[end] 
+                push!(grid_,grid)
+                push!(sys_,sys)
+            end
+        end
+    end
+    p=Plots.plot(
+            xguide="Feed Flow / sccm",
+            yguide="Solar Concentration / kW m-2",
+            title="Solar-To-Chemical Efficiency",
+            size=(400,300)
+            )
+    Plots.heatmap!(p,Qflows./ufac"ml/minute",Cs,reshape(STCs,l,:))
+    Plots.savefig(p, "./img/out/STC.svg")
+
+    Df=DataFrame((C=repeat(Cs, outer=l),Qflow=repeat(Qflows, inner=l),STCs))
+    CSV.write("./data/out/STC.csv",Df)
+    Df, datas, sols, grid_, sys_
 end
-
 
 function HeatFluxes(C=[1,10])
     data=ModelData()
@@ -191,6 +184,7 @@ function HeatFluxes(C=[1,10])
     q_in,q_top_abs,q_top_refl,q_top_rerad,q_top_convec,q_sides_conv,q_bot_rerad
     
 end
+
 
 function PlotLosses(C=[1,10,25,50,75,100])
     q_in,q_top_abs,q_top_refl,q_top_rerad,q_top_convec,q_sides_conv,q_bot_rerad = HeatFluxes(C)

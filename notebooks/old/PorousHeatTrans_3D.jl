@@ -18,7 +18,7 @@ end
 begin
 	using Pkg
 	using Revise
-	Pkg.activate(joinpath(@__DIR__,".."))
+	Pkg.activate(joinpath(@__DIR__,"../.."))
 	
 	using VoronoiFVM
 	using ExtendableGrids, SimplexGridFactory, TetGen

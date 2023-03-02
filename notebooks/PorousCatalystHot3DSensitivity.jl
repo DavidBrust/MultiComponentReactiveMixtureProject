@@ -268,14 +268,6 @@ md"""
 ### Surface Temperature
 """
 
-# ╔═╡ b93ddd9d-9a35-477e-b069-b07b25d09e50
-# ╠═╡ disabled = true
-#=╠═╡
-md"""
-### Volumetric Average Catalyst Temperature
-"""
-  ╠═╡ =#
-
 # ╔═╡ 808e5a71-572f-4b0c-aeb3-9513d969dada
 function CatDims(grid)
 	Cells = findall(x->x == 2, grid[CellRegions]) # catalyst layer
@@ -1027,14 +1019,6 @@ let
 	scalarplot!(vis, grid_, sol_[data.iT].- 273.15, show=true)
 end
 
-# ╔═╡ 9952c815-5459-44ff-b1f8-07ab24ce0c53
-# ╠═╡ disabled = true
-#=╠═╡
-md"""
-Volumetric average Catalyst layer temperature: $(round(Tcatavg(sol,sys,grid,data_embed)[2])) °C
-"""
-  ╠═╡ =#
-
 # ╔═╡ 0f7cce89-3add-4316-bcc2-a924064af884
 md"""
 Yield of CO relative to inflow of ``\text{CO}_2``: $(round(Yield_CO(sol,sys,data_embed),sigdigits=2))
@@ -1088,7 +1072,8 @@ Chemical species flows through porous frit from bottom and top:
 # ╔═╡ 3bd80c19-0b49-43f6-9daa-0c87c2ea8093
 let
 	iT=data.iT
-	vis=GridVisualizer(Plotter=PyPlot)
+	#vis=GridVisualizer(Plotter=PyPlot)
+	vis=GridVisualizer()
 	scalarplot!(vis, grid, sol[iT,:].- 273.15, show=true)
 
 	#reveal(vis)

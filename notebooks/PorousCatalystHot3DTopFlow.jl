@@ -223,7 +223,7 @@ The thermal boundary conditions consist of radiative losses (reflection of incom
 # ╠═╡ skip_as_script = true
 #=╠═╡
 md"""
-$(LocalResource("../img/ThermalBC.png")) 
+$(LocalResource("../img/ThermalBC_flip.png")) 
 """
   ╠═╡ =#
 
@@ -237,21 +237,45 @@ md"""
 Boundary conditions for the transport of gas phase species cover in and outflow boundary conditions at the bottom and top surfaces of the modelling domain with no-flux conditins applied elsewhere. In the catalyst layer, volumetric catalytic reactions take place.
 """
 
-# ╔═╡ 40906795-a4dd-4e4a-a62e-91b4639a48fa
-function bottom(f,u,bnode,data)
-	if bnode.region==Γ_bottom # bottom boundary
-		iT=data.iT
-		f[iT] = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
-
+# ╔═╡ 7da59e27-62b9-4b89-b315-d88a4fd34f56
+function top(f,u,bnode,data)
+	# top boundaries (cat layer & frit)
+	if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat 
 		ng=data.ng
+		#ip = data.ip
+		iT = data.iT
+		flux_rerad = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
+
+		#X=zeros(eltype(u), ng)
+		#mole_frac!(bnode,data,X,u)
+		#cf=heatcap_mix(data.Fluids, u[iT], X)		
+		#flux_convec=data.utop*u[ip]/(ph"R"*u[iT])*cf*(u[iT]-data.Tamb)
+
+		abs = 0.0
+		if bnode.region==Γ_top_frit
+			abs=data.Abs_lamp_frit
+		else # catalyst layer
+			abs=data.Abs_lamp_cat
+		end
+		#f[iT] = -abs*data.Tau_quartz*data.G_lamp + flux_rerad + flux_convec
+		f[iT] = -abs*data.Tau_quartz*data.G_lamp + flux_rerad
 		
-		for i=1:data.ng
-			# specify flux at boundary: flow velocity is normal to bot boundary	
-			f[i] = -data.u0*data.X0[i]*data.pn/(ph"R"*data.Tn)
-			
+		
+		# flow velocity is normal to top boundary
+		for i=1:ng
+			# f[i] = data.utop*u[i]/(ph"R"*u[iT])
+			# f[i] = -data.u0*data.X0[i]*data.pn/(ph"R"*data.Tn)
+			f[i] = -data.u0*data.X0[i]*data.p/(ph"R"*data.Tamb)
+
 		end
 	end
 end
+
+# ╔═╡ 58d0610b-1739-4260-8d16-5a31ba362d69
+md"""
+## TODO:
+Add description of bottom chamber radiation exchange -> assume bottom Al plate as perfect mirror
+"""
 
 # ╔═╡ edd9fdd1-a9c4-4f45-8f63-9681717d417f
 function side(f,u,bnode,data)
@@ -289,33 +313,30 @@ function mole_frac!(node,data,X,u::VoronoiFVM.BNodeUnknowns)
 	nothing
 end
 
-# ╔═╡ 7da59e27-62b9-4b89-b315-d88a4fd34f56
-function top(f,u,bnode,data)
-	# top boundaries (cat layer & frit)
-	if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat 
+# ╔═╡ 40906795-a4dd-4e4a-a62e-91b4639a48fa
+function bottom(f,u,bnode,data)
+	if bnode.region==Γ_bottom # bottom boundary
+		iT=data.iT
+		ip=data.ip
 		ng=data.ng
-		ip = data.ip
-		iT = data.iT
-		flux_rerad = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
+		# for perfect mirror of Al bottom plate: no radiative therm. energy loss
 
-		
 		X=zeros(eltype(u), ng)
 		mole_frac!(bnode,data,X,u)
 		cf=heatcap_mix(data.Fluids, u[iT], X)		
-		flux_convec=data.utop*u[ip]/(ph"R"*u[iT])*cf*(u[iT]-data.Tamb)
+		flux_convec=data.ubot*u[ip]/(ph"R"*u[iT])*cf*(u[iT]-data.Tamb)
 
-		abs = 0.0
-		if bnode.region==Γ_top_frit
-			abs=data.Abs_lamp_frit
-		else # catalyst layer
-			abs=data.Abs_lamp_cat
-		end
-		f[iT] = -abs*data.Tau_quartz*data.G_lamp + flux_rerad + flux_convec
+		flux_rerad = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
+		#f[iT] = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
+		f[iT] = flux_rerad + flux_convec
+
 		
 		
-		# flow velocity is normal to top boundary
 		for i=1:data.ng
-			f[i] = data.utop*u[i]/(ph"R"*u[iT])
+			# specify flux at boundary: flow velocity is normal to bot boundary
+			f[i] = data.ubot*u[i]/(ph"R"*u[iT])
+			#f[i] = -data.u0*data.X0[i]*data.pn/(ph"R"*data.Tn)
+			
 		end
 	end
 end
@@ -520,7 +541,7 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	p::Float64=1.0*ufac"atm" # reactor pressure
 
 	u0::Float64=Qflow/(Ac)*ufac"m/s" # mean superficial velocity
-	utop::Float64=u0*ufac"m/s" # adjustable parameter to match the outlet mass flow to prescribed inlet mass flow rate
+	ubot::Float64=u0*ufac"m/s" # adjustable parameter to match the outlet mass flow to prescribed inlet mass flow rate
 	
 end;
 
@@ -571,9 +592,9 @@ function main(;data=ModelData())
 		 
 	 	Tavg=sum(integrate(sys,Inttop,sol; boundary=true)[data.iT,[Γ_top_frit,Γ_top_cat]])/(data.Ac/4)
 		
-	 	utop_calc=ntop*ph"R"*Tavg/(1.0*ufac"bar")/data.Ac
-	 	utops=[data.utop, utop_calc]*ufac"m/s"
-	 	data.utop = minimum(utops) + par*(maximum(utops)-minimum(utops))
+	 	ubot_calc=ntop*ph"R"*Tavg/(1.0*ufac"bar")/data.Ac
+	 	ubots=[data.ubot, ubot_calc]*ufac"m/s"
+	 	data.ubot = minimum(ubots) + par*(maximum(ubots)-minimum(ubots))
 		
 		
 	 	# specific catalyst loading
@@ -963,7 +984,7 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╟─2554b2fc-bf5c-4b8f-b5e9-8bc261fe597b
 # ╟─f4dcde90-6d8f-4b17-b4ec-367d2372637f
 # ╟─3703afb0-93c4-4664-affe-b723758fb56b
-# ╠═21d0195b-b170-460d-989e-f9d00b511237
+# ╟─21d0195b-b170-460d-989e-f9d00b511237
 # ╟─8f4843c6-8d2b-4e24-b6f8-4eaf3dfc9bf0
 # ╟─66b55f6b-1af5-438d-aaa8-fe4745e85426
 # ╟─8528e15f-cce7-44d7-ac17-432f92cc5f53
@@ -978,12 +999,13 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╟─bcaf83fb-f215-428d-9c84-f5b557fe143f
 # ╟─7f94d703-2759-4fe1-a8c8-ddf26732a6ca
 # ╟─906ad096-4f0c-4640-ad3e-9632261902e3
-# ╠═39e74955-aab6-4bba-a1b8-b2307b45e673
-# ╠═6798d5e2-b8c7-4f54-aa71-6ea1ccab78fb
+# ╟─39e74955-aab6-4bba-a1b8-b2307b45e673
+# ╟─6798d5e2-b8c7-4f54-aa71-6ea1ccab78fb
 # ╟─ed3609cb-8483-4184-a385-dca307d13f17
-# ╠═8139166e-42f9-41c3-a360-50d3d4e5ee86
-# ╠═44d91c2e-8082-4a90-89cc-81aba783d5ac
+# ╟─8139166e-42f9-41c3-a360-50d3d4e5ee86
+# ╟─44d91c2e-8082-4a90-89cc-81aba783d5ac
 # ╠═7da59e27-62b9-4b89-b315-d88a4fd34f56
+# ╠═58d0610b-1739-4260-8d16-5a31ba362d69
 # ╠═40906795-a4dd-4e4a-a62e-91b4639a48fa
 # ╠═edd9fdd1-a9c4-4f45-8f63-9681717d417f
 # ╠═29d66705-3d9f-40b1-866d-dd3392a1a268
