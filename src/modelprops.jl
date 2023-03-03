@@ -1,59 +1,59 @@
 abstract type AbstractModelData end
 
-Base.@kwdef mutable struct ModelData <:AbstractModelData
-	iT::Int64=1 # index of Temperature variable
-    ng::Int64=2 # number of gas phase species
+# Base.@kwdef mutable struct ModelData <:AbstractModelData
+# 	iT::Int64=1 # index of Temperature variable
+#     ng::Int64=2 # number of gas phase species
 	
 	
 	
-	Tamb::Float64=298.15*ufac"K" # ambient temperature
-	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
-	α_nc::Float64=15.0*ufac"W/(m^2*K)" # natural convection heat transfer coefficient
+# 	Tamb::Float64=298.15*ufac"K" # ambient temperature
+# 	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
+# 	α_nc::Float64=15.0*ufac"W/(m^2*K)" # natural convection heat transfer coefficient
 
-	## irradiation data
-	G_lamp::Float64=1.0*ufac"kW/m^2" # solar simulator irradiation flux
-	Abs_lamp::Float64=0.7 # avg absorptivity of cat. of irradiation coming from lamp
-	Eps_ir::Float64=0.7 # avg absorptivity/emissivity of cat. of IR irradiation coming from surroundings / emitted
+# 	## irradiation data
+# 	G_lamp::Float64=1.0*ufac"kW/m^2" # solar simulator irradiation flux
+# 	Abs_lamp::Float64=0.7 # avg absorptivity of cat. of irradiation coming from lamp
+# 	Eps_ir::Float64=0.7 # avg absorptivity/emissivity of cat. of IR irradiation coming from surroundings / emitted
 		
 	
-	## porous filter data
-	d::Float64=100.0*ufac"μm" # average pore size
-	# cylindrical disc / 2D
-    D::Float64=12.0*ufac"cm" # disc diameter
+# 	## porous filter data
+# 	d::Float64=100.0*ufac"μm" # average pore size
+# 	# cylindrical disc / 2D
+#     D::Float64=12.0*ufac"cm" # disc diameter
 	
 
-	# prism / 3D
-	wi::Float64=12.0*ufac"cm" # prism width/side lenght
-	le::Float64=wi # prism width/side lenght
-	h::Float64=0.5*ufac"cm" # frit thickness (applies to 2D & 3D)
+# 	# prism / 3D
+# 	wi::Float64=12.0*ufac"cm" # prism width/side lenght
+# 	le::Float64=wi # prism width/side lenght
+# 	h::Float64=0.5*ufac"cm" # frit thickness (applies to 2D & 3D)
 
-	#Ac::Float64=pi*D^2.0/4.0*ufac"m^2" # cross-sectional area, circular
-	Ac::Float64=wi^2*ufac"m^2" # cross-sectional area, square
+# 	#Ac::Float64=pi*D^2.0/4.0*ufac"m^2" # cross-sectional area, circular
+# 	Ac::Float64=wi^2*ufac"m^2" # cross-sectional area, square
 	
-	ρs::Float64=2.23e3*ufac"kg/m^3" # density of non-porous Boro-Solikatglas 3.3
-	λs::Float64=1.4*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2 	
-	cs::Float64=0.8e3*ufac"J/(kg*K)" # heat capacity of non-porous SiO2
+# 	ρs::Float64=2.23e3*ufac"kg/m^3" # density of non-porous Boro-Solikatglas 3.3
+# 	λs::Float64=1.4*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2 	
+# 	cs::Float64=0.8e3*ufac"J/(kg*K)" # heat capacity of non-porous SiO2
 	
-	ϕ::Float64=0.36 # porosity, class 2
-	k::Float64=2.9e-11*ufac"m^2" # permeability
-	a_s::Float64=0.13*ufac"m^2/g" # specific surface area
-	ρfrit::Float64=(1.0-ϕ)*ρs*ufac"kg/m^3" # density of porous frit
-	a_v::Float64=a_s*ρfrit # volume specific interface area
-	## END porous filter data
+# 	ϕ::Float64=0.36 # porosity, class 2
+# 	k::Float64=2.9e-11*ufac"m^2" # permeability
+# 	a_s::Float64=0.13*ufac"m^2/g" # specific surface area
+# 	ρfrit::Float64=(1.0-ϕ)*ρs*ufac"kg/m^3" # density of porous frit
+# 	a_v::Float64=a_s*ρfrit # volume specific interface area
+# 	## END porous filter data
 
-	## fluid data
+# 	## fluid data
 	
-	Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate
-	Tin::Float64=298.15*ufac"K" # inlet temperature
-	p::Float64=1.0*ufac"atm" # reactor pressure		
-	# u0::Float64=Qflow/(Ac*ϕ)*ufac"m/s" # mean superficial velocity
-	u0::Float64=Qflow/(Ac)*ufac"m/s" # mean superficial velocity
-	# fluid properties: Air
-	# values taken from VDI heat atlas 2010 chapter D3.1
-	Fluid::FluidProps=Air
-	## END fluid data
+# 	Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate
+# 	Tin::Float64=298.15*ufac"K" # inlet temperature
+# 	p::Float64=1.0*ufac"atm" # reactor pressure		
+# 	# u0::Float64=Qflow/(Ac*ϕ)*ufac"m/s" # mean superficial velocity
+# 	u0::Float64=Qflow/(Ac)*ufac"m/s" # mean superficial velocity
+# 	# fluid properties: Air
+# 	# values taken from VDI heat atlas 2010 chapter D3.1
+# 	Fluid::FluidProps=Air
+# 	## END fluid data
 	
-end;
+# end;
 
 # calculate non-dimensional numbers: Reynolds, Prandtl, Peclet
 function RePrPe(data::AbstractModelData,T,p,x)
@@ -123,4 +123,18 @@ function hsf(data::AbstractModelData,T,p,x)
 	ϕ = data.ϕ
 	d = data.d
 	λf/d*((1.0 + 4*(1.0-ϕ)/ϕ) + 0.5*(1.0-ϕ)^0.5*Re^0.6*Pr^(1.0/3.0))*ufac"W/(m^2*K)"
+end
+
+# Knudsen effective Diffusivity
+
+# In the DGM the solid porous matrix is considered as another species in the ideal gas mix. The Knudsen diffusion coefficients describe the interactions between the gas molecules and the solid porous matrix. Analogous to the gas-gas diffusion coefficients, the Knudsen diffusion coefficients quantify the resulting friction force from momentum transfer upon collision with the walls acting on the gas molecules.
+
+# Calculation of Knudsen diffusion coefficients according to __Wesselingh, J. A., & Krishna, R. (2006).__ Mass Transfer in Multicomponent Mixtures (ch. 21, Fig. 21.8)
+
+
+function DK_eff(data,T,i)
+	ϕ=data.ϕ # porosity
+	dp=data.dp # avg. particle size (assumed to be = pore size)
+	DK=dp*ϕ^1.5/(1.0-ϕ)*sqrt(8.0*ph"R"*T/(9.0*π*data.Fluids[i].MW))
+	#Bern(DK)
 end

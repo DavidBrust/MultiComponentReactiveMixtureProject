@@ -122,34 +122,34 @@ M
 
 # ╔═╡ 78cf4646-c373-4688-b1ac-92ed5f922e3c
 function reaction(f,u,node,data)
-	ngas=data.ng
-	ip=data.ip
+	(;ng,ip,isreactive)=data
 	
-	if node.region == 2 && data.isreactive # catalyst layer
-		#ng=data.gni # gas species indices from names
-		nr=data.kinpar.rni # reaction indices from names
-		iT=data.iT
-		
-		pi = u[1:ngas]./ufac"bar"
+	if node.region == 2 && isreactive # catalyst layer
+		(;iT,mcats,kinpar)=data
+		rni=data.kinpar.rni # reaction indices from names
+				
+		pi = u[1:ng]./ufac"bar"
 		# negative sign: sign convention of VoronoiFVM: source term < 0 
 		# ri returns reaction rate in mol/(h gcat)
-		RR = -data.mcats*ri(data.kinpar,u[iT],pi)*ufac"mol/hr"*ufac"1/g"
-		# reactions in S3P kinetics model
-		# R1: CO + H2O = CO2 + H2
-		# R2: CH4 + 2 H2O = CO2 + 4 H2
-		# R3: CH4 + H2O = CO + 3 H2
+		RR = -mcats*ri(kinpar,u[iT],pi)*ufac"mol/hr"*ufac"1/g"
+		
+		## Xu & Froment 1989 kinetics
+		# 
+		# R1: CH4 + H2O = CO + 3 H2
+		# R2: CO + H2O = CO2 + H2
+		# R3: CH4 + 2 H2O = CO2 + 4 H2
 
-		for i=1:ngas
-			f[i] = sum(data.kinpar.nuij[i,:] .* RR)
+		for i=1:ng
+			f[i] = sum(kinpar.nuij[i,:] .* RR)
 		end
 		
 		# temperature eq. / heat source
-		ΔHi=data.kinpar.ΔHi
-		f[iT] = -(RR[nr["R1"]]*ΔHi["R1"]+RR[nr["R2"]]*ΔHi["R2"] +RR[nr["R3"]]*ΔHi["R3"])
+		ΔHi=kinpar.ΔHi
+		f[iT] = -(RR[rni[:R1]]*ΔHi[:R1]+RR[rni[:R2]]*ΔHi[:R2] +RR[rni[:R3]]*ΔHi[:R3])
 	end
 	
 	# ∑xi = 1
-	f[ip]=u[ip]-sum(u[1:ngas])
+	f[ip]=u[ip]-sum(u[1:ng])
 	
 end
 
@@ -167,14 +167,6 @@ In the DGM the solid porous matrix is considered as another species in the ideal
 md"""
 Calculation of Knudsen diffusion coefficients according to __Wesselingh, J. A., & Krishna, R. (2006).__ Mass Transfer in Multicomponent Mixtures (ch. 21, Fig. 21.8)
 """
-
-# ╔═╡ 722e681c-225a-4484-b0b8-c85d4536e5f9
-function DK_eff(data,T,i)
-	ϕ=data.ϕ # porosity
-	dp=data.dp # avg. particle size (assumed to be = pore size)
-	DK=dp*ϕ^1.5/(1.0-ϕ)*sqrt(8.0*ph"R"*T/(9.0*π*data.Fluids[i].MW))
-	#Bern(DK)
-end
 
 # ╔═╡ 3bf71cea-4f73-47da-b5ed-2cae3ec3d18b
 md"""
@@ -230,14 +222,13 @@ Boundary conditions for the transport of gas phase species cover in and outflow 
 # ╔═╡ 40906795-a4dd-4e4a-a62e-91b4639a48fa
 function bottom(f,u,bnode,data)
 	if bnode.region==Γ_bottom # bottom boundary
-		iT=data.iT
-		f[iT] = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
-
-		ng=data.ng
+		(;ng,iT,Eps_ir,Tamb,u0,X0,pn,Tn)=data
 		
-		for i=1:data.ng
+		f[iT] = Eps_ir*ph"σ"*(u[iT]^4 - Tamb^4)
+		
+		for i=1:ng
 			# specify flux at boundary: flow velocity is normal to bot boundary	
-			f[i] = -data.u0*data.X0[i]*data.pn/(ph"R"*data.Tn)
+			f[i] = -u0*X0[i]*pn/(ph"R"*data.Tn)
 			
 		end
 	end
@@ -246,8 +237,9 @@ end
 # ╔═╡ edd9fdd1-a9c4-4f45-8f63-9681717d417f
 function side(f,u,bnode,data)
 	# side wall boundary condition
-	iT=data.iT
-	boundary_robin!(f,u,bnode;species=iT,region=[Γ_side_back,Γ_side_right], factor=data.α_w, value=data.Tamb*data.α_w)	
+	(;iT,α_w,Tamb)=data
+	
+	boundary_robin!(f,u,bnode;species=iT,region=[Γ_side_back,Γ_side_right], factor=α_w, value=Tamb*α_w)	
 end
 
 # ╔═╡ 02b76cda-ffae-4243-ab40-8d0fe1325776
@@ -267,27 +259,45 @@ function mole_frac(node,data,u::VoronoiFVM.EdgeUnknowns)
 	X .= X / sump
 end
 
-# ╔═╡ c0de2aff-8f7f-439c-b931-8eb8fbfcd45d
+# ╔═╡ 7d705c9c-6653-4050-b32e-ea96ff972657
 function mole_frac!(node,data,X,u::VoronoiFVM.EdgeUnknowns)
-	n=data.ng
-	sump = 0.0
-	for i=1:n
+	ng=data.ng
+	sump=zero(eltype(u))
+	#X=zeros(eltype(u), ng)
+	for i=1:ng
 		X[i] = 0.5*(u[i,1]+u[i,2])
 		sump += X[i]
 	end
-	X .= X / sump
+	for i=1:ng
+		X[i] = X[i] / sump
+	end
 	nothing
 end
 
-# ╔═╡ 51b03d3b-3c7c-4019-8ed8-bf1aaa0b1ddb
-function mole_frac!(node,data,X,u::VoronoiFVM.BNodeUnknowns)
-	n=data.ng
-	sump = 0.0
-	for i=1:n
+# ╔═╡ 42fc2eaf-b48d-4aa4-acf7-851b38b2940c
+function mole_frac(node,data,u::VoronoiFVM.BNodeUnknowns)
+	ng=data.ng
+	sump=zero(eltype(u))
+	X=zeros(eltype(u), ng)
+	for i=1:ng
 		X[i] = u[i]
 		sump += X[i]
 	end
 	X .= X / sump
+end
+
+# ╔═╡ e4997de1-672a-4060-97b8-b4aa000f5112
+function mole_frac!(node,data,X,u::VoronoiFVM.BNodeUnknowns)
+	ng=data.ng
+	sump=zero(eltype(u))
+	#X=zeros(eltype(u), ng)
+	for i=1:ng
+		X[i] = u[i]
+		sump += X[i]
+	end
+	for i=1:ng
+		X[i] = X[i] / sump
+	end
 	nothing
 end
 
@@ -295,29 +305,28 @@ end
 function top(f,u,bnode,data)
 	# top boundaries (cat layer & frit)
 	if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat 
-		ng=data.ng
-		ip = data.ip
-		iT = data.iT
-		flux_rerad = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
-
+		(;ng,ip,iT,Tamb,Fluids,utop,Eps_ir,Abs_lamp_frit,Abs_lamp_cat,Tau_quartz,G_lamp)=data
 		
-		X=zeros(eltype(u), ng)
+		flux_rerad = Eps_ir*ph"σ"*(u[iT]^4 - Tamb^4)
+		
+		X = StrideArray{eltype(u)}(undef, (ng))
 		mole_frac!(bnode,data,X,u)
-		cf=heatcap_mix(data.Fluids, u[iT], X)		
-		flux_convec=data.utop*u[ip]/(ph"R"*u[iT])*cf*(u[iT]-data.Tamb)
+		
+		cf=heatcap_mix(Fluids, u[iT], X)		
+		flux_convec=utop*u[ip]/(ph"R"*u[iT])*cf*(u[iT]-Tamb)
 
 		abs = 0.0
 		if bnode.region==Γ_top_frit
-			abs=data.Abs_lamp_frit
+			abs=Abs_lamp_frit
 		else # catalyst layer
-			abs=data.Abs_lamp_cat
+			abs=Abs_lamp_cat
 		end
-		f[iT] = -abs*data.Tau_quartz*data.G_lamp + flux_rerad + flux_convec
+		f[iT] = -abs*Tau_quartz*G_lamp + flux_rerad + flux_convec
 		
 		
 		# flow velocity is normal to top boundary
-		for i=1:data.ng
-			f[i] = data.utop*u[i]/(ph"R"*u[iT])
+		for i=1:ng
+			f[i] = utop*u[i]/(ph"R"*u[iT])
 		end
 	end
 end
@@ -331,25 +340,39 @@ end
 
 # ╔═╡ 2191bece-e186-4d8e-8a21-3830441baf11
 function D_matrix(data, T, p)
-	n=data.ng
-	v = zeros(typeof(T),n,n)
+	ng=data.ng
+	v = zeros(typeof(T),ng,ng)
 	
-	for i=1:(n-1)
-		for j=(i+1):n
+	for i=1:(ng-1)
+		for j=(i+1):ng
 			v[j,i] = binary_diff_coeff_gas(data.Fluids[j], data.Fluids[i], T, p)
 		end
 	end
 	Symmetric(v, :L)
 end
 
+# ╔═╡ bdf5e360-cc20-443a-8929-5cd2b64fd749
+function D_matrix!(data, D, T, p)
+	ng=data.ng
+	for i=1:(ng-1)
+		for j=(i+1):ng
+			Dji = binary_diff_coeff_gas(data.Fluids[j], data.Fluids[i], T, p)
+			D[j,i] = Dji
+			D[i,j] = Dji
+			#v[j,i] = binary_diff_coeff_gas(data.Fluids[j], data.Fluids[i], T, p)
+		end
+	end
+	nothing
+end
+
 # ╔═╡ b6381008-0280-404c-a86c-9c9c3c9f82eb
 function M_matrix(data,T,p,x)
-	n=data.ng
+	ng=data.ng
 	D=data.γ_τ*D_matrix(data,T,p)
-	M=zeros(eltype(x), n, n)
-	for i=1:n
+	M=zeros(eltype(x), ng, ng)
+	for i=1:ng
 		M[i,i] = -1/DK_eff(data,T,i)
-		for j=1:n
+		for j=1:ng
 			if j != i
 				M[i,i] -= x[j]/D[i,j]
 				M[i,j] = x[i]/D[i,j]
@@ -359,29 +382,44 @@ function M_matrix(data,T,p,x)
 	M
 end
 
+# ╔═╡ 101b88bc-f382-4c60-a890-6b9e0265d206
+function M_matrix!(M,D,T,p,x,data)
+	ng=data.ng
+	D_matrix!(data, D, T, p)
+	for i=1:ng
+		M[i,i] = -1/DK_eff(data,T,i)
+		for j=1:ng
+			if j != i
+				M[i,i] -= x[j]/(data.γ_τ*D[i,j])
+				M[i,j] = x[i]/(data.γ_τ*D[i,j])
+			end
+		end	
+	end
+	nothing
+end
+
 # ╔═╡ ed7941c4-0485-4d84-ad5b-383eb5cae70a
 function flux(f,u,edge,data)
-	#(;ng, ip, k, Tin, pscale) = data
-	ng=data.ng
-	ip=data.ip
-	iT=data.iT
-	k=data.k
-	Fluids=data.Fluids
+	(;ng,ip,iT,k,Fluids,Tamb) = data
 	
-	F=zeros(eltype(u), ng)
+	#F=zeros(eltype(u), ng)
+	F = StrideArray{eltype(u)}(undef, (ng))
+	
 	#X=zeros(eltype(u), ng)
+	X = StrideArray{eltype(u)}(undef, (ng))
 
 	pk,pl = u[ip,1],u[ip,2]
 	δp = pk-pl
 	pm = 0.5*(pk+pl)
 
-	T=0.5*(u[iT,1]+u[iT,2])
-	#mole_frac!(edge,data,X,u)
-	X=mole_frac(edge,data,u)
+	Tm=0.5*(u[iT,1]+u[iT,2])
 	
-	#μ=dynvisc_mix(data, T, X)
-	cf=heatcap_mix(Fluids, T, X)
-	μ,λf=dynvisc_thermcond_mix(data, T, X)
+	mole_frac!(edge,data,X,u)
+	#X=mole_frac(edge,data,u)
+	
+	
+	cf=heatcap_mix(Fluids, Tm, X)
+	μ,λf=dynvisc_thermcond_mix(data, Tm, X)
 	λbed=kbed(data,λf)*λf
 
 	# Darcy flow
@@ -389,22 +427,25 @@ function flux(f,u,edge,data)
 	# vh=project(edge,(0,ud)) # 2D
 	vh=project(edge,(0,0,ud)) # 3D
 	# convective enthalpy flux
-	conv=vh*pm/(ph"R"*T)*cf/λbed
+	conv=vh*pm/(ph"R"*Tm)*cf/λbed
 	
 	Bp,Bm = fbernoulli_pm(conv)
 	# temperature flux
-	f[iT]= λbed*(Bm*(u[iT,1]-data.Tamb)-Bp*(u[iT,2]-data.Tamb))		
+	f[iT]= λbed*(Bm*(u[iT,1]-Tamb)-Bp*(u[iT,2]-Tamb))		
 
 	
 	for i=1:ng
-		DK = DK_eff(data,T,i)
+		DK = DK_eff(data,Tm,i)
 		bp,bm=fbernoulli_pm(vh/DK)		
-		F[i] = -(bm*u[i,1]-bp*u[i,2])/(ph"R"*T)
+		F[i] = -(bm*u[i,1]-bp*u[i,2])/(ph"R"*Tm)
 	end
+		
+	M = StrideArray{eltype(u)}(undef, (ng,ng))
+	D = StrideArray{eltype(u)}(undef, (ng,ng))
+	M_matrix!(M,D,Tm,pm,X,data)
 	
-    
 	# computation of fluxes J
-	J = M_matrix(data,T,pm,X) \ F
+	J = M \ F
 	
 	f[1:ng] = J	
 	#f[ip] via reaction: ∑pi = p
@@ -424,24 +465,21 @@ md"""
 Base.@kwdef mutable struct ModelData <:AbstractModelData
 	
 	# catalyst / chemistry data
-	# kinetic parameters, S3P="simple 3 parameter" kinetics fit to UPV lab scale experimental data
-	# kinpar::AbstractKineticsData = S3P
 	kinpar::AbstractKineticsData = XuFroment1989
 	
 	# number of gas phase species
 	ng::Int64		 		= S3P.ng
 	# names and fluid indices
-	gn::Dict{Int, String} 	= S3P.gn
-
+	gn::Dict{Int, Symbol} 	= S3P.gn
 	# inverse names and fluid indices
-	gni::Dict{String, Int}  = S3P.gni
+	gni::Dict{Symbol, Int}  = S3P.gni
 	# fluids and respective properties in system
 	Fluids::Vector{FluidProps} = S3P.Fluids
 	#Fluids::Vector{AbstractFluidProps} = [N2]
 	X0::Vector{Float64} = let
 		x=zeros(Float64, ng)
-		x[gni["H2"]] = 1.0
-		x[gni["CO2"]] = 1.0
+		x[gni[:H2]] = 1.0
+		x[gni[:CO2]] = 1.0
 		x/sum(x)
 	end # inlet composition
 
@@ -453,7 +491,6 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	ip::Int64=ng+1 # index of total pressure variable
 	iT::Int64=ip+1 # index of Temperature variable
 
-		
 	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
 	
 	## irradiation data
@@ -463,7 +500,6 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	Abs_lamp_frit::Float64=0.7 # frit avg absorptivity of irradiation from lamp
 	Eps_ir::Float64=0.7 # avg absorptivity/emissivity of cat. of IR irradiation coming from surroundings / emitted
 		
-	
 	## porous filter data
 	dp::Float64=200.0*ufac"μm" # average pore size, por class 0
 	#dp::Float64=100.0*ufac"μm" # average pore size, por class 2
@@ -478,8 +514,6 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	wi::Float64=12.0*ufac"cm" # prism width/side lenght
 	le::Float64=wi # prism width/side lenght
 	catwi::Float64=10.0*ufac"cm" # prism width/side lenght
-	
-	
 	Ac::Float64=wi*le*ufac"m^2" # cross-sectional area, square
 
 	# Solid Boro-Silikatglas
@@ -498,7 +532,6 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	
 	# a_s::Float64=0.13*ufac"m^2/g" # specific surface area, por class 2
 	a_s::Float64=0.02*ufac"m^2/g" # specific surface area, por class 0
-
 	
 	ρfrit::Float64=(1.0-ϕ)*ρs*ufac"kg/m^3" # density of porous frit
 	a_v::Float64=a_s*ρfrit*ufac"m^2/m^3" # volume specific interface area
@@ -519,7 +552,6 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	
 	Tin::Float64=298.15*ufac"K" # inlet temperature
 	Tamb::Float64=Tin # ambient temperature
-	#Tin::Float64=600.0*ufac"K" # inlet temperature
 	p::Float64=1.0*ufac"atm" # reactor pressure
 
 	u0::Float64=Qflow/(Ac)*ufac"m/s" # mean superficial velocity
@@ -558,8 +590,8 @@ function main(;data=ModelData())
 	 	# iteratively adapt top outflow boundary condition
 	 	function Inttop(f,u,bnode,data)
 			
-	 		X=zeros(eltype(u), ng)
-	 		mole_frac!(bnode,data,X,u)
+	 		
+			X=mole_frac(bnode,data,u)
 	 		# top boundary(cat/frit)
 	 		if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat  
 	 			for i=1:ng
@@ -738,7 +770,6 @@ end
 # ╟─a60ce05e-8d92-4172-b4c1-ac3221c54fe5
 # ╟─24374b7a-ce77-45f0-a7a0-c47a224a0b06
 # ╟─4865804f-d385-4a1a-9953-5ac66ea50057
-# ╠═722e681c-225a-4484-b0b8-c85d4536e5f9
 # ╟─3bf71cea-4f73-47da-b5ed-2cae3ec3d18b
 # ╟─bcaf83fb-f215-428d-9c84-f5b557fe143f
 # ╟─7f94d703-2759-4fe1-a8c8-ddf26732a6ca
@@ -754,10 +785,13 @@ end
 # ╠═29d66705-3d9f-40b1-866d-dd3392a1a268
 # ╟─02b76cda-ffae-4243-ab40-8d0fe1325776
 # ╠═5dfe1a6e-7515-47bd-90b0-a9cc01f0e883
-# ╠═c0de2aff-8f7f-439c-b931-8eb8fbfcd45d
-# ╠═51b03d3b-3c7c-4019-8ed8-bf1aaa0b1ddb
+# ╠═7d705c9c-6653-4050-b32e-ea96ff972657
+# ╠═42fc2eaf-b48d-4aa4-acf7-851b38b2940c
+# ╠═e4997de1-672a-4060-97b8-b4aa000f5112
 # ╠═2191bece-e186-4d8e-8a21-3830441baf11
+# ╠═bdf5e360-cc20-443a-8929-5cd2b64fd749
 # ╠═b6381008-0280-404c-a86c-9c9c3c9f82eb
+# ╠═101b88bc-f382-4c60-a890-6b9e0265d206
 # ╟─44aa5b49-d595-4982-bbc8-100d2f199415
 # ╠═333b5c80-259d-47aa-a441-ee7894d6c407
 # ╠═aa498412-e970-45f2-8b11-249cc5c2b18d

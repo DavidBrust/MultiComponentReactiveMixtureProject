@@ -40,16 +40,16 @@ abstract type AbstractKineticsData end
 
 Base.@kwdef mutable struct KineticsData{F<:Function} <:AbstractKineticsData
     ng::Int64=6 # number of gas phase species
-    gnames::Vector{String} = ["CO", "H2", "CH4", "H2O", "CO2", "N2"]
+    gnames::Vector{Symbol} = [:CO, :H2, :CH4, :H2O, :CO2, :N2]
     Fluids::Vector{FluidProps} = [CO,H2,CH4,H2O,CO2,N2]
-    gn::Dict{Int, String} 	= Dict(1:ng .=> gnames)
+    gn::Dict{Int, Symbol} 	= Dict(1:ng .=> gnames)
 	# inverse names and fluid indices
-	gni::Dict{String, Int}  = Dict(value => key for (key, value) in gn)
+	gni::Dict{Symbol, Int}  = Dict(value => key for (key, value) in gn)
     
     nr::Int64=3 # number of reactions
-    rnames::Vector{String} = ["R1", "R2", "R3"]
-    rn::Dict{Int, String} 	= Dict(1:nr .=> rnames)
-	rni::Dict{String, Int}  = Dict(value => key for (key, value) in rn)
+    rnames::Vector{Symbol} = [:R1, :R2, :R3]
+    rn::Dict{Int, Symbol} 	= Dict(1:nr .=> rnames)
+	rni::Dict{Symbol, Int}  = Dict(value => key for (key, value) in rn)
     nuij::Array{Int, 2} = vcat(
         [-1 0 1], # CO
         [1 4 3], # H2
@@ -60,22 +60,22 @@ Base.@kwdef mutable struct KineticsData{F<:Function} <:AbstractKineticsData
     )
     RR::F = RRS3P # RR function
     # values of reaction rate constants @ Tref
-	ki_ref::Dict{String,Float64} = Dict("R1"=>-1.51715, "R2"=>-11.2379, "R3"=>-Inf)
-    Tki_ref::Dict{String,Float64} = Dict( rnames .=> [648.0, 648.0, 648.0]*ufac"K")
+	ki_ref::Dict{Symbol,Float64} = Dict(:R1=>-1.51715, :R2=>-11.2379, :R3=>-Inf)
+    Tki_ref::Dict{Symbol,Float64} = Dict( rnames .=> [648.0, 648.0, 648.0]*ufac"K")
     # Activation energies
-    Ei::Dict{String,Float64} = Dict( rnames .=> [0.0, 175.904, 0.0]*ufac"kJ/mol")
+    Ei::Dict{Symbol,Float64} = Dict( rnames .=> [0.0, 175.904, 0.0]*ufac"kJ/mol")
 
     # equilibrium constants Ki
-    Ki_ref::Dict{String,Float64} = Dict( rnames .=> [10.18, 1.947e-3, 1.913e-4])
-    TKi_ref::Dict{String,Float64} = Dict( rnames .=> [693.0, 693.0, 693.0]*ufac"K")
+    Ki_ref::Dict{Symbol,Float64} = Dict( rnames .=> [10.18, 1.947e-3, 1.913e-4])
+    TKi_ref::Dict{Symbol,Float64} = Dict( rnames .=> [693.0, 693.0, 693.0]*ufac"K")
     # reaction enthalpies
-    ΔHi::Dict{String,Float64} = Dict( rnames .=> [-37.92, 182.09, 220.01]*ufac"kJ/mol")
+    ΔHi::Dict{Symbol,Float64} = Dict( rnames .=> [-37.92, 182.09, 220.01]*ufac"kJ/mol")
 	
 
     # values of gas phase species adsorption coefficients @ Tref
-	Kj_ref::Dict{String,Float64} = Dict( gnames .=> [0.0, 0.0296, 0.0, 0.0, 0.0, 0.0])
-    TKj_ref::Dict{String,Float64} = Dict( gnames .=> [648.0, 648.0, 823.0, 823.0, 823.0, 823.0]*ufac"K" )
-    ΔHj::Dict{String,Float64} = Dict( gnames .=> [-70.65, -82.9, -38.28, 88.68, 0, 0]*ufac"kJ/mol")
+	Kj_ref::Dict{Symbol,Float64} = Dict( gnames .=> [0.0, 0.0296, 0.0, 0.0, 0.0, 0.0])
+    TKj_ref::Dict{Symbol,Float64} = Dict( gnames .=> [648.0, 648.0, 823.0, 823.0, 823.0, 823.0]*ufac"K" )
+    ΔHj::Dict{Symbol,Float64} = Dict( gnames .=> [-70.65, -82.9, -38.28, 88.68, 0, 0]*ufac"kJ/mol")
 end
 
 # reaction rate expression for kinetic models of Vazquez2017 / S3P
@@ -84,9 +84,9 @@ function RRS3P(kindata::AbstractKineticsData,T,p)
     r=kindata.rni
 	K=Ki(kindata, T)
 	ki(kindata,T) .* @views [
-		1/p[n["H2"]]*(p[n["CO"]]*p[n["H2O"]]-p[n["H2"]]*p[n["CO2"]]/K[r["R1"]]),
-		1/p[n["H2"]]^3.5*(p[n["CH4"]]*p[n["H2O"]]^2-p[n["H2"]]^4*p[n["CO2"]]/K[r["R2"]]),
-		1/p[n["H2"]]^2.5*(p[n["CH4"]]*p[n["H2O"]]-p[n["H2"]]^3*p[n["CO"]]/K[r["R3"]])
+		1/p[n[:H2]]*(p[n[:CO]]*p[n[:H2O]]-p[n[:H2]]*p[n[:CO2]]/K[r[:R1]]),
+		1/p[n[:H2]]^3.5*(p[n[:CH4]]*p[n[:H2O]]^2-p[n[:H2]]^4*p[n[:CO2]]/K[r[:R2]]),
+		1/p[n[:H2]]^2.5*(p[n[:CH4]]*p[n[:H2O]]-p[n[:H2]]^3*p[n[:CO]]/K[r[:R3]])
 	] / DEN(kindata,T,p)^2
 end
 
@@ -96,9 +96,9 @@ function RRXuFroment(kindata::KineticsData,T,p)
     r=kindata.rni
 	K=Ki(kindata, T)
 	ki(kindata,T) .* @views [
-        1/p[n["H2"]]^2.5*(p[n["CH4"]]*p[n["H2O"]]-p[n["H2"]]^3*p[n["CO"]]/K[r["R1"]]),
-		1/p[n["H2"]]*(p[n["CO"]]*p[n["H2O"]]-p[n["H2"]]*p[n["CO2"]]/K[r["R2"]]),
-		1/p[n["H2"]]^3.5*(p[n["CH4"]]*p[n["H2O"]]^2-p[n["H2"]]^4*p[n["CO2"]]/K[r["R3"]]),		
+        1/p[n[:H2]]^2.5*(p[n[:CH4]]*p[n[:H2O]]-p[n[:H2]]^3*p[n[:CO]]/K[r[:R1]]),
+		1/p[n[:H2]]*(p[n[:CO]]*p[n[:H2O]]-p[n[:H2]]*p[n[:CO2]]/K[r[:R2]]),
+		1/p[n[:H2]]^3.5*(p[n[:CH4]]*p[n[:H2O]]^2-p[n[:H2]]^4*p[n[:CO2]]/K[r[:R3]]),		
 	] / DEN(kindata,T,p)^2
 end
 
@@ -110,7 +110,7 @@ S3P = KineticsData{typeof(RRS3P)}()
 # R2: CO + H2O = CO2 + H2
 # R3: CH4 + 2 H2O = CO2 + 4 H2
 # temporary variables
-ng = 6; gnames = ["CO", "H2", "CH4", "H2O", "CO2", "N2"]; gn = Dict(1:ng .=> gnames); nr = 3; rnames = ["R1", "R2", "R3"]; rn = Dict(1:nr .=> rnames);
+ng = 6; gnames = [:CO, :H2, :CH4, :H2O, :CO2, :N2]; gn = Dict(1:ng .=> gnames); nr = 3; rnames = [:R1, :R2, :R3]; rn = Dict(1:nr .=> rnames);
 XuFroment1989 = KineticsData{typeof(RRXuFroment)}(
     ng = ng,
     gnames = gnames,
@@ -247,7 +247,7 @@ function DEN(kindata::AbstractKineticsData,T,p)
 	n=kindata.gni
     # p_=p
     p_=copy(p)
-	p_[n["H2O"]]=p_[n["H2O"]]/p_[n["H2"]] # p_H2O/p_H2
+	p_[n[:H2O]]=p_[n[:H2O]]/p_[n[:H2]] # p_H2O/p_H2
 	1+sum(Kj(kindata, T).*p_)
 end
 
@@ -264,14 +264,6 @@ end
 
 
 function ri(kindata::AbstractKineticsData,T,p)
-    # n=kindata.gni
-    # r=kindata.rni
-	# K=Ki(kindata, T)
-	# ki(kindata,T) .* @views [
-	# 	1/p[n["H2"]]*(p[n["CO"]]*p[n["H2O"]]-p[n["H2"]]*p[n["CO2"]]/K[r["R1"]]),
-	# 	1/p[n["H2"]]^3.5*(p[n["CH4"]]*p[n["H2O"]]^2-p[n["H2"]]^4*p[n["CO2"]]/K[r["R2"]]),
-	# 	1/p[n["H2"]]^2.5*(p[n["CH4"]]*p[n["H2O"]]-p[n["H2"]]^3*p[n["CO"]]/K[r["R3"]])
-	# ] / DEN(kindata,T,p)^2
     kindata.RR(kindata,T,p)
 end
 
