@@ -15,7 +15,7 @@ begin
 	using LinearSolve,LinearSolvePardiso
 	using LessUnitful
 	
-	using PlutoVista,PyPlot
+	using PlutoVista,Plots,PyPlot,GLMakie
 	using PlutoUI
 	using Colors
 
@@ -61,6 +61,25 @@ function prism_sq(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.
 	hh=h/5.0*2.0^(-nref)
 	W=collect(0:hw:(w/2.0))
     H=collect(0:hh:h)
+	grid=simplexgrid(W,W,H)
+	
+	# catalyst layer region
+	cellmask!(grid,[0.0,0.0,h-cath],[catwi/2,catwi/2,h],2)
+	# catalyst layer boundary
+	bfacemask!(grid,[0.0,0.0,h],[catwi/2,catwi/2,h],Γ_top_cat)	
+end
+
+# ╔═╡ e2e8ed00-f53f-476c-ab5f-95b9ec2f5094
+function prism_sq_(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.catwi)
+	
+	hw=w/2.0/5.0*2.0^(-nref)
+	W=collect(0:hw:(w/2.0))
+	#hh=h/5.0*2.0^(-nref)
+	#H=collect(0:hh:h)
+	hmin=h/100.0
+    hmax=h/5.0
+ 	H=geomspace(0.0,h,hmax,hmin)
+    
 	grid=simplexgrid(W,W,H)
 	
 	# catalyst layer region
@@ -155,7 +174,7 @@ function reaction(f,u,node,data)
 		
 		# temperature eq. / heat source
 		ΔHi=data.kinpar.ΔHi
-		f[iT] = -(RR[nr["R1"]]*ΔHi["R1"]+RR[nr["R2"]]*ΔHi["R2"] +RR[nr["R3"]]*ΔHi["R3"])
+		f[iT] = -(RR[nr[:R1]]*ΔHi[:R1]+RR[nr[:R2]]*ΔHi[:R2] +RR[nr[:R3]]*ΔHi[:R3])
 	end
 	
 	# ∑xi = 1
@@ -241,31 +260,29 @@ Boundary conditions for the transport of gas phase species cover in and outflow 
 function top(f,u,bnode,data)
 	# top boundaries (cat layer & frit)
 	if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat 
-		ng=data.ng
-		#ip = data.ip
-		iT = data.iT
-		flux_rerad = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
+		(;ng, iT)=data
 
-		#X=zeros(eltype(u), ng)
-		#mole_frac!(bnode,data,X,u)
-		#cf=heatcap_mix(data.Fluids, u[iT], X)		
-		#flux_convec=data.utop*u[ip]/(ph"R"*u[iT])*cf*(u[iT]-data.Tamb)
-
-		abs = 0.0
+		Abs_lamp, Eps_ir = 0.0,0.0
 		if bnode.region==Γ_top_frit
-			abs=data.Abs_lamp_frit
+			Abs_lamp=data.Abs_lamp_frit
+			Eps_ir=data.Eps_ir_frit
 		else # catalyst layer
-			abs=data.Abs_lamp_cat
+			Abs_lamp=data.Abs_lamp_cat
+			Eps_ir=data.Eps_ir_cat
 		end
-		#f[iT] = -abs*data.Tau_quartz*data.G_lamp + flux_rerad + flux_convec
-		f[iT] = -abs*data.Tau_quartz*data.G_lamp + flux_rerad
+		
+		flux_rerad = Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
+		flux_abs = -Abs_lamp*data.Tau_quartz*data.G_lamp
+		
+		#f[iT] = -abs_lamp*data.Tau_quartz*data.G_lamp + flux_rerad
+		f[iT] = flux_abs + flux_rerad
 		
 		
 		# flow velocity is normal to top boundary
 		for i=1:ng
 			# f[i] = data.utop*u[i]/(ph"R"*u[iT])
-			# f[i] = -data.u0*data.X0[i]*data.pn/(ph"R"*data.Tn)
-			f[i] = -data.u0*data.X0[i]*data.p/(ph"R"*data.Tamb)
+			f[i] = -data.u0*data.X0[i]*data.pn/(ph"R"*data.Tn)
+			#f[i] = -data.u0*data.X0[i]*data.p/(ph"R"*data.Tamb)
 
 		end
 	end
@@ -326,7 +343,7 @@ function bottom(f,u,bnode,data)
 		cf=heatcap_mix(data.Fluids, u[iT], X)		
 		flux_convec=data.ubot*u[ip]/(ph"R"*u[iT])*cf*(u[iT]-data.Tamb)
 
-		flux_rerad = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
+		flux_rerad = data.Eps_ir_frit*ph"σ"*(u[iT]^4 - data.Tamb^4)
 		#f[iT] = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
 		f[iT] = flux_rerad + flux_convec
 
@@ -449,22 +466,23 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	# number of gas phase species
 	ng::Int64		 		= S3P.ng
 	# names and fluid indices
-	gn::Dict{Int, String} 	= S3P.gn
+	gn::Dict{Int, Symbol} 	= S3P.gn
 
 	# inverse names and fluid indices
-	gni::Dict{String, Int}  = S3P.gni
+	gni::Dict{Symbol, Int}  = S3P.gni
 	# fluids and respective properties in system
 	Fluids::Vector{FluidProps} = S3P.Fluids
 	#Fluids::Vector{AbstractFluidProps} = [N2]
 	X0::Vector{Float64} = let
 		x=zeros(Float64, ng)
-		x[gni["H2"]] = 1.0
-		x[gni["CO2"]] = 1.0
+		x[gni[:H2]] = 1.0
+		x[gni[:CO2]] = 1.0
 		x/sum(x)
 	end # inlet composition
 
 	# volume specific cat mass loading, UPV lab scale PC reactor
 	mcats::Float64 =1234.568*ufac"kg/m^3"
+	#mcats::Float64 =0.01*ufac"kg/m^3"
 	isreactive::Bool = 1
 	#isreactive::Bool = 0
 
@@ -478,8 +496,10 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	Tau_quartz::Float64=0.9 # transmission coefficient of quartz window
 	G_lamp::Float64=1.0*ufac"kW/m^2" # solar simulator irradiation flux
 	Abs_lamp_cat::Float64=0.7 # cat avg absorptivity of irradiation from lamp
-	Abs_lamp_frit::Float64=0.7 # frit avg absorptivity of irradiation from lamp
-	Eps_ir::Float64=0.7 # avg absorptivity/emissivity of cat. of IR irradiation coming from surroundings / emitted
+	#Abs_lamp_frit::Float64=0.7 # frit avg absorptivity of irradiation from lamp
+	Abs_lamp_frit::Float64=0.2 # frit avg absorptivity of irradiation from lamp
+	Eps_ir_cat::Float64=0.7 # cat avg absorptivity/emissivity of IR irradiation
+	Eps_ir_frit::Float64=0.2 # cat avg absorptivity/emissivity of IR irradiation
 		
 	
 	## porous filter data
@@ -489,7 +509,7 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	# frit thickness (applies to 2D & 3D)
 	h::Float64=0.5*ufac"cm"
 	# catalyst layer thickness (applies to 2D & 3D)
-	cath::Float64 = 1000.0*ufac"μm"
+	cath::Float64 = 500.0*ufac"μm"
 	
 
 	# prism / 3D
@@ -507,6 +527,7 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	
 	#ϕ::Float64=0.36 # porosity, class 2
 	ϕ::Float64=0.33 # porosity, class 0
+	
 	
 	# approximation from Wesselingh, J. A., & Krishna, R. (2006). Mass Transfer in Multicomponent Mixtures
 	γ_τ::Float64=ϕ^1.5 # constriction/tourtuosity factor
@@ -527,9 +548,9 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	#norm conditions
 	pn::Float64 = 1.0*ufac"bar"
 	Tn::Float64 = 273.15*ufac"K"
-	
+
 	Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
-	#Qflow::Float64=20000.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
+	#Qflow::Float64=50000.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
 
 	MWin::Float64 = molarweight_mix(Fluids, X0)
 	mdotin::Float64=MWin*Qflow*pn/(ph"R"*Tn)*ufac"kg/s"
@@ -548,7 +569,8 @@ end;
 # ╔═╡ 333b5c80-259d-47aa-a441-ee7894d6c407
 function main(;data=ModelData())
 
-	grid=prism_sq(data)
+	#grid=prism_sq(data)
+	grid=prism_sq_(data)
 
 	ngas=data.ng
 	iT=data.iT
@@ -573,13 +595,13 @@ function main(;data=ModelData())
 	 function pre(sol,par)
 	 	ng=data.ng
 	 	iT=data.iT
-	 	# iteratively adapt top outflow boundary condition
-	 	function Inttop(f,u,bnode,data)
-			
+		 
+	 	# iteratively adapt bottom outflow boundary condition
+	 	function Intbot(f,u,bnode,data)			
 	 		X=zeros(eltype(u), ng)
 	 		mole_frac!(bnode,data,X,u)
 	 		# top boundary(cat/frit)
-	 		if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat  
+	 		if bnode.region==Γ_bottom
 	 			for i=1:ng
 	 				f[i] = data.Fluids[i].MW*X[i]
 	 			end
@@ -587,16 +609,17 @@ function main(;data=ModelData())
 	 		end
 	 	end
 		
-	 	MWavg=sum(integrate(sys,Inttop,sol; boundary=true)[1:ng,[Γ_top_frit,Γ_top_cat]])/(data.Ac/4)
-	 	ntop=data.mdotin/MWavg
+	 	MWavg=sum(integrate(sys,Intbot,sol; boundary=true)[1:ng,Γ_bottom])/(data.Ac/4)
+	 	ndotbot=data.mdotin/MWavg
 		 
-	 	Tavg=sum(integrate(sys,Inttop,sol; boundary=true)[data.iT,[Γ_top_frit,Γ_top_cat]])/(data.Ac/4)
+	 	Tavg=sum(integrate(sys,Intbot,sol; boundary=true)[iT,Γ_bottom])/(data.Ac/4)
 		
-	 	ubot_calc=ntop*ph"R"*Tavg/(1.0*ufac"bar")/data.Ac
+	 	ubot_calc=ndotbot*ph"R"*Tavg/(1.0*ufac"bar")/data.Ac
 	 	ubots=[data.ubot, ubot_calc]*ufac"m/s"
 	 	data.ubot = minimum(ubots) + par*(maximum(ubots)-minimum(ubots))
-		
-		
+
+				 
+				
 	 	# specific catalyst loading
 	 	mcats=[10.0, 1300.0]*ufac"kg/m^3"
 	 	data.mcats= minimum(mcats) + par*(maximum(mcats)-minimum(mcats))
@@ -642,7 +665,7 @@ end;
 # ╠═╡ skip_as_script = true
 #=╠═╡
 md"""
-Cutplane at ``z=`` $(@bind zcut Slider(range(0.0,data_embed.h,length=101),default=data_embed.h,show_value=true)) m
+Cutplane at ``z=`` $(@bind zcut PlutoUI.Slider(range(0.0,data_embed.h,length=101),default=data_embed.h,show_value=true)) m
 """
   ╠═╡ =#
 
@@ -650,11 +673,10 @@ Cutplane at ``z=`` $(@bind zcut Slider(range(0.0,data_embed.h,length=101),defaul
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	vis=GridVisualizer(resolution=(600,400), zoom=1.9, )
-	#zcut = data.h-data.cath/2
-	gridplot!(vis, prism_sq(ModelData(),nref=0,cath=2*ufac"mm"), zplane=zcut)
+	vis=GridVisualizer(resolution=(600,400),zoom=1.9)
+	#gridplot!(vis, prism_sq(ModelData(),nref=0,cath=2*ufac"mm"), zplane=zcut)
+	gridplot!(vis, prism_sq_(ModelData(),nref=0,cath=2*ufac"mm"), zplane=zcut)
 	reveal(vis)
-	#save("../img/out/domain.svg", vis)
 end
   ╠═╡ =#
 
@@ -682,10 +704,11 @@ let
 	iT=data_embed.iT
 	#vis=GridVisualizer(resolution=(600,400), title="Temperature °C", Plotter=PyPlot)
     vis=GridVisualizer(resolution=(600,400), title="Temperature °C")
+	
 	scalarplot!(vis, grid, sol[iT,:].- 273.15, show=true)
 
-	#reveal(vis)
-	#save("../img/out/Temeprature.svg", vis)
+	reveal(vis)
+	#save("../img/out/Temeprature.png", reveal(vis), Plotter=PyPlot)
 end
   ╠═╡ =#
 
@@ -697,7 +720,8 @@ md"""
 # ╔═╡ bd7552d2-2c31-4834-97d9-ccdb4652242f
 function SolAlongLine(data,sol)
 		
-	grid=prism_sq(data)
+	#grid=prism_sq(data)
+	grid=prism_sq_(data)
 	mid_x=argmin(abs.(grid[Coordinates][1,:] .-data.wi/4))
 	mid_x=grid[Coordinates][1,mid_x]
 	mid_y=argmin(abs.(grid[Coordinates][2,:] .-data.le/4))
@@ -724,20 +748,19 @@ let
 	sol_, grid_,midx,midy = SolAlongLine(data_embed,sol)
 	
 	(;ng, gn, ip)=data_embed
-	c1 = colorant"red"
-	c2 = colorant"blue"
-	cols=range(c1, stop=c2, length=ng+1)
 
-	vis=GridVisualizer(title="At position x= $(midx), y= $(midy)")
-	#vis=GridVisualizer(Plotter=PyPlot)
+	cols = distinguishable_colors(ng+1, [RGB(1,1,1), RGB(0,0,0)], dropseed=true)
+	pcols = map(col -> (red(col), green(col), blue(col)), cols)
+
+	p=Plots.plot(title="Partial Pressures", size=(450,450), xguide="Height / cm", yguide="Pressure / bar",legend=:outertopright,)
 	for i in 1:ng
-		scalarplot!(vis, grid_, sol_[i], color=cols[i], label="$(gn[i])", clear=false, legend=:best)
+		Plots.plot!(p, grid_./ufac"cm", vec(sol_[i])./ufac"bar", label="$(gn[i])", lw=2, ls=:auto)
 	end
-
-	scalarplot!(vis, grid_, sol_[ip], color=cols[ip], label="total p", clear=false,legend=:best, xlabel="Height / m", ylabel="Pressure / Pa")
+	Plots.plot!(p, grid_./ufac"cm", vec(sol_[ip])./ufac"bar", color=cols[ip], label="total p", lw=2)
+	lens!([0.45, .50001], [0.15, 0.3], inset = (1, bbox(0.15, 0.1, 0.5, 0.5)))
+	p
+	#Plots.savefig(p, "../img/out/pi_pt_flip.svg")
 	
-	reveal(vis)
-	#save("../img/out/pi_pt.svg", vis)
 end
   ╠═╡ =#
 
@@ -760,10 +783,9 @@ md"""
 ## Mass and Molar flows
 """
 
-# ╔═╡ a9ec34cb-5c01-423f-a9b1-027cba13dca3
-# ╠═╡ skip_as_script = true
+# ╔═╡ 0c3eb801-f271-4cf4-a109-25a283a51779
 #=╠═╡
-data_embed.mdotin/ufac"kg/hr"
+data_embed.mdotin/ufac"kg/hr"/4
   ╠═╡ =#
 
 # ╔═╡ f39dd714-972c-4d29-bfa8-d2c3795d2eef
@@ -809,14 +831,14 @@ md"""
 
 Chemical species flows through porous frit from bottom and top:
 
-|    | Bottom     | Top     |    |
+|    | Top   | Bottom    |    |
 |----|-------|-------|-------|
-| $(data_embed.gn[1]) | $(abs(round(ndot_bot[1]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_top[1]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
-| $(data_embed.gn[2]) | $(abs(round(ndot_bot[2]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_top[2]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
-| $(data_embed.gn[3]) | $(abs(round(ndot_bot[3]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_top[3]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
-| $(data_embed.gn[4]) | $(abs(round(ndot_bot[4]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_top[4]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
-| $(data_embed.gn[5]) | $(abs(round(ndot_bot[5]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_top[5]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
-| $(data_embed.gn[6]) | $(abs(round(ndot_bot[6]/ufac"mol/hr")))  |   $(round(ndot_top[6]/ufac"mol/hr"))   |  mol/hr  |
+| $(data_embed.gn[1]) | $(abs(round(ndot_top[1]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_bot[1]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
+| $(data_embed.gn[2]) | $(abs(round(ndot_top[2]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_bot[2]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
+| $(data_embed.gn[3]) | $(abs(round(ndot_top[3]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_bot[3]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
+| $(data_embed.gn[4]) | $(abs(round(ndot_top[4]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_bot[4]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
+| $(data_embed.gn[5]) | $(abs(round(ndot_top[5]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_bot[5]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
+| $(data_embed.gn[6]) | $(abs(round(ndot_top[6]/ufac"mol/hr")))  |   $(round(ndot_bot[6]/ufac"mol/hr"))   |  mol/hr  |
 
 
 """
@@ -830,7 +852,7 @@ md"""
 # ╔═╡ fec9ca6d-d815-4b50-bec7-f8fb3d8195ba
 function TopPlane(data,sol)
 
-	grid=prism_sq(data)
+	grid=prism_sq_(data)
 	wi=data.wi/2
 	
 	bid = maximum(grid[BFaceRegions])+1
@@ -853,14 +875,49 @@ function TopPlane(data,sol)
 	sol_p, grid_2D
 end
 
+# ╔═╡ 746e1a39-3c9b-478f-b371-3cb8333e93b1
+function CutPlane(data,sol)
+
+	grid=prism_sq_(data)
+	wi=data.wi/2
+	
+	bid = maximum(grid[BFaceRegions])+1
+	bfacemask!(grid, [0,0.024,0],[wi,0.024,data.h],bid)
+
+	# keep x-z coordinates of parent grid
+	function _3to2(a,b)
+		a[1]=b[1]
+		a[2]=b[3]
+	end
+	#grid_1D  = subgrid(grid, [bid], boundary=true, transform=_3to1) 
+	grid_2D  = subgrid(grid, [bid], boundary=true, transform=_3to2) 
+
+	sol_p = []
+	for i=1:(data.ng+2)
+		sol_i = view(sol[i, :], grid_2D)
+		push!(sol_p, collect(sol_i))
+	end
+
+	sol_p, grid_2D
+end
+
 # ╔═╡ 30393c90-298c-412d-86ce-e36106613d35
 #=╠═╡
 let
-	sol_, grid_ =TopPlane(data_embed,sol)
+	sol_xy, grid_xy =TopPlane(data_embed,sol)
+	sol_xz, grid_xz =CutPlane(data_embed,sol)
+	x=unique(grid_xz[Coordinates][1,:])
+	y=unique(grid_xy[Coordinates][2,:])
+	z=unique(grid_xz[Coordinates][2,:])
 
-	# vis=GridVisualizer(resolution=(400,300), title="Temperature at z= $(data.h) (top surface)", Plotter=PyPlot)
-    vis=GridVisualizer(resolution=(400,300), title="Temperature at z= $(data_embed.h) (top surface)")
-	scalarplot!(vis, grid_, sol_[data_embed.iT].- 273.15, show=true)
+	p1=Plots.plot(xguide="X / cm",yguide="Y / cm", aspect_ratio=:equal)
+	Plots.contour!(p1,x./ufac"cm", y./ufac"cm", sol_xy[data_embed.iT].- 273.15, fill=true, levels=8)
+	
+	p2=Plots.plot(xguide="X / cm",yguide="Z / cm", aspect_ratio=4, ylim=(0,data_embed.h/ufac"cm"))
+	Plots.contour!(p2,x./ufac"cm", z./ufac"cm", sol_xz[data_embed.iT].- 273.15, fill=true, levels=8)
+	
+	p=Plots.plot(p1,p2, layout=Plots.grid(2,1,heights=[0.75 ,0.25]), size=(450,600))
+	#Plots.savefig(p, "../img/out/T_flip.svg")
 end
   ╠═╡ =#
 
@@ -925,11 +982,13 @@ Y_{\text{CO}} = \frac{\dot n_{\text{CO}}}{\dot n^0_{\text{CO}_2}}
 """
 
 # ╔═╡ b3bf7b7d-eb38-4a32-87f7-5aef098ad03e
+#=╠═╡
 function Yield_CO(sol,sys,data)
-	ndot_bot,ndot_top = MoleFlows(sol,sys,data)
+	ndot_top,ndot_top = MoleFlows(sol,sys,data)
 	
-	ndot_top[data.gni["CO"]] / abs(ndot_bot[data.gni["CO2"]])
+	ndot_bot[data.gni[:CO]] / abs(ndot_top[data.gni[:CO2]])
 end
+  ╠═╡ =#
 
 # ╔═╡ 0f7cce89-3add-4316-bcc2-a924064af884
 #=╠═╡
@@ -957,11 +1016,11 @@ md"""
 
 # ╔═╡ 47161886-9a5c-41ac-abf5-bbea82096d5a
 function STCefficiency(sol,sys,data,grid)
-	_,ndot_top = MoleFlows(sol,sys,data)
+	ndot_bot,ndot_top = MoleFlows(sol,sys,data)
 	# R2 = RWGS in Xu & Froment kinetic model
-	STC_Atot = ndot_top[data.gni["CO"]] * -data.kinpar.ΔHi["R2"] / (data.G_lamp*data.Ac/4)
+	STC_Atot = ndot_bot[data.gni[:CO]] * -data.kinpar.ΔHi[:R2] / (data.G_lamp*data.Ac/4)
 	catA, _ = CatDims(grid)
-	STC_Acat = ndot_top[data.gni["CO"]] * -data.kinpar.ΔHi["R2"] / (data.G_lamp*catA)
+	STC_Acat = ndot_bot[data.gni[:CO]] * -data.kinpar.ΔHi[:R2] / (data.G_lamp*catA)
 	STC_Atot, STC_Acat
 end
 
@@ -978,6 +1037,7 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╟─2ed3223e-a604-410e-93d4-016580f49093
 # ╟─390c7839-618d-4ade-b9be-ee9ed09a77aa
 # ╠═ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
+# ╠═e2e8ed00-f53f-476c-ab5f-95b9ec2f5094
 # ╠═0a911687-aff4-4c77-8def-084293329f35
 # ╠═ff58b0b8-2519-430e-8343-af9a5adcb135
 # ╟─985718e8-7ed7-4c5a-aa13-29462e52d709
@@ -995,7 +1055,7 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╟─24374b7a-ce77-45f0-a7a0-c47a224a0b06
 # ╟─4865804f-d385-4a1a-9953-5ac66ea50057
 # ╠═722e681c-225a-4484-b0b8-c85d4536e5f9
-# ╠═3bf71cea-4f73-47da-b5ed-2cae3ec3d18b
+# ╟─3bf71cea-4f73-47da-b5ed-2cae3ec3d18b
 # ╟─bcaf83fb-f215-428d-9c84-f5b557fe143f
 # ╟─7f94d703-2759-4fe1-a8c8-ddf26732a6ca
 # ╟─906ad096-4f0c-4640-ad3e-9632261902e3
@@ -1027,7 +1087,7 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╟─e81e803a-d831-4d62-939c-1e4a4fdec74f
 # ╟─c4521a0c-c5af-43cd-97bc-a4a7a42d27b1
 # ╟─b34c1d1b-a5b8-4de9-bea9-3f2d0503c1c0
-# ╠═a9ec34cb-5c01-423f-a9b1-027cba13dca3
+# ╠═0c3eb801-f271-4cf4-a109-25a283a51779
 # ╟─8b1a0902-2542-40ed-9f91-447bffa4290f
 # ╠═f39dd714-972c-4d29-bfa8-d2c3795d2eef
 # ╟─b06a7955-6c91-444f-9bf3-72cfb4a011ec
@@ -1035,10 +1095,11 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╠═7ab38bc2-9ca4-4206-a4c3-5fed673557f1
 # ╟─a6e61592-7958-4094-8614-e77446eb2223
 # ╟─2739bcff-3fb0-4169-8a1a-2b0a14998cec
-# ╠═30393c90-298c-412d-86ce-e36106613d35
+# ╟─30393c90-298c-412d-86ce-e36106613d35
 # ╟─9952c815-5459-44ff-b1f8-07ab24ce0c53
 # ╠═68e2628a-056a-4ec3-827f-2654f49917d9
 # ╠═fec9ca6d-d815-4b50-bec7-f8fb3d8195ba
+# ╠═746e1a39-3c9b-478f-b371-3cb8333e93b1
 # ╟─808e5a71-572f-4b0c-aeb3-9513d969dada
 # ╟─4cde8752-bbdf-4b83-869e-46b78bb4adb5
 # ╟─0f7cce89-3add-4316-bcc2-a924064af884
