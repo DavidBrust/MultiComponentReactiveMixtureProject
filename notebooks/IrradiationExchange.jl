@@ -65,6 +65,39 @@ md"""
 | $\rho_1^{\text{vis}}$   | $(round(rho1_vis,sigdigits=1)) | $\rho_2^{\text{vis}}$ |   $(round(rho2_vis,sigdigits=1))  |
 """
 
+# ╔═╡ 07a18632-4c57-4820-815d-24a3afa71347
+Base.@kwdef struct IrradiationExchange
+	# surface 1
+	# effective optical parameters intergrated over infrared spectrum (IR)
+	alpha1_IR::Float64 = 0.2 # absorptance: obtain from datasheet/measurement
+	tau1_IR::Float64 = 0.5 # transmittance: obtain from datasheet/measurement
+	rho1_IR::Float64 = 1.0 - tau1_IR - alpha1_IR
+	eps1::Float64 = alpha1_IR
+	# effective opt. par. integrated over visible spectrum (vis)
+	alpha1_vis::Float64 = 0.0
+	tau1_vis::Float64 = 0.9 # obtain from datasheet, transmittance
+	# the following is probably inaccurate since it depends on incidence angle, which differs between the irradiation coming from the lamp (relevant for tau1_vis) and the diffuse reflected light coming from the catalyst (surface 2)
+	rho1_vis::Float64 = 1.0 - tau1_vis - alpha1_vis 
+
+	# surface 2
+	# effective optical parameters intergrated over infrared spectrum (IR)
+	alpha2_IR::Float64 = 0.7 # obtain from datasheet, absorptance
+	tau2_IR::Float64 = 0.0 # obtain from datasheet, transmittance
+	rho2_IR::Float64 = 1.0 - tau2_IR - alpha2_IR
+	eps2::Float64 = alpha2_IR
+	# effective opt. par. integrated over visible spectrum (vis)
+	alpha2_vis::Float64 = 0.7
+	tau2_vis::Float64 = 0.0 
+	rho2_vis::Float64 = 1.0 - tau2_vis - alpha2_vis 
+	
+end
+
+# ╔═╡ 67f418db-5c38-4e30-86d1-ef2a6258b9c9
+# surface 1: glass
+upper_chamber = IrradiationExchange(
+	
+)
+
 # ╔═╡ 6c246116-d73b-4c2d-bb4b-577d2578f2ab
 const Glamp = 50.0*ufac"kW/m^2";
 
@@ -90,5 +123,7 @@ end
 # ╟─50237926-dd49-45db-8ebe-63d9ba98dc9a
 # ╟─a4caa320-bd20-11ed-0e42-693f0a5328c9
 # ╠═b17ef005-cf0f-4a7d-86b1-0c10ce60ff3d
+# ╠═07a18632-4c57-4820-815d-24a3afa71347
+# ╠═67f418db-5c38-4e30-86d1-ef2a6258b9c9
 # ╠═6c246116-d73b-4c2d-bb4b-577d2578f2ab
 # ╠═e5b9e84d-880a-485a-8429-12e5584aa8e4
