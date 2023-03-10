@@ -58,9 +58,12 @@ end;
 function prism_sq(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.catwi)
 	
 	hw=w/2.0/5.0*2.0^(-nref)
-	hh=h/5.0*2.0^(-nref)
 	W=collect(0:hw:(w/2.0))
-    H=collect(0:hh:h)
+	#hh=h/5.0*2.0^(-nref)
+	#H=collect(0:hh:h)
+	hmin=h/50.0
+    hmax=h/10.0
+ 	H=geomspace(0.0,h,hmax,hmin)
 	grid=simplexgrid(W,W,H)
 	
 	# catalyst layer region
@@ -76,16 +79,22 @@ function prism_sq_(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data
 	W=collect(0:hw:(w/2.0))
 	#hh=h/5.0*2.0^(-nref)
 	#H=collect(0:hh:h)
-	hmin=h/100.0
-    hmax=h/5.0
- 	H=geomspace(0.0,h,hmax,hmin)
+	hmin=h/50.0
+    hmax=h/10.0
+ 	H=geomspace(0.0,h+cath,hmax,hmin)
     
 	grid=simplexgrid(W,W,H)
 	
 	# catalyst layer region
-	cellmask!(grid,[0.0,0.0,h-cath],[catwi/2,catwi/2,h],2)
+	cellmask!(grid,[0.0,0.0,h],[catwi/2,catwi/2,h+cath],2)
 	# catalyst layer boundary
-	bfacemask!(grid,[0.0,0.0,h],[catwi/2,catwi/2,h],Γ_top_cat)	
+	bfacemask!(grid,[0.0,0.0,h+cath],[catwi/2,catwi/2,h+cath],Γ_top_cat)	
+end
+
+# ╔═╡ 02941a1f-7353-42fc-9680-08708f4f9be7
+function gridfun(data)
+	#prism_sq(data)
+	prism_sq_(data)
 end
 
 # ╔═╡ 2554b2fc-bf5c-4b8f-b5e9-8bc261fe597b
@@ -287,12 +296,6 @@ function top(f,u,bnode,data)
 		end
 	end
 end
-
-# ╔═╡ 58d0610b-1739-4260-8d16-5a31ba362d69
-md"""
-## TODO:
-Add description of bottom chamber radiation exchange -> assume bottom Al plate as perfect mirror
-"""
 
 # ╔═╡ edd9fdd1-a9c4-4f45-8f63-9681717d417f
 function side(f,u,bnode,data)
@@ -569,8 +572,7 @@ end;
 # ╔═╡ 333b5c80-259d-47aa-a441-ee7894d6c407
 function main(;data=ModelData())
 
-	#grid=prism_sq(data)
-	grid=prism_sq_(data)
+	grid=gridfun(data)
 
 	ngas=data.ng
 	iT=data.iT
@@ -665,7 +667,7 @@ end;
 # ╠═╡ skip_as_script = true
 #=╠═╡
 md"""
-Cutplane at ``z=`` $(@bind zcut PlutoUI.Slider(range(0.0,data_embed.h,length=101),default=data_embed.h,show_value=true)) m
+Cutplane at ``z=`` $(@bind zcut PlutoUI.Slider(range(0.0,data_embed.h+data_embed.cath,length=101),default=data_embed.h,show_value=true)) m
 """
   ╠═╡ =#
 
@@ -674,8 +676,7 @@ Cutplane at ``z=`` $(@bind zcut PlutoUI.Slider(range(0.0,data_embed.h,length=101
 #=╠═╡
 let
 	vis=GridVisualizer(resolution=(600,400),zoom=1.9)
-	#gridplot!(vis, prism_sq(ModelData(),nref=0,cath=2*ufac"mm"), zplane=zcut)
-	gridplot!(vis, prism_sq_(ModelData(),nref=0,cath=2*ufac"mm"), zplane=zcut)
+	gridplot!(vis, gridfun(ModelData()), zplane=zcut)
 	reveal(vis)
 end
   ╠═╡ =#
@@ -717,11 +718,13 @@ md"""
 ## Partial Pressure Plot
 """
 
+# ╔═╡ 769b970d-c28d-4771-8b4b-e3dd4c0f2dc2
+
+
 # ╔═╡ bd7552d2-2c31-4834-97d9-ccdb4652242f
 function SolAlongLine(data,sol)
 		
-	#grid=prism_sq(data)
-	grid=prism_sq_(data)
+	grid=gridfun(data)
 	mid_x=argmin(abs.(grid[Coordinates][1,:] .-data.wi/4))
 	mid_x=grid[Coordinates][1,mid_x]
 	mid_y=argmin(abs.(grid[Coordinates][2,:] .-data.le/4))
@@ -750,16 +753,15 @@ let
 	(;ng, gn, ip)=data_embed
 
 	cols = distinguishable_colors(ng+1, [RGB(1,1,1), RGB(0,0,0)], dropseed=true)
-	pcols = map(col -> (red(col), green(col), blue(col)), cols)
 
-	p=Plots.plot(title="Partial Pressures", size=(450,450), xguide="Height / cm", yguide="Pressure / bar",legend=:outertopright,)
+	p=Plots.plot(title="Partial Pressures", size=(450,450), xguide="Z / cm", yguide="Pressure / bar",legend=:outertopright,)
 	for i in 1:ng
-		Plots.plot!(p, grid_./ufac"cm", vec(sol_[i])./ufac"bar", label="$(gn[i])", lw=2, ls=:auto)
+		Plots.plot!(p, grid_./ufac"cm", vec(sol_[i])./ufac"bar", label="$(gn[i])", lw=2, color=cols[i], ls=:auto)
 	end
 	Plots.plot!(p, grid_./ufac"cm", vec(sol_[ip])./ufac"bar", color=cols[ip], label="total p", lw=2)
-	lens!([0.45, .50001], [0.15, 0.3], inset = (1, bbox(0.15, 0.1, 0.5, 0.5)))
+	lens!([0.5, .55001], [0.23, 0.29], inset = (1, bbox(0.15, 0.1, 0.5, 0.5)))
 	p
-	#Plots.savefig(p, "../img/out/pi_pt_flip.svg")
+	#Plots.savefig(p, "../img/out/pi_pt_flip_lens.svg")
 	
 end
   ╠═╡ =#
@@ -852,11 +854,12 @@ md"""
 # ╔═╡ fec9ca6d-d815-4b50-bec7-f8fb3d8195ba
 function TopPlane(data,sol)
 
-	grid=prism_sq_(data)
+	grid=gridfun(data)
 	wi=data.wi/2
+	htop = data.h+data.cath
 	
 	bid = maximum(grid[BFaceRegions])+1
-	bfacemask!(grid, [0,0,data.h],[wi,wi,data.h],bid)
+	bfacemask!(grid, [0,0,htop],[wi,wi,htop],bid)
 
 	# keep x-y coordinates of parent grid
 	function _3to2(a,b)
@@ -877,12 +880,14 @@ end
 
 # ╔═╡ 746e1a39-3c9b-478f-b371-3cb8333e93b1
 function CutPlane(data,sol)
-
-	grid=prism_sq_(data)
+	
+	grid=gridfun(data)
+	
 	wi=data.wi/2
+	htop = data.h+data.cath
 	
 	bid = maximum(grid[BFaceRegions])+1
-	bfacemask!(grid, [0,0.024,0],[wi,0.024,data.h],bid)
+	bfacemask!(grid, [0,0.024,0],[wi,0.024,htop],bid)
 
 	# keep x-z coordinates of parent grid
 	function _3to2(a,b)
@@ -901,23 +906,17 @@ function CutPlane(data,sol)
 	sol_p, grid_2D
 end
 
-# ╔═╡ 30393c90-298c-412d-86ce-e36106613d35
+# ╔═╡ 010589d3-1df2-4a9e-be67-e3a889e8c0b9
 #=╠═╡
 let
-	sol_xy, grid_xy =TopPlane(data_embed,sol)
-	sol_xz, grid_xz =CutPlane(data_embed,sol)
-	x=unique(grid_xz[Coordinates][1,:])
-	y=unique(grid_xy[Coordinates][2,:])
-	z=unique(grid_xz[Coordinates][2,:])
+	sol_xy, grid_xy = TopPlane(data_embed,sol)
+	sol_xz, grid_xz = CutPlane(data_embed,sol)
+	vis=GridVisualizer(layout=(1,2), resolution=(700, 300))
+	scalarplot!(vis[1,1], grid_xy, sol_xy[data_embed.iT] .-273.15, colormap= :inferno, show=true)
+	scalarplot!(vis[1,2], grid_xz, sol_xz[data_embed.iT] .-273.15, aspect=4, colormap= :inferno, show=true)
 
-	p1=Plots.plot(xguide="X / cm",yguide="Y / cm", aspect_ratio=:equal)
-	Plots.contour!(p1,x./ufac"cm", y./ufac"cm", sol_xy[data_embed.iT].- 273.15, fill=true, levels=8)
 	
-	p2=Plots.plot(xguide="X / cm",yguide="Z / cm", aspect_ratio=4, ylim=(0,data_embed.h/ufac"cm"))
-	Plots.contour!(p2,x./ufac"cm", z./ufac"cm", sol_xz[data_embed.iT].- 273.15, fill=true, levels=8)
-	
-	p=Plots.plot(p1,p2, layout=Plots.grid(2,1,heights=[0.75 ,0.25]), size=(450,600))
-	#Plots.savefig(p, "../img/out/T_flip.svg")
+	#sol_xz, _ =CutPlane(data_embed,sol)
 end
   ╠═╡ =#
 
@@ -1036,11 +1035,12 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╠═863c9da7-ef45-49ad-80d0-3594eca4a189
 # ╟─2ed3223e-a604-410e-93d4-016580f49093
 # ╟─390c7839-618d-4ade-b9be-ee9ed09a77aa
+# ╠═02941a1f-7353-42fc-9680-08708f4f9be7
 # ╠═ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
-# ╠═e2e8ed00-f53f-476c-ab5f-95b9ec2f5094
 # ╠═0a911687-aff4-4c77-8def-084293329f35
 # ╠═ff58b0b8-2519-430e-8343-af9a5adcb135
 # ╟─985718e8-7ed7-4c5a-aa13-29462e52d709
+# ╠═e2e8ed00-f53f-476c-ab5f-95b9ec2f5094
 # ╟─2554b2fc-bf5c-4b8f-b5e9-8bc261fe597b
 # ╟─f4dcde90-6d8f-4b17-b4ec-367d2372637f
 # ╟─3703afb0-93c4-4664-affe-b723758fb56b
@@ -1065,7 +1065,6 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╟─8139166e-42f9-41c3-a360-50d3d4e5ee86
 # ╟─44d91c2e-8082-4a90-89cc-81aba783d5ac
 # ╠═7da59e27-62b9-4b89-b315-d88a4fd34f56
-# ╠═58d0610b-1739-4260-8d16-5a31ba362d69
 # ╠═40906795-a4dd-4e4a-a62e-91b4639a48fa
 # ╠═edd9fdd1-a9c4-4f45-8f63-9681717d417f
 # ╠═29d66705-3d9f-40b1-866d-dd3392a1a268
@@ -1083,6 +1082,7 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╠═3bd80c19-0b49-43f6-9daa-0c87c2ea8093
 # ╟─2790b550-3105-4fc0-9070-d142c19678db
 # ╠═bea97fb3-9854-411c-8363-15cbef13d033
+# ╠═769b970d-c28d-4771-8b4b-e3dd4c0f2dc2
 # ╠═bd7552d2-2c31-4834-97d9-ccdb4652242f
 # ╟─e81e803a-d831-4d62-939c-1e4a4fdec74f
 # ╟─c4521a0c-c5af-43cd-97bc-a4a7a42d27b1
@@ -1095,7 +1095,7 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╠═7ab38bc2-9ca4-4206-a4c3-5fed673557f1
 # ╟─a6e61592-7958-4094-8614-e77446eb2223
 # ╟─2739bcff-3fb0-4169-8a1a-2b0a14998cec
-# ╟─30393c90-298c-412d-86ce-e36106613d35
+# ╠═010589d3-1df2-4a9e-be67-e3a889e8c0b9
 # ╟─9952c815-5459-44ff-b1f8-07ab24ce0c53
 # ╠═68e2628a-056a-4ec3-827f-2654f49917d9
 # ╠═fec9ca6d-d815-4b50-bec7-f8fb3d8195ba
