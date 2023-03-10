@@ -1039,20 +1039,12 @@ end
 # ╔═╡ 30393c90-298c-412d-86ce-e36106613d35
 #=╠═╡
 let
-	sol_xy, grid_xy =TopPlane(data_embed,sol)
-	sol_xz, grid_xz =CutPlane(data_embed,sol)
-	x=unique(grid_xz[Coordinates][1,:])
-	y=unique(grid_xy[Coordinates][2,:])
-	z=unique(grid_xz[Coordinates][2,:])
+	sol_xy, grid_xy = TopPlane(data_embed,sol)
+	sol_xz, grid_xz = CutPlane(data_embed,sol)
+	vis=GridVisualizer(layout=(1,2), resolution=(700, 300))
+	scalarplot!(vis[1,1], grid_xy, sol_xy[data_embed.iT] .-273.15, colormap= :inferno, show=true)
+	scalarplot!(vis[1,2], grid_xz, sol_xz[data_embed.iT] .-273.15, aspect=4, colormap= :inferno, show=true)
 
-	p1=Plots.plot(xguide="X / cm",yguide="Y / cm", aspect_ratio=:equal)
-	Plots.contour!(p1,x./ufac"cm", y./ufac"cm", sol_xy[data_embed.iT].- 273.15, fill=true, levels=8)
-	
-	p2=Plots.plot(xguide="X / cm",yguide="Z / cm", aspect_ratio=4, ylim=(0,data_embed.h/ufac"cm"))
-	Plots.contour!(p2,x./ufac"cm", z./ufac"cm", sol_xz[data_embed.iT].- 273.15, fill=true, levels=8)
-	
-	p=Plots.plot(p1,p2, layout=Plots.grid(2,1,heights=[0.75 ,0.25]), size=(450,600))
-	#Plots.savefig(p, "../img/out/T_flip.svg")
 end
   ╠═╡ =#
 
@@ -1239,7 +1231,7 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╠═7ab38bc2-9ca4-4206-a4c3-5fed673557f1
 # ╟─a6e61592-7958-4094-8614-e77446eb2223
 # ╟─2739bcff-3fb0-4169-8a1a-2b0a14998cec
-# ╟─30393c90-298c-412d-86ce-e36106613d35
+# ╠═30393c90-298c-412d-86ce-e36106613d35
 # ╟─9952c815-5459-44ff-b1f8-07ab24ce0c53
 # ╠═68e2628a-056a-4ec3-827f-2654f49917d9
 # ╠═fec9ca6d-d815-4b50-bec7-f8fb3d8195ba
