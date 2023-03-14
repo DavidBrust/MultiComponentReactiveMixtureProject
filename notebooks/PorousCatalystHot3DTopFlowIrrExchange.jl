@@ -639,7 +639,7 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	# number of gas phase species
 	ng::Int64		 		= S3P.ng
 	# names and fluid indices
-	#gn::Dict{Int, Symbol} 	= S3P.gn
+	gn::Dict{Int, Symbol} 	= S3P.gn
 
 	# inverse names and fluid indices
 	gni::Dict{Symbol, Int}  = S3P.gni
