@@ -259,27 +259,104 @@ Boundary conditions for the transport of gas phase species cover in and outflow 
 # ╔═╡ 58d0610b-1739-4260-8d16-5a31ba362d69
 md"""
 ## Irradiation Exchange:
-Account for the exchange of (thermal) irradiation between the surfaces in the top and bottom chambers of the reactos. View factors of 1 are assumed throughout.
+Account for the exchange of (thermal) irradiation between the surfaces in the top and bottom chambers of the reactos. View factors are used to describe the geometrical arrangement of surfaces that exchange irradiation. The view factors are values between 0 and 1, describing the fractions of surface areas that "see each other" (exchange irradiation with each other). In upper chamber, the surfaces are designated as (see figure below):
+1. quartz window
+2. catalyst layer
+3. uncoated frit
 
-In the following, the net irradiation fluxes through the surfaces marked by the __red dashed line__ are stated. These will be implemented in the code as boundary conditions for the thermal energy transport equation.
+For the given geometry, the following view factors are obtained:
 
-The optical properties $\tau, \rho, \alpha, \epsilon$ are effective values, integrated over the respective spectral distributions of irradiative power from the lamp (visible, vis) and from emitted thermal radition (infrared, IR) for the surfaces 1 and 2 respectively.
+```math
+\phi_{12} = \frac{A_2}{A_1}, \qquad \phi_{13} = \frac{A_3}{A_1}, \qquad \phi_{21} = \phi_{31} = 1
+```
+where $A_i$ are the geometric areas of the corresponding surfaces.
+"""
+
+# ╔═╡ d9dee38e-6036-46b8-bc06-e545baa06789
+md"""
+In the following, the net irradiation fluxes through the surfaces of interest marked by the __red__ dashed line (__catalyst layer__, __2__) and __green__ dashed line (__uncoated frit__, __3__) are stated. Per sign sign convention applied here, fluxes entering the control surfaces are counted as positive while fluxes exiting the control surfaces are counted as negative. 
+These irradiation fluxes through the surfaces will be implemented in the code as boundary conditions for the thermal energy transport equation.
+
 """
 
 # ╔═╡ e58ec04f-023a-4e00-98b8-f9ae85ca506f
 md"""
 ### Top chamber
-$(LocalResource("../img/irrad_top_chamber.png"))
+$(LocalResource("../img/irrad_top_chamber_view_factors.png"))
 ```math
-F = -\epsilon_2 \sigma T_2^4 + \frac{\alpha_2^{\text{vis}} \tau_1^{\text{vis}}}{1-\rho_1^{\text{vis}} \rho_2^{\text{vis}}} G_{\text{HFSS}} + \frac{\alpha_2^{\text{IR}}}{1-\rho_1^{\text{IR}} \rho_2^{\text{IR}}} \left( \epsilon_1 \sigma T_1^4 + \rho_1^{\text{IR}} \epsilon_2 \sigma T_2^4 \right)
+\begin{align}
+F_2 &=-\epsilon_2\sigma T_2^4 + \alpha_2^{\text{vis}} G_1^{\text{vis}} + \alpha_2^{\text{IR}} G_1^{\text{IR}} \\
+F_3 &=-\epsilon_3\sigma T_3^4 + \alpha_3^{\text{vis}} G_1^{\text{vis}} + \alpha_3^{\text{IR}} G_1^{\text{IR}}
+\end{align}
 ```
-
 """
 
-# ╔═╡ d330a384-5ab4-4767-bfc6-6a0eac0747a9
+# ╔═╡ 80d2b5db-792a-42f9-b9c2-91d0e18cfcfb
 md"""
-where $T_1$ is set to a fixed value, to avoid the solution of the coupled problem of irradiation exchange which cannot be stated explicitly.
+```math
+G_1^{\text{vis}} = \frac{\tau_1^{\text{vis}} G_{\text{lamp}}}{1-\rho_1^{\text{vis}} \left( \phi_{12} \rho_2^{\text{vis}} + \phi_{13} \rho_3^{\text{vis}} \right)} \\
+```
 """
+
+# ╔═╡ b1ae3b4d-59ca-420f-a1a0-dc698b52e5b0
+md"""
+```math
+G_1^{\text{IR}} = \frac{\epsilon_1\sigma T_1^4 + \rho_1^{\text{IR}} \left( \phi_{12}\epsilon_2 \sigma T_2^4+\phi_{13}\epsilon_3 \sigma T_3^4\right)}{1-\rho_1^{\text{IR}} \left( \phi_{12} \rho_2^{\text{IR}} + \phi_{13} \rho_3^{\text{IR}} \right)}
+```
+"""
+
+# ╔═╡ b1ef2a89-27db-4f21-a2e3-fd6356c394da
+md"""
+where $G_1^{\text{vis}}$ and $G_1^{\text{IR}}$ are the surface brightnesses (cumulative irradiation flux resulting from emission, transmission and reflection) of surface 1 in the visible and IR spectral range respectively. Also the temperature of the inside surface of quartz window $T_1$ is set to a fixed value, to avoid the solution of the coupled problem of irradiation exchange which cannot be stated explicitly.
+"""
+
+# ╔═╡ 4dae93b2-be63-4ee9-bc1e-871a31ade811
+md"""
+The optical properties $\tau, \rho, \alpha, \epsilon$ are effective values, integrated over the respective spectral distributions of irradiative power from the lamp (visible, vis) and from emitted thermal radition (infrared, IR) for the surfaces 1, 2 and 3 respectively.
+"""
+
+# ╔═╡ 9547ed7c-3304-4c63-a6c1-5f84e0001c54
+Base.@kwdef struct SurfaceOpticalProps
+	alpha_IR::Float64 = 0.2 # absorptance: obtain from datasheet/measurement
+	tau_IR::Float64 = 0.5 # transmittance: obtain from datasheet/measurement
+	rho_IR::Float64 = 1.0 - tau_IR - alpha_IR
+	eps::Float64 = alpha_IR
+	# effective opt. par. integrated over visible spectrum (vis)
+	alpha_vis::Float64 = 0.0
+	tau_vis::Float64 = 0.9 # obtain from datasheet, transmittance
+	rho_vis::Float64 = 1.0 - tau_vis - alpha_vis 
+end;
+
+# ╔═╡ 9d191a3a-e096-4ad7-aae6-bbd63d478fa2
+# optical parameters for quartz window in upper chamber (uc)
+const uc_window = SurfaceOpticalProps(
+	# quartz glass windows
+	alpha_IR=0.2, # datasheet integrated over spectrum of HFSS
+	tau_IR=0.5,# datasheet integrated over spectrum of HFSS
+	alpha_vis=0.0, # quartz glass is transparent in visible spectrum
+	tau_vis=0.9, # datasheet, take reflection losses at adouble interface into account
+	# the calculated value for rho_vis is probably inaccurate since it depends on incidence angle, which differs between the irradiation coming from the lamp (relevant for tau_vis) and the diffuse reflected light coming from the catalyst 
+)
+
+# ╔═╡ 2d51f54b-4cff-4253-b17f-217e3261f36d
+#  optical parameters for catalyst layer in upper chamber (uc)
+const uc_cat = SurfaceOpticalProps(
+	# quartz glass windows
+	alpha_IR=0.7, # measurement (ideally at high T) integrated over IR
+	tau_IR=0.0, # opaque surface
+	alpha_vis=0.7, # measurement (ideally at high T) integrated over vis
+	tau_vis=0.0 # opaque surface	
+)
+
+# ╔═╡ fdaeafb6-e29f-41f8-8468-9c2b03b9eed7
+# optical parameters for uncoated frit in upper chamber (uc)
+const uc_frit = SurfaceOpticalProps(
+	# quartz glass windows
+	alpha_IR=0.2, # measurement (ideally at high T) integrated over IR
+	tau_IR=0.0, # opaque surface
+	alpha_vis=0.2, # measurement (ideally at high T) integrated over vis
+	tau_vis=0.0 # opaque surface	
+)
 
 # ╔═╡ 8b485112-6b1a-4b38-af91-deb9b79527e0
 md"""
@@ -295,79 +372,18 @@ md"""
 where $T_2$ is set to a fixed value, to avoid the solution of the coupled problem of irradiation exchange which cannot be stated explicitly.
 """
 
-# ╔═╡ b8dc52f0-1e6f-4118-95a9-f1a2a4d10be4
-Base.@kwdef struct IrradiationExchange
-	# surface 1
-	# effective optical parameters intergrated over infrared spectrum (IR)
-	alpha1_IR::Float64 = 0.2 # absorptance: obtain from datasheet/measurement
-	tau1_IR::Float64 = 0.5 # transmittance: obtain from datasheet/measurement
-	rho1_IR::Float64 = 1.0 - tau1_IR - alpha1_IR
-	eps1::Float64 = alpha1_IR
-	# effective opt. par. integrated over visible spectrum (vis)
-	alpha1_vis::Float64 = 0.0
-	tau1_vis::Float64 = 0.9 # obtain from datasheet, transmittance
-	# the following is probably inaccurate since it depends on incidence angle, which differs between the irradiation coming from the lamp (relevant for tau1_vis) and the diffuse reflected light coming from the catalyst (surface 2)
-	rho1_vis::Float64 = 1.0 - tau1_vis - alpha1_vis 
+# ╔═╡ 162122bc-12ae-4a81-8df6-86498041be40
+# optical parameters for uncoated frit in lower chamber (lc) = frit in upper chamber
+const lc_frit = uc_frit
 
-	# surface 2
-	# effective optical parameters intergrated over infrared spectrum (IR)
-	alpha2_IR::Float64 = 0.7 # absorptance: obtain from datasheet/measurement
-	tau2_IR::Float64 = 0.0 # transmittance: obtain from datasheet/measurement
-	rho2_IR::Float64 = 1.0 - tau2_IR - alpha2_IR
-	eps2::Float64 = alpha2_IR
-	# effective opt. par. integrated over visible spectrum (vis)
-	alpha2_vis::Float64 = 0.7
-	tau2_vis::Float64 = 0.0 
-	rho2_vis::Float64 = 1.0 - tau2_vis - alpha2_vis	
-end;
-
-# ╔═╡ 21b84221-071e-44bc-b370-e2255f4f7448
-# specify optical parameters for upper chamber, interaction between glass and catalyst layer
-const upper_chamber_cat = IrradiationExchange(
-	# surface 1: quartz glass
-	alpha1_IR=0.2, # datasheet integrated over spectrum of HFSS
-	tau1_IR=0.5,# datasheet integrated over spectrum of HFSS
-	alpha1_vis=0.0, # quartz glass is transparent in visible spectrum
-	tau1_vis=0.9, # datasheet, take reflection losses at adouble interface into account
-
-	# surface 2: catalyst layer
-	alpha2_IR=0.7, # measurement (ideally at high T) integrated over IR
-	tau2_IR=0.0, # opaque surface
-	alpha2_vis=0.7, # measurement (ideally at high T) integrated over vis
-	tau2_vis=0.0 # opaque surface	
-)
-
-# ╔═╡ 1cdc67ba-bc13-4f6e-ac17-fd8cfe348935
-# specify optical parameters for upper chamber, interaction between glass and porous frit
-const upper_chamber_frit = IrradiationExchange(
-	# surface 1: quartz glass
-	alpha1_IR=0.2, # datasheet integrated over spectrum of HFSS
-	tau1_IR=0.5,# datasheet integrated over spectrum of HFSS
-	alpha1_vis=0.0, # quartz glass is transparent in visible spectrum
-	tau1_vis=0.9, # datasheet, take reflection losses at adouble interface into account
-
-	# surface 2: (uncoated) porous frit
-	alpha2_IR=0.2, # measurement (ideally at high T) integrated over IR
-	tau2_IR=0.0, # opaque surface
-	alpha2_vis=0.2, # measurement (ideally at high T) integrated over vis
-	tau2_vis=0.0 # opaque surface	
-	
-)
-
-# ╔═╡ a68e10a1-4b63-4bca-a9ce-d2136551a7e6
-# specify optical parameters for lower chamber, interaction between porous frit and aluminium bottom plate
-const lower_chamber = IrradiationExchange(
-	# surface 1: porous frit
-	alpha1_IR=0.2, # measurement (ideally at high T) integrated over IR
-	tau1_IR=0.0, # opaque surface
-	alpha1_vis=0.2, # measurement (ideally at high T) integrated over IR
-	tau1_vis=0.0, # opaque surface
-
-	# surface 2: aluminium bottom plate (machined surface)
-	alpha2_IR=0.1, # see in lit, assume large reflectivity
-	tau2_IR=0.0, # opaque surface
-	alpha2_vis=0.1, # see in lit, assume large reflectivity
-	tau2_vis=0.0 # opaque surface	
+# ╔═╡ 221a1ee4-f7e9-4233-b45c-a715c9edae5f
+# optical parameters for Al bottom plate in lower chamber (lc)
+const lc_plate = SurfaceOpticalProps(
+	# aluminium bottom plate (machined surface)
+	alpha_IR=0.1, # see in lit, assume large reflectivity
+	tau_IR=0.0, # opaque surface
+	alpha_vis=0.1, # see in lit, assume large reflectivity
+	tau_vis=0.0 # opaque surface	
 )
 
 # ╔═╡ 4ebbe06f-0993-4c5c-9af3-76b2b645e592
@@ -375,34 +391,64 @@ md"""
 ## Implementation
 """
 
+# ╔═╡ 0bc79692-8db4-44a2-9433-5b6ce97b656f
+md"""
+#### Practical problem
+A problem regarding the implementation of above irradiation flux boundary conditions in VoronoiFVM.jl arises: in the physics callback functions that define the boundary conditions, only local values of the solution are available. But since irradiation is not acting locally but acts over distances, values from other part of the modeling domain influence the local solution. These interactions cannot be considered in a streight-forward way.
+
+In the following, a "simplification" is applied: instead of considering the different temperatures $T_2$ and $T_3$, we consider the single, local temperature $T_{2/3}$ in the calculation of the surface brightness. 
+Instead of the surface brightness $G_1^{\text{IR}}$ as defined above, the following is implemented in the code:
+
+```math
+G_1^{\text{IR}} = \frac{\epsilon_1\sigma T_1^4 + \rho_1^{\text{IR}} \left( \phi_{12}\epsilon_2 \sigma T_{\bf{2/3}}^4+\phi_{13}\epsilon_3 \sigma T_{\bf{2/3}}^4 \right)}{1-\rho_1^{\text{IR}} \left( \phi_{12} \rho_2^{\text{IR}} + \phi_{13} \rho_3^{\text{IR}} \right)}
+
+```
+This will lead to an error, that should be estimated.
+
+"""
+
 # ╔═╡ 7da59e27-62b9-4b89-b315-d88a4fd34f56
 function top(f,u,bnode,data)
 	# top boundaries (cat layer & frit)
 	if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat 
-		(;ng,iT,Glamp,Tglass,upper_chamber_cat,upper_chamber_frit)=data
-
-		#Abs_lamp, Eps_ir = 0.0,0.0		
-		#if bnode.region==Γ_top_frit
-		#	Abs_lamp=data.Abs_lamp_frit
-		#	Eps_ir=data.Eps_ir_frit
-		#else # catalyst layer
-		#	Abs_lamp=data.Abs_lamp_cat
-		#	Eps_ir=data.Eps_ir_cat
-		#end
-		
-		#flux_rerad = Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
-		#flux_abs = -Abs_lamp*data.Tau_quartz*data.Glamp
-		#f[iT] = flux_abs + flux_rerad
+		(;ng,iT,Glamp,Tglass,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
 		
 		flux_irrad=0.0
 		σ=ph"σ"
-		if bnode.region==Γ_top_frit
-			(;eps1,tau1_vis,rho1_vis,rho1_IR,alpha2_IR,rho2_vis,rho2_IR,eps2,alpha2_vis,rho2_IR) = upper_chamber_frit
-			flux_irrad = -eps2*σ*u[iT]^4 + alpha2_vis*tau1_vis/(1-rho1_vis*rho2_vis)*Glamp + alpha2_IR/(1-rho1_IR*rho2_IR)*(eps1*σ*Tglass^4+rho1_IR*eps2*σ*u[iT]^4)
-		else # catalyst layer
-			(;eps1,tau1_vis,rho1_vis,rho1_IR,alpha2_IR,rho2_vis,rho2_IR,eps2,alpha2_vis,rho2_IR) = upper_chamber_cat
-			flux_irrad = -eps2*σ*u[iT]^4 + alpha2_vis*tau1_vis/(1-rho1_vis*rho2_vis)*Glamp + alpha2_IR/(1-rho1_IR*rho2_IR)*(eps1*σ*Tglass^4+rho1_IR*eps2*σ*u[iT]^4)
+
+		# irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
+		# window properties (1)
+		tau1_vis=uc_window.tau_vis
+		rho1_vis=uc_window.rho_vis
+		rho1_IR=uc_window.rho_IR
+		eps1=uc_window.eps
+		# catalyst layer properties (2)
+		rho2_vis=uc_cat.rho_vis
+		rho2_IR=uc_cat.rho_IR
+		alpha2_vis=uc_cat.alpha_vis
+		alpha2_IR=uc_cat.alpha_IR
+		eps2=uc_cat.eps
+		# uncoated frit properties (3)
+		rho3_vis=uc_frit.rho_vis
+		rho3_IR=uc_frit.rho_IR
+		alpha3_vis=uc_frit.alpha_vis
+		alpha3_IR=uc_frit.alpha_IR
+		eps3=uc_frit.eps
+		#view factors
+		ϕ12=vf_uc_window_cat
+		ϕ13=vf_uc_window_frit
+		
+		# surface brigthness of quartz window (1) in vis & IR	
+		G1_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
+		# here the simplification is applied: only local value of T (u[iT]) is available, it is used for both surfaces
+		G1_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*u[iT]^4+ϕ13*eps3*σ*u[iT]^4))/(1-rho1_vis*(ϕ12*rho2_IR+ϕ13*rho3_IR))
+		
+		if bnode.region==Γ_top_cat
+			flux_irrad = -eps2*σ*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR
+		else # upper chamber frit
+			flux_irrad = -eps3*σ*u[iT]^4 + alpha3_vis*G1_vis + alpha3_IR*G1_IR
 		end
+		
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
 		f[iT] = -flux_irrad
 		
@@ -456,17 +502,20 @@ end
 # ╔═╡ 40906795-a4dd-4e4a-a62e-91b4639a48fa
 function bottom(f,u,bnode,data)
 	if bnode.region==Γ_bottom # bottom boundary
-		(;ng,iT,ip,Fluids,ubot,Tamb,lower_chamber,Tplate) = data
+		(;ng,iT,ip,Fluids,ubot,Tamb,lc_frit,lc_plate,Tplate) = data
 		
 		X=zeros(eltype(u), ng)
 		mole_frac!(bnode,data,X,u)
 		cf=heatcap_mix(Fluids, u[iT], X)		
 		flux_convec=ubot*u[ip]/(ph"R"*u[iT])*cf*(u[iT]-Tamb)
 
-		#flux_rerad = data.Eps_ir_frit*ph"σ"*(u[iT]^4 - data.Tamb^4)
-		#f[iT] = flux_rerad + flux_convec
+		# irradiation exchange between porous frit (1) and Al bottom plate (2)
+		# porous frit properties (1)
+		eps1=lc_frit.eps; alpha1_IR=lc_frit.alpha_IR; rho1_IR=lc_frit.rho_IR; 	
+		# Al bottom plate properties (2)
+		eps2=lc_plate.eps; rho2_IR=lc_plate.rho_IR;
 		
-		(;eps1,alpha1_IR,rho1_IR,rho2_IR,eps2,rho2_IR) = lower_chamber
+		#(;eps1,alpha1_IR,rho1_IR,rho2_IR,eps2,rho2_IR) = lower_chamber
 		σ=ph"σ"
 		flux_irrad = -eps1*σ*u[iT]^4 + alpha1_IR/(1-rho1_IR*rho2_IR)*(eps2*σ*Tplate^4+rho2_IR*eps1*σ*u[iT]^4)
 		
@@ -590,7 +639,7 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	# number of gas phase species
 	ng::Int64		 		= S3P.ng
 	# names and fluid indices
-	gn::Dict{Int, Symbol} 	= S3P.gn
+	#gn::Dict{Int, Symbol} 	= S3P.gn
 
 	# inverse names and fluid indices
 	gni::Dict{Symbol, Int}  = S3P.gni
@@ -604,37 +653,17 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 		x/sum(x)
 	end # inlet composition
 
-	# volume specific cat mass loading, UPV lab scale PC reactor
-	mcats::Float64 =1234.568*ufac"kg/m^3"
-	#mcats::Float64 =0.01*ufac"kg/m^3"
-	isreactive::Bool = 1
-	#isreactive::Bool = 0
-
 	ip::Int64=ng+1 # index of total pressure variable
 	iT::Int64=ip+1 # index of Temperature variable
+	
+	# volume specific cat mass loading, UPV lab scale PC reactor
+	mcats::Float64 =1234.568*ufac"kg/m^3"
+	isreactive::Bool = 1
+	#isreactive::Bool = 0
 
 		
 	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
 	
-	## irradiation data
-	Glamp::Float64=1.0*ufac"kW/m^2" # solar simulator irradiation flux
-	# irradiation exchange upper chamber: quartz window / catalyst
-	upper_chamber_cat::IrradiationExchange = upper_chamber_cat
-	# irradiation exchange upper chamber: quartz window / frit
-	upper_chamber_frit::IrradiationExchange = upper_chamber_frit
-	Tglass::Float64 = 373.15*ufac"K" # glass temperature on surface facing catalyst
-	# irradiation exchange bottom chamber: frit / bottom Al plate
-	lower_chamber::IrradiationExchange = lower_chamber
-	Tplate::Float64 = 373.15*ufac"K" # bottom Al plate temperature facing frit
-	
-	
-	Tau_quartz::Float64=0.9 # transmission coefficient of quartz window
-	
-	Abs_lamp_cat::Float64=0.7 # cat avg absorptivity of irradiation from lamp
-	#Abs_lamp_frit::Float64=0.7 # frit avg absorptivity of irradiation from lamp
-	Abs_lamp_frit::Float64=0.2 # frit avg absorptivity of irradiation from lamp
-	Eps_ir_cat::Float64=0.7 # cat avg absorptivity/emissivity of IR irradiation
-	Eps_ir_frit::Float64=0.2 # cat avg absorptivity/emissivity of IR irradiation
 		
 	
 	## porous filter data
@@ -650,10 +679,32 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	# prism / 3D
 	wi::Float64=12.0*ufac"cm" # prism width/side lenght
 	le::Float64=wi # prism width/side lenght
-	catwi::Float64=10.0*ufac"cm" # prism width/side lenght
-	
+	catwi::Float64=10.0*ufac"cm" # prism width/side lenght	
 	
 	Ac::Float64=wi*le*ufac"m^2" # cross-sectional area, square
+
+	## irradiation data
+	Glamp::Float64=1.0*ufac"kW/m^2" # solar simulator irradiation flux
+
+	# upper chamber: quartz window eff. optical properties
+	uc_window::SurfaceOpticalProps = uc_window
+	# upper chamber: catalyst layer eff. optical properties
+	uc_cat::SurfaceOpticalProps = uc_cat
+	# upper chamber: (uncoated) porous frir eff. optical properties
+	uc_frit::SurfaceOpticalProps = uc_frit
+
+	#view factors
+	vf_uc_window_cat::Float64 = catwi^2/Ac # A2/A1
+	vf_uc_window_frit::Float64 = 1-vf_uc_window_cat # A3/A1 = 1-A2/A1
+
+	# lower chamber: (uncoated) porous frir eff. optical properties
+	lc_frit::SurfaceOpticalProps = lc_frit
+	# lower chamber:  Al bottom plate eff. optical properties
+	lc_plate::SurfaceOpticalProps = lc_plate
+	
+	Tglass::Float64 = 373.15*ufac"K" # glass temperature on surface facing catalyst
+	Tplate::Float64 = 373.15*ufac"K" # bottom Al plate temperature facing frit
+	
 
 	# Solid Boro-Silikatglas
 	ρs::Float64=2.23e3*ufac"kg/m^3" # density of non-porous Boro-Solikatglas 3.3
@@ -670,12 +721,7 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	#k::Float64=2.9e-11*ufac"m^2" # permeability , por class 2
 	k::Float64=1.23e-10*ufac"m^2" # permeability , por class 0
 	
-	# a_s::Float64=0.13*ufac"m^2/g" # specific surface area, por class 2
-	a_s::Float64=0.02*ufac"m^2/g" # specific surface area, por class 0
-
-	
 	ρfrit::Float64=(1.0-ϕ)*ρs*ufac"kg/m^3" # density of porous frit
-	a_v::Float64=a_s*ρfrit*ufac"m^2/m^3" # volume specific interface area
 	## END porous filter data
 
 
@@ -690,10 +736,7 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	MWin::Float64 = molarweight_mix(Fluids, X0)
 	mdotin::Float64=MWin*Qflow*pn/(ph"R"*Tn)*ufac"kg/s"
 
-	
-	Tin::Float64=298.15*ufac"K" # inlet temperature
-	Tamb::Float64=Tin # ambient temperature
-	#Tin::Float64=600.0*ufac"K" # inlet temperature
+	Tamb::Float64=298.15*ufac"K" # ambient temperature
 	p::Float64=1.0*ufac"atm" # reactor pressure
 
 	u0::Float64=Qflow/(Ac)*ufac"m/s" # mean superficial velocity
@@ -750,8 +793,9 @@ function main(;data=ModelData())
 	 	Tavg=sum(integrate(sys,Intbot,sol; boundary=true)[iT,Γ_bottom])/(data.Ac/4)
 		
 	 	ubot_calc=ndotbot*ph"R"*Tavg/(1.0*ufac"bar")/data.Ac
-	 	ubots=[data.ubot, ubot_calc]*ufac"m/s"
-	 	data.ubot = minimum(ubots) + par*(maximum(ubots)-minimum(ubots))
+	 	#ubots=[data.ubot, ubot_calc]*ufac"m/s"
+	 	#data.ubot = minimum(ubots) + par*(maximum(ubots)-minimum(ubots))
+		data.ubot = ubot_calc
 
 				 
 				
@@ -765,9 +809,6 @@ function main(;data=ModelData())
 	 end
 	
 	 control=SolverControl( ;
-	 						#method_linear=MKLPardisoFactorize(),
-	 						#method_linear=UMFPACKFactorization(),
-	 						#method_linear=SparspakFactorization(),
 	 				  		handle_exceptions=true,
 							Δp_min=1.0e-4,					  
 	 				  		Δp=0.1,
@@ -1192,15 +1233,22 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╟─8139166e-42f9-41c3-a360-50d3d4e5ee86
 # ╟─44d91c2e-8082-4a90-89cc-81aba783d5ac
 # ╟─58d0610b-1739-4260-8d16-5a31ba362d69
+# ╟─d9dee38e-6036-46b8-bc06-e545baa06789
 # ╟─e58ec04f-023a-4e00-98b8-f9ae85ca506f
-# ╟─d330a384-5ab4-4767-bfc6-6a0eac0747a9
-# ╠═21b84221-071e-44bc-b370-e2255f4f7448
-# ╠═1cdc67ba-bc13-4f6e-ac17-fd8cfe348935
+# ╟─80d2b5db-792a-42f9-b9c2-91d0e18cfcfb
+# ╟─b1ae3b4d-59ca-420f-a1a0-dc698b52e5b0
+# ╟─b1ef2a89-27db-4f21-a2e3-fd6356c394da
+# ╟─4dae93b2-be63-4ee9-bc1e-871a31ade811
+# ╠═9547ed7c-3304-4c63-a6c1-5f84e0001c54
+# ╠═9d191a3a-e096-4ad7-aae6-bbd63d478fa2
+# ╠═2d51f54b-4cff-4253-b17f-217e3261f36d
+# ╠═fdaeafb6-e29f-41f8-8468-9c2b03b9eed7
 # ╟─8b485112-6b1a-4b38-af91-deb9b79527e0
 # ╟─25edaf7b-4051-4934-b4ad-a4655698a6c7
-# ╠═a68e10a1-4b63-4bca-a9ce-d2136551a7e6
-# ╠═b8dc52f0-1e6f-4118-95a9-f1a2a4d10be4
+# ╠═162122bc-12ae-4a81-8df6-86498041be40
+# ╠═221a1ee4-f7e9-4233-b45c-a715c9edae5f
 # ╟─4ebbe06f-0993-4c5c-9af3-76b2b645e592
+# ╟─0bc79692-8db4-44a2-9433-5b6ce97b656f
 # ╠═7da59e27-62b9-4b89-b315-d88a4fd34f56
 # ╠═40906795-a4dd-4e4a-a62e-91b4639a48fa
 # ╠═edd9fdd1-a9c4-4f45-8f63-9681717d417f
