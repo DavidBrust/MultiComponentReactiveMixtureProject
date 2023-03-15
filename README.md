@@ -18,4 +18,6 @@ The simulation will utilize the finite volume method as implemented in the
 
 The code development takes place in Pluto notebooks, located in the notebooks 
 subfolder.
-The __main reactor model__ is in [PorousCatalystHot3D.jl](https://github.com/DavidBrust/FixedBed/blob/main/notebooks/PorousCatalystHot3D.jl)
+The Pluto notebook [PorousCatalystHot3D.jl](https://github.com/DavidBrust/FixedBed/blob/main/notebooks/PorousCatalystHot3D.jl) contains all __main features of the model__ including some post processing.
+
+The Pluto notebook [PorousCatalystHot3DTopFlowIrrExchange.jl](https://github.com/DavidBrust/FixedBed/blob/main/notebooks/PorousCatalystHot3DTopFlowIrrExchange.jl) also considers __additional processes__ such as irradiation exchange together with more comprehensive plotting and post-processing.

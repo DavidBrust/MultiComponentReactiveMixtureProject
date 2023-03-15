@@ -155,7 +155,7 @@ function reaction(f,u,node,data)
 		
 		# temperature eq. / heat source
 		ΔHi=data.kinpar.ΔHi
-		f[iT] = -(RR[nr["R1"]]*ΔHi["R1"]+RR[nr["R2"]]*ΔHi["R2"] +RR[nr["R3"]]*ΔHi["R3"])
+		f[iT] = -(RR[nr[:R1]]*ΔHi[:R1]+RR[nr[:R2]]*ΔHi[:R2] +RR[nr[:R3]]*ΔHi[:R3])
 	end
 	
 	# ∑xi = 1
@@ -428,17 +428,17 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	# number of gas phase species
 	ng::Int64		 		= S3P.ng
 	# names and fluid indices
-	gn::Dict{Int, String} 	= S3P.gn
+	gn::Dict{Int, Symbol} 	= S3P.gn
 
 	# inverse names and fluid indices
-	gni::Dict{String, Int}  = S3P.gni
+	gni::Dict{Symbol, Int}  = S3P.gni
 	# fluids and respective properties in system
 	Fluids::Vector{FluidProps} = S3P.Fluids
 	#Fluids::Vector{AbstractFluidProps} = [N2]
 	X0::Vector{Float64} = let
 		x=zeros(Float64, ng)
-		x[gni["H2"]] = 1.0
-		x[gni["CO2"]] = 1.0
+		x[gni[:H2]] = 1.0
+		x[gni[:CO2]] = 1.0
 		x/sum(x)
 	end # inlet composition
 
@@ -631,7 +631,7 @@ Cutplane at ``z=`` $(@bind zcut Slider(range(0.0,data_embed.h,length=101),defaul
 let
 	vis=GridVisualizer(resolution=(600,400), zoom=1.9, )
 	#zcut = data.h-data.cath/2
-	gridplot!(vis, prism_sq(ModelData(),nref=0,cath=2*ufac"mm"), zplane=zcut)
+	gridplot!(vis, prism_sq(ModelData(),nref=2,cath=0.5*ufac"mm"), zplane=zcut)
 	reveal(vis)
 	#save("../img/out/domain.svg", vis)
 end
@@ -907,7 +907,7 @@ Y_{\text{CO}} = \frac{\dot n_{\text{CO}}}{\dot n^0_{\text{CO}_2}}
 function Yield_CO(sol,sys,data)
 	ndot_bot,ndot_top = MoleFlows(sol,sys,data)
 	
-	ndot_top[data.gni["CO"]] / abs(ndot_bot[data.gni["CO2"]])
+	ndot_top[data.gni[:CO]] / abs(ndot_bot[data.gni[:CO2]])
 end
 
 # ╔═╡ 0f7cce89-3add-4316-bcc2-a924064af884
@@ -938,9 +938,9 @@ md"""
 function STCefficiency(sol,sys,data,grid)
 	_,ndot_top = MoleFlows(sol,sys,data)
 	# R2 = RWGS in Xu & Froment kinetic model
-	STC_Atot = ndot_top[data.gni["CO"]] * -data.kinpar.ΔHi["R2"] / (data.G_lamp*data.Ac/4)
+	STC_Atot = ndot_top[data.gni[:CO]] * -data.kinpar.ΔHi[:R2] / (data.G_lamp*data.Ac/4)
 	catA, _ = CatDims(grid)
-	STC_Acat = ndot_top[data.gni["CO"]] * -data.kinpar.ΔHi["R2"] / (data.G_lamp*catA)
+	STC_Acat = ndot_top[data.gni[:CO]] * -data.kinpar.ΔHi[:R2] / (data.G_lamp*catA)
 	STC_Atot, STC_Acat
 end
 
@@ -963,7 +963,7 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╟─2554b2fc-bf5c-4b8f-b5e9-8bc261fe597b
 # ╟─f4dcde90-6d8f-4b17-b4ec-367d2372637f
 # ╟─3703afb0-93c4-4664-affe-b723758fb56b
-# ╠═21d0195b-b170-460d-989e-f9d00b511237
+# ╟─21d0195b-b170-460d-989e-f9d00b511237
 # ╟─8f4843c6-8d2b-4e24-b6f8-4eaf3dfc9bf0
 # ╟─66b55f6b-1af5-438d-aaa8-fe4745e85426
 # ╟─8528e15f-cce7-44d7-ac17-432f92cc5f53
@@ -978,11 +978,11 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╟─bcaf83fb-f215-428d-9c84-f5b557fe143f
 # ╟─7f94d703-2759-4fe1-a8c8-ddf26732a6ca
 # ╟─906ad096-4f0c-4640-ad3e-9632261902e3
-# ╠═39e74955-aab6-4bba-a1b8-b2307b45e673
-# ╠═6798d5e2-b8c7-4f54-aa71-6ea1ccab78fb
+# ╟─39e74955-aab6-4bba-a1b8-b2307b45e673
+# ╟─6798d5e2-b8c7-4f54-aa71-6ea1ccab78fb
 # ╟─ed3609cb-8483-4184-a385-dca307d13f17
-# ╠═8139166e-42f9-41c3-a360-50d3d4e5ee86
-# ╠═44d91c2e-8082-4a90-89cc-81aba783d5ac
+# ╟─8139166e-42f9-41c3-a360-50d3d4e5ee86
+# ╟─44d91c2e-8082-4a90-89cc-81aba783d5ac
 # ╠═7da59e27-62b9-4b89-b315-d88a4fd34f56
 # ╠═40906795-a4dd-4e4a-a62e-91b4639a48fa
 # ╠═edd9fdd1-a9c4-4f45-8f63-9681717d417f
