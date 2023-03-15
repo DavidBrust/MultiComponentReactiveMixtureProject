@@ -638,6 +638,9 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	
 	# number of gas phase species
 	ng::Int64		 		= S3P.ng
+	ip::Int64=ng+1 # index of total pressure variable
+	iT::Int64=ip+1 # index of Temperature variable
+
 	# names and fluid indices
 	gn::Dict{Int, Symbol} 	= S3P.gn
 
@@ -653,14 +656,10 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 		x/sum(x)
 	end # inlet composition
 
-	ip::Int64=ng+1 # index of total pressure variable
-	iT::Int64=ip+1 # index of Temperature variable
-	
 	# volume specific cat mass loading, UPV lab scale PC reactor
 	mcats::Float64 =1234.568*ufac"kg/m^3"
 	isreactive::Bool = 1
 	#isreactive::Bool = 0
-
 		
 	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
 	
@@ -721,7 +720,12 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	#k::Float64=2.9e-11*ufac"m^2" # permeability , por class 2
 	k::Float64=1.23e-10*ufac"m^2" # permeability , por class 0
 	
+	# a_s::Float64=0.13*ufac"m^2/g" # specific surface area, por class 2
+	a_s::Float64=0.02*ufac"m^2/g" # specific surface area, por class 0
+
+	
 	ρfrit::Float64=(1.0-ϕ)*ρs*ufac"kg/m^3" # density of porous frit
+	a_v::Float64=a_s*ρfrit*ufac"m^2/m^3" # volume specific interface area
 	## END porous filter data
 
 
@@ -735,7 +739,7 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 
 	MWin::Float64 = molarweight_mix(Fluids, X0)
 	mdotin::Float64=MWin*Qflow*pn/(ph"R"*Tn)*ufac"kg/s"
-
+	
 	Tamb::Float64=298.15*ufac"K" # ambient temperature
 	p::Float64=1.0*ufac"atm" # reactor pressure
 
@@ -933,7 +937,7 @@ let
 		Plots.plot!(p, grid_./ufac"cm", vec(sol_[i])./ufac"bar", label="$(gn[i])", lw=2, ls=:auto)
 	end
 	Plots.plot!(p, grid_./ufac"cm", vec(sol_[ip])./ufac"bar", color=cols[ip], label="total p", lw=2)
-	lens!([0.45, .50001], [0.15, 0.3], inset = (1, bbox(0.15, 0.1, 0.5, 0.5)))
+	lens!([0.45, .50001], [0.24, 0.27], inset = (1, bbox(0.15, 0.1, 0.5, 0.5)))
 	p
 	#Plots.savefig(p, "../img/out/pi_pt_flip.svg")
 	
