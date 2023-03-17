@@ -955,7 +955,7 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╠═11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 # ╠═863c9da7-ef45-49ad-80d0-3594eca4a189
 # ╟─2ed3223e-a604-410e-93d4-016580f49093
-# ╟─390c7839-618d-4ade-b9be-ee9ed09a77aa
+# ╠═390c7839-618d-4ade-b9be-ee9ed09a77aa
 # ╠═ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
 # ╠═0a911687-aff4-4c77-8def-084293329f35
 # ╠═ff58b0b8-2519-430e-8343-af9a5adcb135
@@ -965,7 +965,7 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╟─3703afb0-93c4-4664-affe-b723758fb56b
 # ╟─21d0195b-b170-460d-989e-f9d00b511237
 # ╟─8f4843c6-8d2b-4e24-b6f8-4eaf3dfc9bf0
-# ╟─66b55f6b-1af5-438d-aaa8-fe4745e85426
+# ╠═66b55f6b-1af5-438d-aaa8-fe4745e85426
 # ╟─8528e15f-cce7-44d7-ac17-432f92cc5f53
 # ╠═ed7941c4-0485-4d84-ad5b-383eb5cae70a
 # ╟─a6afe118-dcbd-4126-8646-c7268acfacf3

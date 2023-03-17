@@ -126,7 +126,7 @@ In the framework of the DGM a system with ``\nu`` gas phase species has ``\nu+1`
 md"""
 ```math
 \begin{align}
-	\sum_{j=1 \atop j \neq i}^{\nu} \frac{x_i N_j-x_j N_i}{D_{ij}^{\text{eff}}} - \frac{N_i}{D_{i,\text K}^{\text{eff}}} &= \frac{\nabla p_i}{RT} + \frac{1}{D_{i,K}^{\text{eff}}} \frac{p_i}{RT} \left(\frac{\kappa}{\mu} \nabla p \right) \\
+	\sum_{j=1 \atop j \neq i}^{\nu} \frac{x_j N_i-x_i N_j}{D_{ij}^{\text{eff}}} + \frac{N_i}{D_{i,\text K}^{\text{eff}}} &= -\frac{\nabla p_i}{RT} - \frac{1}{D_{i,K}^{\text{eff}}} \frac{p_i}{RT} \left(\frac{\kappa}{\mu} \nabla p \right) \\
 	\sum_{i=1}^\nu p_i &= p
 \end{align}
 ```
@@ -557,11 +557,11 @@ function M_matrix(data,T,p,x)
 	D=data.γ_τ*D_matrix(data,T,p)
 	M=zeros(eltype(x), n, n)
 	for i=1:n
-		M[i,i] = -1/DK_eff(data,T,i)
+		M[i,i] = 1/DK_eff(data,T,i)
 		for j=1:n
 			if j != i
-				M[i,i] -= x[j]/D[i,j]
-				M[i,j] = x[i]/D[i,j]
+				M[i,i] += x[j]/D[i,j]
+				M[i,j] = -x[i]/D[i,j]
 			end
 		end	
 	end
@@ -570,12 +570,7 @@ end
 
 # ╔═╡ ed7941c4-0485-4d84-ad5b-383eb5cae70a
 function flux(f,u,edge,data)
-	#(;ng, ip, k, Tin, pscale) = data
-	ng=data.ng
-	ip=data.ip
-	iT=data.iT
-	k=data.k
-	Fluids=data.Fluids
+	(;ng, ip, iT, k, Fluids) = data
 	
 	F=zeros(eltype(u), ng)
 	X=zeros(eltype(u), ng)
@@ -587,34 +582,36 @@ function flux(f,u,edge,data)
 	T=0.5*(u[iT,1]+u[iT,2])
 	mole_frac!(edge,data,X,u)
 	
-	μ=dynvisc_mix(data, T, X)
-	cf=heatcap_mix(Fluids, T, X)
-	_,λf=dynvisc_thermcond_mix(data, T, X)
+	μ,λf=dynvisc_thermcond_mix(data, T, X)
 	λbed=kbed(data,λf)*λf
 
 	# Darcy flow
 	ud=-k/μ * δp
 	# vh=project(edge,(0,ud)) # 2D
 	vh=project(edge,(0,0,ud)) # 3D
-	# convective enthalpy flux
-	conv=vh*pm/(ph"R"*T)*cf/λbed
 	
-	Bp,Bm = fbernoulli_pm(conv)
-	# temperature flux
-	f[iT]= λbed*(Bm*(u[iT,1]-data.Tamb)-Bp*(u[iT,2]-data.Tamb))		
-
-	
+		
 	for i=1:ng
 		DK = DK_eff(data,T,i)
 		bp,bm=fbernoulli_pm(vh/DK)		
-		F[i] = -(bm*u[i,1]-bp*u[i,2])/(ph"R"*T)
+		F[i] = (bm*u[i,1]-bp*u[i,2])/(ph"R"*T)
 	end
 	
     
 	# computation of fluxes J
 	J = M_matrix(data,T,pm,X) \ F
 	
-	f[1:ng] = J	
+	f[1:ng] = J
+
+	# use species molar fluxes for thermal drift contribution
+	conv=0.0
+	for i=1:ng
+		conv += J[i] * heatcap_gas(Fluids[i], T)
+	end
+	Bp,Bm = fbernoulli_pm(conv/λbed)
+	# thermal energy flux
+	f[iT]= λbed*(Bm*(u[iT,1]-data.Tamb)-Bp*(u[iT,2]-data.Tamb))		
+	
 	#f[ip] via reaction: ∑pi = p
 end
 
@@ -1218,7 +1215,7 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╟─3703afb0-93c4-4664-affe-b723758fb56b
 # ╟─21d0195b-b170-460d-989e-f9d00b511237
 # ╟─8f4843c6-8d2b-4e24-b6f8-4eaf3dfc9bf0
-# ╟─66b55f6b-1af5-438d-aaa8-fe4745e85426
+# ╠═66b55f6b-1af5-438d-aaa8-fe4745e85426
 # ╟─8528e15f-cce7-44d7-ac17-432f92cc5f53
 # ╠═ed7941c4-0485-4d84-ad5b-383eb5cae70a
 # ╟─a6afe118-dcbd-4126-8646-c7268acfacf3
