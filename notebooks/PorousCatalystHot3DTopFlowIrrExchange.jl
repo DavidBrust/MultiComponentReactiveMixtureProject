@@ -15,7 +15,8 @@ begin
 	using LinearSolve,LinearSolvePardiso
 	using LessUnitful
 	
-	using PlutoVista,Plots,PyPlot,GLMakie
+	# using PlutoVista,Plots,PyPlot,GLMakie
+	using PlutoVista, Plots
 	using PlutoUI
 	using Colors
 
@@ -259,7 +260,7 @@ Boundary conditions for the transport of gas phase species cover in and outflow 
 # ╔═╡ 58d0610b-1739-4260-8d16-5a31ba362d69
 md"""
 ## Irradiation Exchange:
-Account for the exchange of (thermal) irradiation between the surfaces in the top and bottom chambers of the reactos. View factors are used to describe the geometrical arrangement of surfaces that exchange irradiation. The view factors are values between 0 and 1, describing the fractions of surface areas that "see each other" (exchange irradiation with each other). In upper chamber, the surfaces are designated as (see figure below):
+Account for the exchange of irradiation between the surfaces in the top and bottom chambers of the reactor. View factors are used to describe the geometrical arrangement of surfaces that exchange irradiation. The view factors are values between 0 and 1, describing the fractions of surface areas that "see each other" (exchange irradiation with each other). In upper chamber, the surfaces are designated as (see figure below):
 1. quartz window
 2. catalyst layer
 3. uncoated frit
@@ -274,12 +275,14 @@ where $A_i$ are the geometric areas of the corresponding surfaces.
 
 # ╔═╡ d9dee38e-6036-46b8-bc06-e545baa06789
 md"""
-In the following, the net irradiation fluxes through the surfaces of interest marked by the __red__ dashed line (__catalyst layer__, __2__) and __green__ dashed line (__uncoated frit__, __3__) are stated. Per sign sign convention applied here, fluxes entering the control surfaces are counted as positive while fluxes exiting the control surfaces are counted as negative. 
+In the following, the net irradiation fluxes through the surfaces of interest marked by the __red__ dashed line (__catalyst layer__, __2__) and __green__ dashed line (__uncoated frit__, __3__) are stated. Per sign convention applied here, __fluxes entering__ the control surfaces are counted as __positive__ while __fluxes exiting__ the control surfaces are counted as __negative__. 
 These irradiation fluxes through the surfaces will be implemented in the code as boundary conditions for the thermal energy transport equation.
 
 """
 
 # ╔═╡ e58ec04f-023a-4e00-98b8-f9ae85ca506f
+# ╠═╡ skip_as_script = true
+#=╠═╡
 md"""
 ### Top chamber
 $(LocalResource("../img/irrad_top_chamber_view_factors.png"))
@@ -290,6 +293,7 @@ F_3 &=-\epsilon_3\sigma T_3^4 + \alpha_3^{\text{vis}} G_1^{\text{vis}} + \alpha_
 \end{align}
 ```
 """
+  ╠═╡ =#
 
 # ╔═╡ 80d2b5db-792a-42f9-b9c2-91d0e18cfcfb
 md"""
@@ -359,6 +363,8 @@ const uc_frit = SurfaceOpticalProps(
 )
 
 # ╔═╡ 8b485112-6b1a-4b38-af91-deb9b79527e0
+# ╠═╡ skip_as_script = true
+#=╠═╡
 md"""
 ### Bottom chamber
 $(LocalResource("../img/irrad_bottom_chamber.png"))
@@ -366,10 +372,20 @@ $(LocalResource("../img/irrad_bottom_chamber.png"))
 F = -\epsilon_1 \sigma T_1^4 + \frac{\alpha_1^{\text{IR}}}{1-\rho_1^{\text{IR}} \rho_2^{\text{IR}}} \left( \epsilon_2 \sigma T_2^4 + \rho_2^{\text{IR}} \epsilon_1 \sigma T_1^4 \right)
 ```
 """
+  ╠═╡ =#
 
 # ╔═╡ 25edaf7b-4051-4934-b4ad-a4655698a6c7
 md"""
-where $T_2$ is set to a fixed value, to avoid the solution of the coupled problem of irradiation exchange which cannot be stated explicitly.
+where $T_2$ is set to a fixed value, that will be known experimentally, to avoid the solution of the coupled problem of irradiation exchange which cannot be stated explicitly.
+"""
+
+# ╔═╡ 3fe2135d-9866-4367-8faa-56cdb42af7ed
+md"""
+
+For opaque surfaces $1=\alpha + \rho$ and with Kirchhoff's law $\alpha = \epsilon$, we can simplify the term for the net radiative transfer rate to/from surface __1__:
+```math
+F = \frac{ \sigma (T_2^4 -T_1^4)}{\frac{1}{\epsilon_1}+\frac{1}{\epsilon_2}-1}
+```
 """
 
 # ╔═╡ 162122bc-12ae-4a81-8df6-86498041be40
@@ -441,7 +457,7 @@ function top(f,u,bnode,data)
 		# surface brigthness of quartz window (1) in vis & IR	
 		G1_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
 		# here the simplification is applied: only local value of T (u[iT]) is available, it is used for both surfaces
-		G1_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*u[iT]^4+ϕ13*eps3*σ*u[iT]^4))/(1-rho1_vis*(ϕ12*rho2_IR+ϕ13*rho3_IR))
+		G1_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*u[iT]^4+ϕ13*eps3*σ*u[iT]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
 		
 		if bnode.region==Γ_top_cat
 			flux_irrad = -eps2*σ*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR
@@ -658,9 +674,7 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	isreactive::Bool = 1
 	#isreactive::Bool = 0
 		
-	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
-	
-		
+	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient	
 	
 	## porous filter data
 	dp::Float64=200.0*ufac"μm" # average pore size, por class 0
@@ -704,7 +718,7 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 
 	# Solid Boro-Silikatglas
 	ρs::Float64=2.23e3*ufac"kg/m^3" # density of non-porous Boro-Solikatglas 3.3
-	λs::Float64=1.4*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2 	
+	λs::Float64=1.4*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2
 	cs::Float64=0.8e3*ufac"J/(kg*K)" # heat capacity of non-porous SiO2
 	
 	#ϕ::Float64=0.36 # porosity, class 2
@@ -802,19 +816,21 @@ function main(;data=ModelData())
 				
 	 	# specific catalyst loading
 	 	mcats=[10.0, 1300.0]*ufac"kg/m^3"
-	 	data.mcats= minimum(mcats) + par*(maximum(mcats)-minimum(mcats))
+	 	data.mcats = minimum(mcats) + par*(maximum(mcats)-minimum(mcats))
 
 	 	# irradiation flux density
 	 	Glamps=[1.0, 100.0]*ufac"kW/m^2"
-	 	data.Glamp= minimum(Glamps) + par*(maximum(Glamps)-minimum(Glamps))
+	 	data.Glamp = minimum(Glamps) + par*(maximum(Glamps)-minimum(Glamps))
+
+		 
 	 end
 	
 	 control=SolverControl( ;
 	 				  		handle_exceptions=true,
-							Δp_min=1.0e-4,					  
+							Δp_min=1.0e-6,					  
 	 				  		Δp=0.1,
 	 				  		Δp_grow=1.2,
-	 				  		Δu_opt=100000.0, # large value, due to unit Pa of pressure?
+	 				  		Δu_opt=10000.0, # large value, due to unit Pa of pressure?
 	 				  		)
 	
 	# #sol=solve(sys;inival,)
@@ -929,13 +945,17 @@ let
 	cols = distinguishable_colors(ng+1, [RGB(1,1,1), RGB(0,0,0)], dropseed=true)
 	pcols = map(col -> (red(col), green(col), blue(col)), cols)
 
-	p=Plots.plot(title="Partial Pressures", size=(450,450), xguide="Height / cm", yguide="Pressure / bar",legend=:outertopright,)
+	p1=Plots.plot(title="Partial Pressures", size=(450,450), xguide="Height / cm", yguide="Pressure / bar",legend=:outertopright,)
 	for i in 1:ng
-		Plots.plot!(p, grid_./ufac"cm", vec(sol_[i])./ufac"bar", label="$(gn[i])", lw=2, ls=:auto)
+		Plots.plot!(p1, grid_./ufac"cm", vec(sol_[i])./ufac"bar", label="$(gn[i])", lw=2, ls=:auto)
 	end
-	Plots.plot!(p, grid_./ufac"cm", vec(sol_[ip])./ufac"bar", color=cols[ip], label="total p", lw=2)
+	Plots.plot!(p1, grid_./ufac"cm", vec(sol_[ip])./ufac"bar", color=cols[ip], label="total p", lw=2)
 	lens!([0.45, .50001], [0.24, 0.27], inset = (1, bbox(0.15, 0.1, 0.5, 0.5)))
-	p
+
+	p2 = Plots.plot(xguide="Height / cm", yguide="Pressure / bar",legend=:bottomright)
+	Plots.plot!(p2, grid_./ufac"cm", vec(sol_[ip])./ufac"bar", color=cols[ip], label="total p", lw=2)
+
+	Plots.plot(p1,p2, layout=(1,2), size=(700,450))
 	#Plots.savefig(p, "../img/out/pi_pt_flip.svg")
 	
 end
@@ -1200,6 +1220,79 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 """
   ╠═╡ =#
 
+# ╔═╡ 73d1dab0-69dc-40a0-9e38-2326fe9938c2
+md"""
+## Energy Flow Analysis
+"""
+
+# ╔═╡ 89960a27-53a8-40a4-a2af-e338faa0f551
+md"""
+The different energy flow mechanisms are listed below for analysis.
+An energy balance is made around the reactor volume as indicated by the dashed red line.
+Energy that enters trough the aperture and leaves the balance volume via the indicated mechanism numbered 1-8.
+
+$(LocalResource("../img/EnergyFlows.png"))
+
+
+"""
+
+
+# ╔═╡ 604c73ef-3581-4d31-b0c6-564889eb0ed2
+md"""
+To derive the relation for irradiation leaving through the quartz window, look at the quartz window in detail:
+
+$(LocalResource("../img/QTopRad.png",:width => 400))
+
+```math
+G^{\text{vis}}_{1,\text{top}} = \rho_1^{\text{vis}} G_{\text{HFSS}} + \tau_1^{\text{vis}} (\phi_{12} G_2^{\text{vis}} +\phi_{13} G_3^{\text{vis}})
+```
+```math
+G^{\text{IR}}_{1,\text{top}} = \tau_1^{\text{IR}} (\phi_{12} G_2^{\text{IR}} +\phi_{13} G_3^{\text{IR}}) + \epsilon_1 \sigma T_1^4
+```
+"""
+
+# ╔═╡ e13a0afb-5717-4593-b9d7-e31e34a2e9c0
+md"""
+Where the surface brightnesses $G_2^{\text{vis/IR}}$ and $G_3^{\text{vis/IR}}$ for the photo-catalyst and uncoated frit surfaces in the visible and IR spectrum respectively are defined as follows:
+
+```math
+\begin{align}
+G^{\text{IR}}_{2} &= \epsilon_2 \sigma T_2^4 + \rho_2^{\text{IR}} G^{\text{IR}}_{1,\text{bot}}\\
+G^{\text{vis}}_{2} &= \rho_2^{\text{vis}} G^{\text{vis}}_{1,\text{bot}}
+\end{align}
+```
+
+"""
+
+# ╔═╡ 7eb683e4-a183-47b7-8090-3171f420fc7d
+md"""
+```math
+\begin{align}
+G^{\text{IR}}_{3} &= \epsilon_3 \sigma T_3^4 + \rho_3^{\text{IR}} G^{\text{IR}}_{1,\text{bot}}\\
+G^{\text{vis}}_{3} &= \rho_3^{\text{vis}} G^{\text{vis}}_{1,\text{bot}}
+\end{align}
+```
+"""
+
+# ╔═╡ 50c6434f-03e1-41bf-b1a0-3072af659ea1
+md"""
+The surface brigthnesses of the catalyst facing side of the quartz window denoted by $G^{\text{IR}}_{1,\text{bot}}$ and $G^{\text{vis}}_{1,\text{bot}}$ are defined as above for irradiation exchange in the top chamber:
+"""
+
+# ╔═╡ b842e5b7-fb6a-4225-838a-cf857cf7c28b
+md"""
+```math
+G^{\text{IR}}_{1,\text{bot}} = \frac{\epsilon_1\sigma T_1^4 + \rho_1^{\text{IR}} \left( \phi_{12}\epsilon_2 \sigma T_2^4+\phi_{13}\epsilon_3 \sigma T_3^4\right)}{1-\rho_1^{\text{IR}} \left( \phi_{12} \rho_2^{\text{IR}} + \phi_{13} \rho_3^{\text{IR}} \right)}
+```
+"""
+
+# ╔═╡ 71a5d5b4-29ac-4dab-b865-e8561365d8ff
+md"""
+```math
+G^{\text{vis}}_{1,\text{bot}} = \frac{\tau_1^{\text{vis}} G_{\text{lamp}}}{1-\rho_1^{\text{vis}} \left( \phi_{12} \rho_2^{\text{vis}} + \phi_{13} \rho_3^{\text{vis}} \right)} \\
+```
+"""
+
 # ╔═╡ Cell order:
 # ╠═11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 # ╠═863c9da7-ef45-49ad-80d0-3594eca4a189
@@ -1215,7 +1308,7 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╟─3703afb0-93c4-4664-affe-b723758fb56b
 # ╟─21d0195b-b170-460d-989e-f9d00b511237
 # ╟─8f4843c6-8d2b-4e24-b6f8-4eaf3dfc9bf0
-# ╠═66b55f6b-1af5-438d-aaa8-fe4745e85426
+# ╟─66b55f6b-1af5-438d-aaa8-fe4745e85426
 # ╟─8528e15f-cce7-44d7-ac17-432f92cc5f53
 # ╠═ed7941c4-0485-4d84-ad5b-383eb5cae70a
 # ╟─a6afe118-dcbd-4126-8646-c7268acfacf3
@@ -1246,6 +1339,7 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╠═fdaeafb6-e29f-41f8-8468-9c2b03b9eed7
 # ╟─8b485112-6b1a-4b38-af91-deb9b79527e0
 # ╟─25edaf7b-4051-4934-b4ad-a4655698a6c7
+# ╟─3fe2135d-9866-4367-8faa-56cdb42af7ed
 # ╠═162122bc-12ae-4a81-8df6-86498041be40
 # ╠═221a1ee4-f7e9-4233-b45c-a715c9edae5f
 # ╟─4ebbe06f-0993-4c5c-9af3-76b2b645e592
@@ -1295,3 +1389,11 @@ Solar-to-chemical efficiency as defined above: $(round(STCefficiency(sol,sys,dat
 # ╟─1f3b2a0e-c76f-462c-a85c-e85815fd7e5a
 # ╟─428afb22-55ab-4f64-805f-7e15ad4cf23f
 # ╠═47161886-9a5c-41ac-abf5-bbea82096d5a
+# ╟─73d1dab0-69dc-40a0-9e38-2326fe9938c2
+# ╟─89960a27-53a8-40a4-a2af-e338faa0f551
+# ╟─604c73ef-3581-4d31-b0c6-564889eb0ed2
+# ╟─e13a0afb-5717-4593-b9d7-e31e34a2e9c0
+# ╟─7eb683e4-a183-47b7-8090-3171f420fc7d
+# ╟─50c6434f-03e1-41bf-b1a0-3072af659ea1
+# ╟─b842e5b7-fb6a-4225-838a-cf857cf7c28b
+# ╟─71a5d5b4-29ac-4dab-b865-e8561365d8ff
