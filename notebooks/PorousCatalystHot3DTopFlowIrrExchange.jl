@@ -382,7 +382,7 @@ where $T_2$ is set to a fixed value, that will be known experimentally, to avoid
 # ╔═╡ 3fe2135d-9866-4367-8faa-56cdb42af7ed
 md"""
 
-For opaque surfaces $1=\alpha + \rho$ and with Kirchhoff's law $\alpha = \epsilon$, we can simplify the term for the net radiative transfer rate to/from surface __1__:
+For opaque surfaces $1=\alpha + \rho$ and with Kirchhoff's law $\alpha = \epsilon$, we can simplify the term for the net radiative transfer rate to (positive sign convention) surface __1__:
 ```math
 F = \frac{ \sigma (T_2^4 -T_1^4)}{\frac{1}{\epsilon_1}+\frac{1}{\epsilon_2}-1}
 ```
@@ -401,6 +401,16 @@ const lc_plate = SurfaceOpticalProps(
 	alpha_vis=0.1, # see in lit, assume large reflectivity
 	tau_vis=0.0 # opaque surface	
 )
+
+# ╔═╡ 04058f1d-9622-4b59-bf07-93483bc269f2
+md"""
+## Conductive Transport
+Becuase the precise flow field is not known in the chambers, the transport of heat through the gas volumes in the chambers is estimated with conductive transport through a stagnant layer of gas. This is the lower bound on convective transport. It can be estimated assuming a constant temperature gradient over the chamber height and an thermal conductivity evaluated at an average temperature:
+
+```math
+\dot q = -\lambda \nabla T \approx - \lambda(\overline T) \frac{\Delta T}{\Delta z}
+```
+"""
 
 # ╔═╡ 4ebbe06f-0993-4c5c-9af3-76b2b645e592
 md"""
@@ -427,7 +437,7 @@ This will lead to an error, that should be estimated.
 function top(f,u,bnode,data)
 	# top boundaries (cat layer & frit)
 	if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat 
-		(;ng,iT,Glamp,Tglass,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
+		(;ng,iT,Glamp,Tglass,X0,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h)=data
 		
 		flux_irrad=0.0
 		σ=ph"σ"
@@ -464,9 +474,16 @@ function top(f,u,bnode,data)
 		else # upper chamber frit
 			flux_irrad = -eps3*σ*u[iT]^4 + alpha3_vis*G1_vis + alpha3_IR*G1_IR
 		end
-		
+
+		# conductive heat flux through top chamber
+		# mean temperature
+        Tm=0.5*(u[iT] + Tglass)
+        # thermal conductivity at Tm and inlet composition X0 (H2/CO2 = 1/1)
+        _,λf=dynvisc_thermcond_mix(data, Tm, X0)
+
+        flux_cond = -λf*(Tglass-Tm)/uc_h
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
-		f[iT] = -flux_irrad
+		f[iT] = -flux_irrad + flux_cond
 		
 		
 		# flow velocity is normal to top boundary
@@ -518,12 +535,12 @@ end
 # ╔═╡ 40906795-a4dd-4e4a-a62e-91b4639a48fa
 function bottom(f,u,bnode,data)
 	if bnode.region==Γ_bottom # bottom boundary
-		(;ng,iT,ip,Fluids,ubot,Tamb,lc_frit,lc_plate,Tplate) = data
+		(;ng,iT,ip,Fluids,ubot,Tamb,lc_frit,lc_plate,Tplate,lc_h) = data
 		
 		X=zeros(eltype(u), ng)
 		mole_frac!(bnode,data,X,u)
 		cf=heatcap_mix(Fluids, u[iT], X)		
-		flux_convec=ubot*u[ip]/(ph"R"*u[iT])*cf*(u[iT]-Tamb)
+		flux_entahlpy=ubot*u[ip]/(ph"R"*u[iT])*cf*(u[iT]-Tamb)
 
 		# irradiation exchange between porous frit (1) and Al bottom plate (2)
 		# porous frit properties (1)
@@ -534,9 +551,17 @@ function bottom(f,u,bnode,data)
 		#(;eps1,alpha1_IR,rho1_IR,rho2_IR,eps2,rho2_IR) = lower_chamber
 		σ=ph"σ"
 		flux_irrad = -eps1*σ*u[iT]^4 + alpha1_IR/(1-rho1_IR*rho2_IR)*(eps2*σ*Tplate^4+rho2_IR*eps1*σ*u[iT]^4)
+
+		# conductive heat flux through top chamber
+		# mean temperature
+        Tm=0.5*(u[iT] + Tplate)
+        # thermal conductivity at Tm and outlet composition X
+        _,λf=dynvisc_thermcond_mix(data, Tm, X)
+
+        flux_cond = -λf*(Tm-Tplate)/lc_h # positive flux in positive z coord.
 		
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
-		f[iT] = -flux_irrad + flux_convec
+		f[iT] = -flux_irrad + flux_entahlpy - flux_cond
 
 		
 		
@@ -674,7 +699,8 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	isreactive::Bool = 1
 	#isreactive::Bool = 0
 		
-	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient	
+	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
+	α_nat_conv::Float64=15.0*ufac"W/(m^2*K)" # natural convection heat transfer coefficient	
 	
 	## porous filter data
 	dp::Float64=200.0*ufac"μm" # average pore size, por class 0
@@ -684,7 +710,10 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	h::Float64=0.5*ufac"cm"
 	# catalyst layer thickness (applies to 2D & 3D)
 	cath::Float64 = 500.0*ufac"μm"
-	
+
+	# upper and lower chamber heights for calculation of conduction b.c.
+	uc_h::Float64=17.0*ufac"mm"
+	lc_h::Float64=18.0*ufac"mm"
 
 	# prism / 3D
 	wi::Float64=12.0*ufac"cm" # prism width/side lenght
@@ -871,6 +900,21 @@ let
 	gridplot!(vis, prism_sq_(ModelData(),nref=0,cath=2*ufac"mm"), zplane=zcut)
 	reveal(vis)
 end
+  ╠═╡ =#
+
+# ╔═╡ dd4f0f2a-03cc-400a-8e3f-45aa9eb7de87
+#=╠═╡
+let
+	data=data_embed
+	(;Tamb,X0)=data
+	μ,λf=dynvisc_thermcond_mix(data, Tamb, X0)
+	λbed=kbed(data,λf)*λf
+end
+  ╠═╡ =#
+
+# ╔═╡ 9f549296-ba92-4656-a117-b5ce2f7ad102
+#=╠═╡
+dynvisc_thermcond_mix(data_embed, 750.0, data_embed.X0)
   ╠═╡ =#
 
 # ╔═╡ bcaf83fb-f215-428d-9c84-f5b557fe143f
@@ -1226,18 +1270,21 @@ md"""
 """
 
 # ╔═╡ 89960a27-53a8-40a4-a2af-e338faa0f551
+# ╠═╡ skip_as_script = true
+#=╠═╡
 md"""
 The different energy flow mechanisms are listed below for analysis.
 An energy balance is made around the reactor volume as indicated by the dashed red line.
 Energy that enters trough the aperture and leaves the balance volume via the indicated mechanism numbered 1-8.
 
 $(LocalResource("../img/EnergyFlows.png"))
-
-
 """
 
+  ╠═╡ =#
 
 # ╔═╡ 604c73ef-3581-4d31-b0c6-564889eb0ed2
+# ╠═╡ skip_as_script = true
+#=╠═╡
 md"""
 To derive the relation for irradiation leaving through the quartz window, look at the quartz window in detail:
 
@@ -1250,6 +1297,7 @@ G^{\text{vis}}_{1,\text{top}} = \rho_1^{\text{vis}} G_{\text{HFSS}} + \tau_1^{\t
 G^{\text{IR}}_{1,\text{top}} = \tau_1^{\text{IR}} (\phi_{12} G_2^{\text{IR}} +\phi_{13} G_3^{\text{IR}}) + \epsilon_1 \sigma T_1^4
 ```
 """
+  ╠═╡ =#
 
 # ╔═╡ e13a0afb-5717-4593-b9d7-e31e34a2e9c0
 md"""
@@ -1293,11 +1341,23 @@ G^{\text{vis}}_{1,\text{bot}} = \frac{\tau_1^{\text{vis}} G_{\text{lamp}}}{1-\rh
 ```
 """
 
+# ╔═╡ b2eeeb44-d8fe-452b-8905-642dfa043db8
+md"""
+Due to missing information on the flow field that develops in the chambers, only conductive heat transfer through a stagnant fluid is considered. This is the lower bound for convective heat transfer. The gas thermal conductivity is evaluated at the mean temperature between the two surfaces.
+
+```math
+	\begin{align}
+	\dot q_{\text{cond}} &= - \lambda \nabla T \\
+						 &\approx - \lambda(T_{\text m}) \frac{\Delta T}{\Delta z}
+	\end{align}
+```
+"""
+
 # ╔═╡ Cell order:
 # ╠═11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 # ╠═863c9da7-ef45-49ad-80d0-3594eca4a189
 # ╟─2ed3223e-a604-410e-93d4-016580f49093
-# ╟─390c7839-618d-4ade-b9be-ee9ed09a77aa
+# ╠═390c7839-618d-4ade-b9be-ee9ed09a77aa
 # ╠═ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
 # ╠═e2e8ed00-f53f-476c-ab5f-95b9ec2f5094
 # ╠═0a911687-aff4-4c77-8def-084293329f35
@@ -1310,8 +1370,10 @@ G^{\text{vis}}_{1,\text{bot}} = \frac{\tau_1^{\text{vis}} G_{\text{lamp}}}{1-\rh
 # ╟─8f4843c6-8d2b-4e24-b6f8-4eaf3dfc9bf0
 # ╟─66b55f6b-1af5-438d-aaa8-fe4745e85426
 # ╟─8528e15f-cce7-44d7-ac17-432f92cc5f53
+# ╠═dd4f0f2a-03cc-400a-8e3f-45aa9eb7de87
 # ╠═ed7941c4-0485-4d84-ad5b-383eb5cae70a
 # ╟─a6afe118-dcbd-4126-8646-c7268acfacf3
+# ╠═9f549296-ba92-4656-a117-b5ce2f7ad102
 # ╠═78cf4646-c373-4688-b1ac-92ed5f922e3c
 # ╟─a60ce05e-8d92-4172-b4c1-ac3221c54fe5
 # ╟─24374b7a-ce77-45f0-a7a0-c47a224a0b06
@@ -1342,6 +1404,7 @@ G^{\text{vis}}_{1,\text{bot}} = \frac{\tau_1^{\text{vis}} G_{\text{lamp}}}{1-\rh
 # ╟─3fe2135d-9866-4367-8faa-56cdb42af7ed
 # ╠═162122bc-12ae-4a81-8df6-86498041be40
 # ╠═221a1ee4-f7e9-4233-b45c-a715c9edae5f
+# ╟─04058f1d-9622-4b59-bf07-93483bc269f2
 # ╟─4ebbe06f-0993-4c5c-9af3-76b2b645e592
 # ╟─0bc79692-8db4-44a2-9433-5b6ce97b656f
 # ╠═7da59e27-62b9-4b89-b315-d88a4fd34f56
@@ -1397,3 +1460,4 @@ G^{\text{vis}}_{1,\text{bot}} = \frac{\tau_1^{\text{vis}} G_{\text{lamp}}}{1-\rh
 # ╟─50c6434f-03e1-41bf-b1a0-3072af659ea1
 # ╟─b842e5b7-fb6a-4225-838a-cf857cf7c28b
 # ╟─71a5d5b4-29ac-4dab-b865-e8561365d8ff
+# ╟─b2eeeb44-d8fe-452b-8905-642dfa043db8
