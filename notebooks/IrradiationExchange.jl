@@ -73,39 +73,38 @@ const uc_frit = SurfaceOpticalProps(
 )
 
 # ╔═╡ df2a7787-fa68-4f82-b8c4-b7078de80a97
-function runSolveTC(data)
+function EquilWindowTemperature(data, T2, T3)
+
+	(;ng,iT,Glamp,X0,α_nat_conv,Tamb,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h)=data
+
+	σ=ph"σ"
+
 	
-	function f!(F, x)
-
-		(;ng,iT,Glamp,X0,α_nat_conv,Tamb,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h)=data
-
-		σ=ph"σ"
-		T2=873.15
-		T3=773.15
-		
-		# irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
-		# window properties (1)
-		tau1_vis=uc_window.tau_vis
-		rho1_vis=uc_window.rho_vis
-		rho1_IR=uc_window.rho_IR
-		alpha1_IR=uc_window.alpha_IR
-		alpha1_vis=uc_window.alpha_vis
-		eps1=uc_window.eps
-		# catalyst layer properties (2)
-		rho2_vis=uc_cat.rho_vis
-		rho2_IR=uc_cat.rho_IR
-		alpha2_vis=uc_cat.alpha_vis
-		alpha2_IR=uc_cat.alpha_IR
-		eps2=uc_cat.eps
-		# uncoated frit properties (3)
-		rho3_vis=uc_frit.rho_vis
-		rho3_IR=uc_frit.rho_IR
-		alpha3_vis=uc_frit.alpha_vis
-		alpha3_IR=uc_frit.alpha_IR
-		eps3=uc_frit.eps
-		#view factors
-		ϕ12=vf_uc_window_cat
-		ϕ13=vf_uc_window_frit
+	# irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
+	# window properties (1)
+	tau1_vis=uc_window.tau_vis
+	rho1_vis=uc_window.rho_vis
+	rho1_IR=uc_window.rho_IR
+	alpha1_IR=uc_window.alpha_IR
+	alpha1_vis=uc_window.alpha_vis
+	eps1=uc_window.eps
+	# catalyst layer properties (2)
+	rho2_vis=uc_cat.rho_vis
+	rho2_IR=uc_cat.rho_IR
+	alpha2_vis=uc_cat.alpha_vis
+	alpha2_IR=uc_cat.alpha_IR
+	eps2=uc_cat.eps
+	# uncoated frit properties (3)
+	rho3_vis=uc_frit.rho_vis
+	rho3_IR=uc_frit.rho_IR
+	alpha3_vis=uc_frit.alpha_vis
+	alpha3_IR=uc_frit.alpha_IR
+	eps3=uc_frit.eps
+	#view factors
+	ϕ12=vf_uc_window_cat
+	ϕ13=vf_uc_window_frit
+	
+	function f!(F, x)		
 		
 		# surface brigthness of quartz window (1) in vis & IR	
 		G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
@@ -133,9 +132,7 @@ function runSolveTC(data)
 		
 		q_conv_top = α_nat_conv*(x[1]-Tamb)
 
-		q_emit = eps1*σ*x[1]^4
-
-		
+		q_emit = eps1*σ*x[1]^4		
 		
     	F[1] = -q_conv_top + q_cond_bot - 2*q_emit + q_abs_23_IR + q_abs_23_vis
 	end
@@ -231,7 +228,7 @@ function runSolveBC(data)
 		# frit properties
 		eps1=lc_frit.eps
 		rho1_IR=lc_frit.rho_IR
-		
+		# plate properties
 		alpha2_IR=lc_plate.alpha_IR
 		eps2=lc_plate.eps
 		rho2_IR=lc_plate.rho_IR
@@ -406,7 +403,7 @@ end;
 
 # ╔═╡ f6c41087-cdb2-405f-8b31-936d8d5b7a50
 let
-	runSolveTC(ModelData())
+	EquilWindowTemperature(ModelData(),	873.15, 773.15)
 end
 
 # ╔═╡ f04ea704-6a18-47e8-b2a5-b673f7f0862c
@@ -427,11 +424,11 @@ ModelData()
 # ╠═df2a7787-fa68-4f82-b8c4-b7078de80a97
 # ╠═f6c41087-cdb2-405f-8b31-936d8d5b7a50
 # ╟─db854ec4-8bb0-41a2-a870-3b9827ee3579
-# ╟─52e8545f-9efa-4cd3-aefd-165eadeec95a
-# ╟─4f7e75ca-285f-45c7-b214-10406a321ccd
+# ╠═52e8545f-9efa-4cd3-aefd-165eadeec95a
+# ╠═4f7e75ca-285f-45c7-b214-10406a321ccd
 # ╟─6c903b77-f899-4796-af3e-6cd66ba6561f
-# ╟─d33366ed-4a43-4274-b8a7-b589b0300f2f
-# ╟─9ce02c32-6812-4dfc-bf4f-43def0b2c374
+# ╠═d33366ed-4a43-4274-b8a7-b589b0300f2f
+# ╠═9ce02c32-6812-4dfc-bf4f-43def0b2c374
 # ╠═2c5003b1-1ca1-4749-bdf6-21d546f1da50
 # ╠═f04ea704-6a18-47e8-b2a5-b673f7f0862c
 # ╠═df701006-d6c1-428a-95b7-bfa0a1ccf11e

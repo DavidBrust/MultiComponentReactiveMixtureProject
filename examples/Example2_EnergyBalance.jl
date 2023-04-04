@@ -1,85 +1,201 @@
 module Example2_EnergyBalance
 
-using Plots, DataFrames, CSV
+using DataFrames, CSV
 
 
-include("../notebooks/PorousCatalystHot3D.jl")
+include("../notebooks/PorousCatalystHot3DTopFlowIrrExchange.jl")
 
-function RunSim(Qflow,C;data=ModelData(Qflow=Qflow))
-
-	grid=prism_sq(data)
-
-	ngas=data.ng
-	iT=data.iT
-	
-	sys=VoronoiFVM.System( 	grid;
-							data=data,
-							flux=flux,
-							reaction=reaction,
-							bcondition=bcond
-							)
-	enable_species!(sys; species=collect(1:(ngas+2))) # gas phase species + p + T
-	
-	inival=unknowns(sys)
-	inival[:,:].=1.0*data.p
-	for i=1:ngas
-		inival[i,:] .*= data.X0[i]
-	end
-	inival[iT,:] .= data.Tamb
-
-	sol=solve(sys;inival,)
-	
-	 function pre(sol,par)
-	 	ng=data.ng
-	 	iT=data.iT
-	 	# iteratively adapt top outflow boundary condition
-	 	function Inttop(f,u,bnode,data)
-			
-	 		X=zeros(eltype(u), ng)
-	 		mole_frac!(bnode,data,X,u)
-	 		# top boundary(cat/frit)
-	 		if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat  
-	 			for i=1:ng
-	 				f[i] = data.Fluids[i].MW*X[i]
-	 			end
-	 			f[iT] = u[iT]
-	 		end
-	 	end
-		
-	 	MWavg=sum(integrate(sys,Inttop,sol; boundary=true)[1:ng,[Γ_top_frit,Γ_top_cat]])/(data.Ac/4)
-	 	ntop=data.mdotin/MWavg
-		 
-	 	Tavg=sum(integrate(sys,Inttop,sol; boundary=true)[data.iT,[Γ_top_frit,Γ_top_cat]])/(data.Ac/4)
-		
-	 	utop_calc=ntop*ph"R"*Tavg/(1.0*ufac"bar")/data.Ac
-	 	utops=[data.utop, utop_calc]*ufac"m/s"
-	 	data.utop = minimum(utops) + par*(maximum(utops)-minimum(utops))
-		
-		
-	 	# specific catalyst loading
-	 	mcats=[10.0, 1300.0]*ufac"kg/m^3"
-	 	data.mcats= minimum(mcats) + par*(maximum(mcats)-minimum(mcats))
-
-	 	# irradiation flux density
-	 	G_lamp=[1.0, C]*ufac"kW/m^2"
-	 	data.G_lamp= minimum(G_lamp) + par*(maximum(G_lamp)-minimum(G_lamp))
-	 end
-	
-	 control=SolverControl( ;
-	 				  		handle_exceptions=true,
-							Δp_min=1.0e-4,					  
-	 				  		Δp=0.1,
-	 				  		Δp_grow=1.2,
-	 				  		Δu_opt=1.0e7, # large value, due to unit Pa of pressure?
-	 				  		)
-	
-	# #sol=solve(sys;inival,)
-	
-	 sol=solve(sys;inival, embed=[0.0,1.0],pre,control)
-
-	
-	sol,grid,sys,data
+function RunSim()
+    data=ModelData(
+        isreactive=0
+        )
+    sol_embed,grid,sys,data_embed = main(data=data);
+    sol = sol_embed(1.0)
+    sol,grid,sys,data_embed
 end;
+
+function flux_in_aperture(f,u,bnode,data)
+    if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
+        iT=data.iT
+        f[iT] = data.Glamp
+    end
+end
+
+function flux_radiation_top(f,u,bnode,data)
+    if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
+
+        (;ng,iT,Glamp,Tglass,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
+        σ=ph"σ"
+
+        # irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
+        # window properties (1)
+        tau1_vis=uc_window.tau_vis
+        rho1_vis=uc_window.rho_vis
+        tau1_IR=uc_window.tau_IR
+        rho1_IR=uc_window.rho_IR
+        eps1=uc_window.eps
+        # catalyst layer properties (2)
+        rho2_vis=uc_cat.rho_vis
+        rho2_IR=uc_cat.rho_IR
+        eps2=uc_cat.eps
+        # uncoated frit properties (3)
+        rho3_vis=uc_frit.rho_vis
+        rho3_IR=uc_frit.rho_IR
+        eps3=uc_frit.eps
+        #view factors
+        ϕ12=vf_uc_window_cat
+        ϕ13=vf_uc_window_frit
+
+
+        # surface brigthness of quartz window inwards / towards catalyst facing surface (1) in vis & IR	
+        G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
+		# here the simplification is applied: only local value of T (u[iT]) is available, it is used for both surfaces
+		G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*u[iT]^4+ϕ13*eps3*σ*u[iT]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
+                    
+
+        G2_vis = rho2_vis*G1_bot_vis
+        G2_IR = eps2*σ*u[iT]^4 + rho2_IR*G1_bot_IR
+
+        G3_vis = rho3_vis*G1_bot_vis
+        G3_IR = eps3*σ*u[iT]^4 + rho3_IR*G1_bot_IR
+
+        # surface brigthness of quartz window outward facing surface (1) in vis & IR	
+        G1_top_vis = rho1_vis*Glamp + tau1_vis*(ϕ12*G2_vis + ϕ13*G3_vis)
+        G1_top_IR = tau1_IR*(ϕ12*G2_IR + ϕ13*G3_IR) + eps1*σ*Tglass^4
+
+    
+        iT=data.iT
+        f[iT] = G1_top_vis + G1_top_IR
+    end
+end
+
+function flux_conduction_top(f,u,bnode,data)
+    if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
+        (;iT,Tglass,X0,uc_h)=data
+
+        # height of upper chamber / distance over which heat conduction occurs
+        Tsurf = u[iT]
+
+        # mean temperature
+        Tm=0.5*(u[iT] + Tglass)
+        # thermal conductivity at Tm and inlet composition X0 (H2/CO2 = 1/1)
+        _,λf=dynvisc_thermcond_mix(data, Tm, X0)
+
+        f[iT] = λf*(Tsurf-Tglass)/uc_h
+
+    end
+end
+
+
+function flux_enthalpy_bottom(f,u,bnode,data)
+    if bnode.region==Γ_bottom
+		(;ng,iT,ip,Fluids,ubot,Tamb) = data
+		
+		X=zeros(eltype(u), ng)
+		mole_frac!(bnode,data,X,u)
+		cf=heatcap_mix(Fluids, u[iT], X)		
+		flux_enth_bot=ubot*u[ip]/(ph"R"*u[iT])*cf*(u[iT]-Tamb)
+        f[iT]=flux_enth_bot
+    end
+end
+
+function flux_radiation_bottom(f,u,bnode,data)
+    if bnode.region==Γ_bottom
+		(;iT,lc_frit,lc_plate,Tplate) = data
+		
+		# irradiation exchange between porous frit (1) and Al bottom plate (2)
+		# porous frit properties (1)
+		eps1=lc_frit.eps; alpha1_IR=lc_frit.alpha_IR; rho1_IR=lc_frit.rho_IR; 	
+		# Al bottom plate properties (2)
+		eps2=lc_plate.eps; rho2_IR=lc_plate.rho_IR;
+		
+		#(;eps1,alpha1_IR,rho1_IR,rho2_IR,eps2,rho2_IR) = lower_chamber
+		σ=ph"σ"
+		flux_irrad = -eps1*σ*u[iT]^4 + alpha1_IR/(1-rho1_IR*rho2_IR)*(eps2*σ*Tplate^4+rho2_IR*eps1*σ*u[iT]^4)
+        f[iT] = -flux_irrad
+    end
+end
+
+function flux_conduction_bottom(f,u,bnode,data)
+    if bnode.region==Γ_bottom
+        (;ng,iT,Tplate,lc_h)=data
+        X=zeros(eltype(u), ng)    	
+
+        # height of bottom chamber/ distance over which heat conduction occurs
+        Tsurf = u[iT]
+
+        # mean temperature
+        Tm=0.5*(u[iT] + Tplate)
+        mole_frac!(bnode,data,X,u)
+        
+        # thermal conductivity at Tm and outlet composition
+        _,λf=dynvisc_thermcond_mix(data, Tm, X)
+
+        f[iT] = λf*(Tsurf-Tplate)/lc_h
+
+    end
+end
+
+function sidewalls(f,u,bnode,data)
+    (;iT,α_w,Tamb) = data
+    boundary_robin!(f,u,bnode;species=iT,region=Γ_side_right, factor=α_w, value=Tamb*α_w)
+    boundary_robin!(f,u,bnode;species=iT,region=Γ_side_back, factor=α_w, value=Tamb*α_w)
+end
+
+
+function HeatFluxes()
+    data=ModelData(
+        isreactive=0
+    )
+
+    iT=data.iT
+    
+    sol_embed,grid,sys,data_embed = main(data=data);
+    sol = sol_embed(1.0) # select final solution at the end of parameter embedding
+    
+    q_in = 4*integrate(sys,flux_in_aperture,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
+    q_in = sum(q_in)
+
+    q_rad_top = 4*integrate(sys,flux_radiation_top,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
+    q_rad_top = sum(q_rad_top)
+
+    q_cond_top = 4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
+    q_cond_top = sum(q_cond_top)
+
+    q_sidewalls = 4*integrate(sys,sidewalls,sol; boundary=true)[iT,[Γ_side_right,Γ_side_back]]        
+    q_sidewalls = sum(q_sidewalls)
+
+    q_rad_bottom = 4*integrate(sys,flux_radiation_bottom,sol; boundary=true)[iT,Γ_bottom]
+    q_cond_bottom = 4*integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
+    q_enthalpy_bottom = 4*integrate(sys,flux_enthalpy_bottom,sol; boundary=true)[iT,Γ_bottom]
+
+
+
+    q_in,q_rad_top,q_cond_top,q_sidewalls,q_rad_bottom,q_cond_bottom,q_enthalpy_bottom
+
+end
+
+function loss_plot(q_in,q_rad_top,q_cond_top,q_sidewalls,q_rad_bottom,q_cond_bottom,q_enthalpy_bottom)
+
+    #q_in,q_rad_top,q_cond_top,q_sidewalls,q_rad_bottom,q_cond_bottom,q_enthalpy_bottom = HeatFluxes()
+    x = ["Top Rad", "Top Cond", "Conv Sides", "Bottom Rad", "Bottom Cond", "ΔEnthalpy"]
+    total_loss = sum([q_rad_top,q_cond_top,q_sidewalls,q_rad_bottom,q_cond_bottom,q_enthalpy_bottom])
+    y = [q_rad_top,q_cond_top,q_sidewalls,q_rad_bottom,q_cond_bottom,q_enthalpy_bottom] ./ q_in
+    
+    #p=Plots.plot(x, y; st=:bar, texts=round.(y, sigdigits=2), legend=:none)
+    p=Plots.plot(x, y; st=:bar, legend=:none)
+    Plots.annotate!(p, x, y, round.(y, sigdigits=2), :bottom)
+    Plots.annotate!(p, 2.0, 0.3, "Σ flows = "*string(round(total_loss/q_in*100.0,sigdigits=3))*" %", :left)
+
+end
+
+function PlotLosses(C=[1,10,25,50,75,100])
+    q_in,q_top_abs,q_top_refl,q_top_rerad,q_top_convec,q_sides_conv,q_bot_rerad = HeatFluxes(C)
+    p=plot(xguide="Irradiation / kW m⁻²", yguide="Loss contributions / -", legend=:outertopright, size=(400,250))
+	areaplot!(C, [q_top_refl q_top_rerad q_top_convec q_sides_conv q_bot_rerad] ./ (q_in), fillalpha = [0.2 0.2], seriescolor = [1 2 3 4 5], label=["Refl Top" "Rerad Top" "Conv Top" "Conv Sides" "Rerad Bot"])
+    savefig("img/loss_contributions.svg")
+
+end
 
 function ParSweep()
     Qflow =3400.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
@@ -120,78 +236,6 @@ function ParSweep()
     Df=DataFrame((C=repeat(Cs, outer=l),Qflow=repeat(Qflows, inner=l),STCs))
     CSV.write("./data/out/STC.csv",Df)
     Df, datas, sols, grid_, sys_
-end
-
-function HeatFluxes(C=[1,10])
-    data=ModelData()
-    iT=data.iT
-
-    lC=length(C)
-    #q_full=zeros(Float64, lC)
-    q_in=zeros(Float64, lC)
-    q_top_abs=zeros(Float64, lC)
-    q_top_refl=zeros(Float64, lC)
-    q_top_rerad=zeros(Float64, lC)
-    q_top_convec=zeros(Float64, lC)
-    q_sides_conv=zeros(Float64, lC)
-    q_bot_rerad=zeros(Float64, lC)
-
-    function flux_rerad_top(f,u,bnode,data)
-        if bnode.region==6 # top boundary
-            f[iT] = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
-        end
-    end
-
-    function flux_lamp_abs(f,u,bnode,data)
-        if bnode.region==6 # top boundary
-            f[iT] = -data.Abs_lamp*data.G_lamp
-        end
-    end
-
-    function flux_convec_top(f,u,bnode,data)
-        if bnode.region==6 # top boundary
-            ρf=density_idealgas(data.Fluid, u[iT], data.p)
-            cf=heatcap_gas(data.Fluid, u[iT])
-            f[iT] = data.u0*ρf*cf*(u[iT]-data.Tamb)
-        end
-    end
-
-    function sidewalls(f,u,bnode,data)
-        # boundary conditions at side walls
-            boundary_robin!(f,u,bnode;species=iT,region=2, factor=data.α_w, value=data.Tamb*data.α_w)
-            boundary_robin!(f,u,bnode;species=iT,region=3, factor=data.α_w, value=data.Tamb*data.α_w)
-    end
-
-    function bottom(f,u,bnode,data)
-		if bnode.region==5 # bottom boundary
-            f[iT] = data.Eps_ir*ph"σ"*(u[iT]^4 - data.Tamb^4)
-		end
-	end
-
-    for (i,C) in enumerate(C)
-        data.G_lamp=C*1.0*ufac"kW/m^2"
-        sys,sol,data,nref = main3D(data,nref=0)
-        # factor 4: due to symmetry, sim domain covers only 1/4 of the frit
-        q_top_abs[i] = -4*integrate(sys,flux_lamp_abs,sol; boundary=true)[6]
-        q_in[i] = q_top_abs[i]/data.Abs_lamp
-        q_top_refl[i] = (1.0-data.Abs_lamp)*q_in[i]
-        q_top_rerad[i] = 4*integrate(sys,flux_rerad_top,sol; boundary=true)[6]
-        q_top_convec[i] = 4*integrate(sys,flux_convec_top,sol; boundary=true)[6]
-        q_sides_conv[i] = 4*sum(integrate(sys,sidewalls,sol; boundary=true)[1,[2,3]])
-        q_bot_rerad[i] = 4*integrate(sys,bottom,sol; boundary=true)[5]
-
-    end
-    q_in,q_top_abs,q_top_refl,q_top_rerad,q_top_convec,q_sides_conv,q_bot_rerad
-    
-end
-
-
-function PlotLosses(C=[1,10,25,50,75,100])
-    q_in,q_top_abs,q_top_refl,q_top_rerad,q_top_convec,q_sides_conv,q_bot_rerad = HeatFluxes(C)
-    p=plot(xguide="Irradiation / kW m⁻²", yguide="Loss contributions / -", legend=:outertopright, size=(400,250))
-	areaplot!(C, [q_top_refl q_top_rerad q_top_convec q_sides_conv q_bot_rerad] ./ (q_in), fillalpha = [0.2 0.2], seriescolor = [1 2 3 4 5], label=["Refl Top" "Rerad Top" "Conv Top" "Conv Sides" "Rerad Bot"])
-    savefig("img/loss_contributions.svg")
-
 end
 
 end
