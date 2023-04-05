@@ -154,6 +154,31 @@ function heatcap_gas!(cf, i, Fluid, T)
 	nothing
 end
 
+# Molar enthalpy of ideal gases, J/(mol*K)
+# calculation according to VDI heat atlas 2010 D1.6 Equation (66), p. 140
+# use standard conditions (T=25°C, p=1 atm) as reference state
+# set enthalpy at reference state to standard enthalpy of formation
+function enthalpy_gas(Fluid, T)
+    Tref = 298.15*ufac"K"
+    # cp_Tref = heatcap_gas(Fluid, Tref)
+    # cp_T = heatcap_gas(Fluid, T)
+    cp(T) = heatcap_gas(Fluid, T)
+	ΔHform = Fluid.ΔHform
+    ΔHform + 0.5*(cp(T)+cp(Tref))*(T-Tref)
+end
+
+# ideal gas mixture enthalpy
+# calculation according to VDI heat atlas 2010 D1.6 Equation (67), p. 140
+function enthalpy_mix(Fluids, T, x)
+    hmix = 0
+    ng=length(x)
+    for i=1:ng
+        Fluid=Fluids[i]
+        hmix += x[i] * enthalpy_gas(Fluid, T)
+    end
+    hmix
+end
+
 function heatcap_mix!(cmix, cf, Fluids, T, x)
     cmix[1] = zero(eltype(cmix))
     ng=length(x)
@@ -201,6 +226,8 @@ abstract type AbstractFluidProps end
 Base.@kwdef struct FluidProps
 	name::String="Air"
 	MW::Float64=28.96*ufac"g/mol"
+    # standard enthalpy of formation taken from Aspen Plus V10, for ideal gas at 25 °C and 1 atm pressure (1.01325 bar) 
+    ΔHform::Float64=0.0*ufac"kJ/mol"
     # Group contributions for the diffusion volumes in the Fuller method from VDI heat atlas 2010, D1 Table 9 (p.150)
     ΔvF::Float64=19.7 
 	HeatCap::PropsCoeffs=PropsCoeffs(
@@ -233,6 +260,8 @@ N2=FluidProps(
     name="N2",
 	# D3.1 Table 1
 	MW=28.01*ufac"g/mol",
+    # standard enthalpy of formation taken from Aspen Plus V10, for ideal gas at 25 °C and 1 atm pressure (1.01325 bar) 
+    ΔHform=0.0*ufac"kJ/mol",
     # Group contributions for the diffusion volumes in the Fuller method from VDI heat atlas 2010, D1 Table 9 (p.150)
     ΔvF=18.5, 
 	# D3.1 Table 6
@@ -268,6 +297,8 @@ Air=FluidProps(
     name="Air",
 	# D3.1 Table 1
 	MW=28.96*ufac"g/mol",
+    # standard enthalpy of formation taken from Aspen Plus V10, for ideal gas at 25 °C and 1 atm pressure (1.01325 bar) 
+    ΔHform=0.0*ufac"kJ/mol",
     # Group contributions for the diffusion volumes in the Fuller method from VDI heat atlas 2010, D1 Table 9 (p.150)
     ΔvF=19.7, 
 	# D3.1 Table 6
@@ -303,6 +334,8 @@ H2=FluidProps(
     name="H2",
 	# D3.1 Table 1
 	MW=2.02*ufac"g/mol",
+    # standard enthalpy of formation taken from Aspen Plus V10, for ideal gas at 25 °C and 1 atm pressure (1.01325 bar) 
+    ΔHform=0.0*ufac"kJ/mol",
     # Group contributions for the diffusion volumes in the Fuller method from VDI heat atlas 2010, D1 Table 9 (p.150)
     ΔvF=6.12, 
 	# D3.1 Table 6
@@ -338,6 +371,8 @@ CO2=FluidProps(
     name="CO2" ,
 	# D3.1 Table 1
 	MW=44.01*ufac"g/mol",
+    # standard enthalpy of formation taken from Aspen Plus V10, for ideal gas at 25 °C and 1 atm pressure (1.01325 bar) 
+    ΔHform=-393.51*ufac"kJ/mol",
     # Group contributions for the diffusion volumes in the Fuller method from VDI heat atlas 2010, D1 Table 9 (p.150)
     ΔvF=26.9, 
 	# D3.1 Table 6
@@ -373,6 +408,8 @@ CO=FluidProps(
     name="CO",
 	# D3.1 Table 1
 	MW=28.01*ufac"g/mol",
+    # standard enthalpy of formation taken from Aspen Plus V10, for ideal gas at 25 °C and 1 atm pressure (1.01325 bar) 
+    ΔHform=-110.53*ufac"kJ/mol",
     # Group contributions for the diffusion volumes in the Fuller method from VDI heat atlas 2010, D1 Table 9 (p.150)
     ΔvF=18.0, 
 	# D3.1 Table 6
@@ -408,6 +445,8 @@ H2O=FluidProps(
     name="H2O",
 	# D3.1 Table 1
 	MW=18.02*ufac"g/mol",
+    # standard enthalpy of formation taken from Aspen Plus V10, for ideal gas at 25 °C and 1 atm pressure (1.01325 bar) 
+    ΔHform=-241.818*ufac"kJ/mol",
     # Group contributions for the diffusion volumes in the Fuller method from VDI heat atlas 2010, D1 Table 9 (p.150)
     ΔvF=13.1, 
 	# D3.1 Table 6
@@ -443,6 +482,8 @@ CH4=FluidProps(
     name="CH4" ,
 	# D3.1 Table 1
 	MW=16.04*ufac"g/mol",
+    # standard enthalpy of formation taken from Aspen Plus V10, for ideal gas at 25 °C and 1 atm pressure (1.01325 bar) 
+    ΔHform=-74.52*ufac"kJ/mol",
     # Group contributions for the diffusion volumes in the Fuller method from VDI heat atlas 2010, D1 Table 9 (p.150)
     ΔvF=25.14, 
 	# D3.1 Table 6
@@ -478,6 +519,8 @@ Ar=FluidProps(
     name="Ar" ,
 	# D3.1 Table 1
 	MW=39.95*ufac"g/mol",
+    # standard enthalpy of formation taken from Aspen Plus V10, for ideal gas at 25 °C and 1 atm pressure (1.01325 bar) 
+    ΔHform=0.0*ufac"kJ/mol",
     # Group contributions for the diffusion volumes in the Fuller method from VDI heat atlas 2010, D1 Table 9 (p.150)
     ΔvF=16.2, 
 	# D3.1 Table 6

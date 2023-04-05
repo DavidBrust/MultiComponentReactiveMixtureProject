@@ -870,17 +870,17 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	kinpar::AbstractKineticsData = XuFroment1989
 	
 	# number of gas phase species
-	ng::Int64		 		= S3P.ng
+	ng::Int64		 		= kinpar.ng
 	ip::Int64=ng+1 # index of total pressure variable
 	iT::Int64=ip+1 # index of Temperature variable
 
 	# names and fluid indices
-	gn::Dict{Int, Symbol} 	= S3P.gn
+	gn::Dict{Int, Symbol} 	= kinpar.gn
 
 	# inverse names and fluid indices
-	gni::Dict{Symbol, Int}  = S3P.gni
+	gni::Dict{Symbol, Int}  = kinpar.gni
 	# fluids and respective properties in system
-	Fluids::Vector{FluidProps} = S3P.Fluids
+	Fluids::Vector{FluidProps} = kinpar.Fluids
 	#Fluids::Vector{AbstractFluidProps} = [N2]
 	X0::Vector{Float64} = let
 		x=zeros(Float64, ng)
