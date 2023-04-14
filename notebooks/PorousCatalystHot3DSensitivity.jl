@@ -39,7 +39,7 @@ begin
 end;
 
 # ╔═╡ 863c9da7-ef45-49ad-80d0-3594eca4a189
-PlutoUI.TableOfContents(title="Dusty Gas Model")
+PlutoUI.TableOfContents(title="Sensitivity")
 
 # ╔═╡ 2ed3223e-a604-410e-93d4-016580f49093
 md"""
@@ -219,7 +219,7 @@ function reaction(f,u,node,data)
 		
 		# temperature eq. / heat source
 		ΔHi=data.kinpar.ΔHi
-		f[iT] = -(RR[nr["R1"]]*ΔHi["R1"]+RR[nr["R2"]]*ΔHi["R2"] +RR[nr["R3"]]*ΔHi["R3"])
+		f[iT] = -(RR[nr[:R1]]*ΔHi[:R1]+RR[nr[:R2]]*ΔHi[:R2] +RR[nr[:R3]]*ΔHi[:R3])
 	end
 	
 	# ∑xi = 1
@@ -379,25 +379,24 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	
 	# number of gas phase species
 	ng::Int64		 		= S3P.ng
-	#ng::Int64		 		= 1
 	# names and fluid indices
-	gn::Dict{Int, String} 	= S3P.gn
-	#gn::Dict{Int, String} 	= Dict(1=>"N2")
-	# inverse names and fluid indices
-	gni::Dict{String, Int}  = S3P.gni
+	gn::Dict{Int, Symbol} 	= S3P.gn
+		# inverse names and fluid indices
+	gni::Dict{Symbol, Int}  = S3P.gni
 	# fluids and respective properties in system
 	Fluids::Vector{FluidProps} = S3P.Fluids
 	#Fluids::Vector{AbstractFluidProps} = [N2]
 	X0::Vector{Float64} = let
 		x=zeros(Float64, ng)
-		x[gni["H2"]] = 1.0
-		x[gni["CO2"]] = 1.0
+		x[gni[:H2]] = 1.0
+		x[gni[:CO2]] = 1.0
 		x/sum(x)
 	end # inlet composition
 	#X0::Vector{Float64} = [1.0]
 	
 	# volume specific cat mass loading, UPV lab scale PC reactor
-	mcats::Float64 =1234.568*ufac"kg/m^3"
+	#mcats::Float64 =1234.568*ufac"kg/m^3"
+	mcats::Float64 =20.0*ufac"kg/m^3"
 	isreactive::Bool = 1
 	#isreactive::Bool = 0
 
@@ -629,8 +628,8 @@ Base.@kwdef mutable struct ModelDataSens{Tv} <:AbstractModelData
 	#Abs_lamp_cat::Float64=0.7 # cat avg absorptivity of irradiation from lamp
 	
 	# volume specific cat mass loading, UPV lab scale PC reactor
-	#mcats::Tv=S
 	mcats::Float64 =1234.568*ufac"kg/m^3"
+	#mcats::Tv=S
 	
 	# frit avg absorptivity of irradiation from lamp
 	#Abs_lamp_frit::Tv=S
@@ -639,6 +638,9 @@ Base.@kwdef mutable struct ModelDataSens{Tv} <:AbstractModelData
 	# avg absorptivity/emissivity of cat. of IR irradiation coming from surroundings / emitted
 	#Eps_ir::Tv=S
 	Eps_ir::Float64=0.7
+
+	λs::Float64=1.4*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2 	
+	#λs::Tv=S
 
 	# END SENSITIVITY PARAMETERS
 	##############################################################################
@@ -649,19 +651,17 @@ Base.@kwdef mutable struct ModelDataSens{Tv} <:AbstractModelData
 	
 	# number of gas phase species
 	ng::Int64		 		= S3P.ng
-	#ng::Int64		 		= 1
 	# names and fluid indices
-	gn::Dict{Int, String} 	= S3P.gn
-	#gn::Dict{Int, String} 	= Dict(1=>"N2")
+	gn::Dict{Int, Symbol} 	= S3P.gn
 	# inverse names and fluid indices
-	gni::Dict{String, Int}  = S3P.gni
+	gni::Dict{Symbol, Int}  = S3P.gni
 	# fluids and respective properties in system
 	Fluids::Vector{FluidProps} = S3P.Fluids
 	#Fluids::Vector{AbstractFluidProps} = [N2]
 	X0::Vector{Float64} = let
 		x=zeros(Float64, ng)
-		x[gni["H2"]] = 1.0
-		x[gni["CO2"]] = 1.0
+		x[gni[:H2]] = 1.0
+		x[gni[:CO2]] = 1.0
 		x/sum(x)
 	end # inlet composition
 	#X0::Vector{Float64} = [1.0]
@@ -707,7 +707,7 @@ Base.@kwdef mutable struct ModelDataSens{Tv} <:AbstractModelData
 	Ac::Float64=wi*le*ufac"m^2" # cross-sectional area, square
 	
 	ρs::Float64=2.23e3*ufac"kg/m^3" # density of non-porous Boro-Solikatglas 3.3
-	λs::Float64=1.4*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2 	
+	
 	cs::Float64=0.8e3*ufac"J/(kg*K)" # heat capacity of non-porous SiO2
 	
 	#ϕ::Float64=0.36 # porosity, class 2
@@ -905,7 +905,7 @@ end
 function Yield_CO(sol,sys,data)
 	ndot_bot,ndot_top = MoleFlows(sol,sys,data)
 	
-	ndot_top[data.gni["CO"]] / abs(ndot_bot[data.gni["CO2"]])
+	ndot_top[data.gni[:CO]] / abs(ndot_bot[data.gni[:CO2]])
 end
 
 # ╔═╡ 333b5c80-259d-47aa-a441-ee7894d6c407
@@ -938,8 +938,8 @@ function main(;data=ModelData())
 	sol=solve(sys;inival,)
 	
 	 function pre(sol,par)
-	 	ng=data.ng
-	 	iT=data.iT
+		(;ng,iT)=data
+	 	
 	 	# iteratively adapt top outflow boundary condition
 	 	function Inttop(f,u,bnode,data)
 			
@@ -972,11 +972,12 @@ function main(;data=ModelData())
 
 		
 	 	# specific catalyst loading
-	 	mcats=[10.0, 1300.0]*ufac"kg/m^3"
+	 	#mcats=[10.0, 1300.0]*ufac"kg/m^3"
+		 mcats=[10.0, 20.0]*ufac"kg/m^3"
 	 	data.mcats= minimum(mcats) + par*(maximum(mcats)-minimum(mcats))
 
 	 	# irradiation flux density
-	 	G_lamp=[1.0, 125.0]*ufac"kW/m^2"
+	 	G_lamp=[1.0, 100.0]*ufac"kW/m^2"
 	 	data.G_lamp= minimum(G_lamp) + par*(maximum(G_lamp)-minimum(G_lamp))
 	 end
 	
@@ -1017,6 +1018,7 @@ let
 
 	vis=GridVisualizer(resolution=(600,400), Plotter=PyPlot)
 	scalarplot!(vis, grid_, sol_[data.iT].- 273.15, show=true)
+	#save("../img/out/Test.svg", vis)
 end
 
 # ╔═╡ 0f7cce89-3add-4316-bcc2-a924064af884
@@ -1028,9 +1030,9 @@ Yield of CO relative to inflow of ``\text{CO}_2``: $(round(Yield_CO(sol,sys,data
 function STCefficiency(sol,sys,data)
 	_,ndot_top = MoleFlows(sol,sys,data)
 	# R2 = RWGS in Xu & Froment kinetic model
-	STC_Atot = ndot_top[data.gni["CO"]] * -data.kinpar.ΔHi["R2"] / (data.G_lamp*data.Ac/4)
+	STC_Atot = ndot_top[data.gni[:CO]] * -data.kinpar.ΔHi[:R2] / (data.G_lamp*data.Ac/4)
 	catA, _ = CatDims(grid)
-	STC_Acat = ndot_top[data.gni["CO"]] * -data.kinpar.ΔHi["R2"] / (data.G_lamp*catA)
+	STC_Acat = ndot_top[data.gni[:CO]] * -data.kinpar.ΔHi[:R2] / (data.G_lamp*catA)
 	STC_Atot, STC_Acat
 end
 
@@ -1153,7 +1155,7 @@ end
 
 # ╔═╡ db16ecbe-cb69-46b6-8ac8-9ffa51c11dac
 let
-	vis = GridVisualizer(layout=(2,1), legend = :rb, xlabel=string(SensPar), markershape=:circle, markevery=1)
+	vis = GridVisualizer(layout=(2,1), legend = :rb, xlabel=string(SensPar), markershape=:circle, markevery=1, Plotter=PyPlot)
 	
     scalarplot!(vis[1,1], P, Tca; color = :red, label = "Tcat")
     scalarplot!(vis[1,1], P, DTca; color = :blue, label = "dTcat/d($(string(SensPar)))", clear = false, show = true)
@@ -1161,6 +1163,7 @@ let
 	scalarplot!(vis[2,1], P, YCO; color = :red, label = "YCO")
     scalarplot!(vis[2,1], P, DYCO; color = :blue, label = "dYCO/d($(string(SensPar)))", clear = false, show = true)
 
+	#save("../img/out/Sens_abs_cat.svg", vis)
 end
 
 # ╔═╡ Cell order:
@@ -1205,8 +1208,6 @@ end
 # ╟─a6e61592-7958-4094-8614-e77446eb2223
 # ╟─2739bcff-3fb0-4169-8a1a-2b0a14998cec
 # ╠═30393c90-298c-412d-86ce-e36106613d35
-# ╠═b93ddd9d-9a35-477e-b069-b07b25d09e50
-# ╠═9952c815-5459-44ff-b1f8-07ab24ce0c53
 # ╠═68e2628a-056a-4ec3-827f-2654f49917d9
 # ╟─fec9ca6d-d815-4b50-bec7-f8fb3d8195ba
 # ╟─808e5a71-572f-4b0c-aeb3-9513d969dada
