@@ -16,7 +16,6 @@ begin
 	using LinearSolve,LinearSolvePardiso
 	using LessUnitful
 	
-	# using PlutoVista,Plots,PyPlot,GLMakie
 	using PlutoVista, Plots
 	using PlutoUI
 	using Colors
@@ -59,10 +58,14 @@ end;
 # ╔═╡ ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
 function prism_sq(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.catwi)
 	
-	hw=w/2.0/5.0*2.0^(-nref)
-	hh=h/5.0*2.0^(-nref)
+	hw=w/2.0/10.0*2.0^(-nref)
 	W=collect(0:hw:(w/2.0))
-    H=collect(0:hh:h)
+	#hh=h/5.0*2.0^(-nref)
+	#H=collect(0:hh:h)
+	hmin=h/20.0
+    hmax=h/5.0
+ 	H=geomspace(0.0,h,hmax,hmin)
+    
 	grid=simplexgrid(W,W,H)
 	
 	# catalyst layer region
@@ -78,7 +81,7 @@ function prism_sq_(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data
 	W=collect(0:hw:(w/2.0))
 	#hh=h/5.0*2.0^(-nref)
 	#H=collect(0:hh:h)
-	hmin=h/20.0
+	hmin=h/100.0
     hmax=h/5.0
  	H=geomspace(0.0,h,hmax,hmin)
     
@@ -89,6 +92,10 @@ function prism_sq_(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data
 	# catalyst layer boundary
 	bfacemask!(grid,[0.0,0.0,h],[catwi/2,catwi/2,h],Γ_top_cat)	
 end
+
+# ╔═╡ e21b9d37-941c-4f2c-9bdf-956964428f90
+#const grid_fun = prism_sq
+const grid_fun = prism_sq_
 
 # ╔═╡ 2554b2fc-bf5c-4b8f-b5e9-8bc261fe597b
 md"""
@@ -139,6 +146,19 @@ md"""
 The above form of the DGM neglects thermal diffusion and is formulated for a mixture of ideal gases. The driving force for transport of species $i$ relative to the other species (diffusive transport) then reduces to $\nabla p_i$. Transport of species due to the viscous flow through the porous material in the direction of a negative pressure gradient is captured by D'arcy law (convective transport).
 """
 
+# ╔═╡ b403fcdb-24e4-4120-a87a-697ed46f36b8
+md"""
+```math
+\begin{align}
+- \nabla \left(\lambda_{\text{eff}} \nabla T - c_p \left( T-T_{\text{ref}} \right) \frac{p}{RT} \vec u_{\text D}\right) + R_{\text{th}} &= 0
+
+\end{align}
+
+```
+
+where ``\lambda_{\text{eff}}`` is the effective thermal conductivity in ``\frac{\text{W}}{\text{mK}}``, ``c_p`` is the isobaric heat capacity of an ideal gas in ``\frac{\text J}{\text{molK}}``, ``\vec u_{\text D}`` is the D'arcy velocity in ``\frac{\text m}{\text s}`` and ``R_{\text{th}}`` is the volumetric heat source/sink term ``\frac{\text{W}}{\text{m}^3}`` from chemical reactions.
+"""
+
 # ╔═╡ a6afe118-dcbd-4126-8646-c7268acfacf3
 md"""
 The numerical fluxes $\textbf{J}$ are computed using the backslash operator (Julia solver for linear systems) 
@@ -153,34 +173,39 @@ M
 
 # ╔═╡ 78cf4646-c373-4688-b1ac-92ed5f922e3c
 function reaction(f,u,node,data)
-	ngas=data.ng
-	ip=data.ip
+	(;ng,ip) = data
+
 	
 	if node.region == 2 && data.isreactive # catalyst layer
-		#ng=data.gni # gas species indices from names
-		nr=data.kinpar.rni # reaction indices from names
-		iT=data.iT
+		(;iT,Fluids,kinpar,mcats) = data
+		(;rni,nuij,ΔHi) = kinpar
 		
-		pi = u[1:ngas]./ufac"bar"
+		pi = u[1:ng]./ufac"bar"
 		# negative sign: sign convention of VoronoiFVM: source term < 0 
 		# ri returns reaction rate in mol/(h gcat)
-		RR = -data.mcats*ri(data.kinpar,u[iT],pi)*ufac"mol/hr"*ufac"1/g"
-		# reactions in S3P kinetics model
-		# R1: CO + H2O = CO2 + H2
-		# R2: CH4 + 2 H2O = CO2 + 4 H2
-		# R3: CH4 + H2O = CO + 3 H2
+		RR = -mcats*ri(kinpar,u[iT],pi)*ufac"mol/hr"*ufac"1/g"
+		## Xu & Froment 1989 kinetics
+		# R1: CH4 + H2O = CO + 3 H2
+		# R2: CO + H2O = CO2 + H2
+		# R3: CH4 + 2 H2O = CO2 + 4 H2
 
-		for i=1:ngas
-			f[i] = sum(data.kinpar.nuij[i,:] .* RR)
+		for i=1:ng
+			f[i] = sum(nuij[i,:] .* RR)
 		end
 		
+		
+		ΔHiT = zeros(size(nuij,2))
+		for i=1:ng
+			ΔHiT .-= enthalpy_gas(Fluids[i],u[iT])*nuij[i,:]
+		end
+
 		# temperature eq. / heat source
-		ΔHi=data.kinpar.ΔHi
-		f[iT] = -(RR[nr[:R1]]*ΔHi[:R1]+RR[nr[:R2]]*ΔHi[:R2] +RR[nr[:R3]]*ΔHi[:R3])
+		f[iT] = sum(RR .* ΔHiT)
+		#f[iT] = -(RR[rni[:R1]]*ΔHi[:R1]+RR[rni[:R2]]*ΔHi[:R2] +RR[rni[:R3]]*ΔHi[:R3])
 	end
 	
 	# ∑xi = 1
-	f[ip]=u[ip]-sum(u[1:ngas])
+	f[ip]=u[ip]-sum(u[1:ng])
 	
 end
 
@@ -436,7 +461,7 @@ function WindowTemperature(data, T2, T3)
 	function f!(F, x)		
 		# surface brigthness of quartz window (1) in vis & IR	
 		G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
-		# here the simplification is applied: only local value of T (u[iT]) is available, it is used for both surfaces
+
 		G1_bot_IR = (eps1*σ*x[1]^4 + rho1_IR*(ϕ12*eps2*σ*T2+ϕ13*eps3*σ*T3^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))		
 
         G2_vis = rho2_vis*G1_bot_vis
@@ -632,7 +657,23 @@ This will lead to an error, that should be estimated.
 function top(f,u,bnode,data)
 	# top boundaries (cat layer & frit)
 	if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat 
-		(;ng,iT,Glamp,Tglass,X0,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h)=data
+		(;ng,iT,Glamp,Tglass,X0,Fluids,Tamb,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h)=data
+
+		# convective therm. energy flux
+		flux_entahlpy=0.0
+		
+		# flow velocity is normal to top boundary
+		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
+		for i=1:ng
+			# f[i] = data.utop*u[i]/(ph"R"*u[iT])
+			f[i] = -data.u0*data.X0[i]*data.pn/(ph"R"*data.Tn)
+			# use species enthalpy (incl. Δh_formation) for conv. therm. eng. flux 1/2
+			# reactant gases enter control volume at Tref
+			flux_entahlpy += f[i] * enthalpy_gas(Fluids[i], Tamb)
+			#f[i] = -data.u0*data.X0[i]*data.p/(ph"R"*data.Tamb)
+
+		end
+
 		
 		flux_irrad=0.0
 		σ=ph"σ"
@@ -670,6 +711,7 @@ function top(f,u,bnode,data)
 			flux_irrad = -eps3*σ*u[iT]^4 + alpha3_vis*G1_vis + alpha3_IR*G1_IR
 		end
 
+
 		# conductive heat flux through top chamber
 		# mean temperature
         Tm=0.5*(u[iT] + Tglass)
@@ -678,16 +720,14 @@ function top(f,u,bnode,data)
 
         flux_cond = -λf*(Tglass-Tm)/uc_h
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
-		f[iT] = -flux_irrad + flux_cond
-		
-		
-		# flow velocity is normal to top boundary
-		for i=1:ng
-			# f[i] = data.utop*u[i]/(ph"R"*u[iT])
-			f[i] = -data.u0*data.X0[i]*data.pn/(ph"R"*data.Tn)
-			#f[i] = -data.u0*data.X0[i]*data.p/(ph"R"*data.Tamb)
 
-		end
+		# include convective therm. energy flux
+		# use species enthalpy (incl. Δh_formation) for conv. therm. eng. flux 2/2
+		f[iT] = -flux_irrad + flux_cond + flux_entahlpy
+		#f[iT] = -flux_irrad + flux_cond
+		
+		
+
 	end
 end
 
@@ -734,8 +774,12 @@ function bottom(f,u,bnode,data)
 		
 		X=zeros(eltype(u), ng)
 		mole_frac!(bnode,data,X,u)
-		cf=heatcap_mix(Fluids, u[iT], X)		
-		flux_entahlpy=ubot*u[ip]/(ph"R"*u[iT])*cf*(u[iT]-Tamb)
+
+		# use species enthalpy (incl. Δh_formation) for conv. therm. eng. flux 1/2
+		hmix=enthalpy_mix(Fluids, u[iT], X)
+		flux_entahlpy=ubot*u[ip]/(ph"R"*u[iT])*hmix
+		#cf=heatcap_mix(Fluids, u[iT], X)		
+		#flux_entahlpy=ubot*u[ip]/(ph"R"*u[iT])*cf*(u[iT]-Tamb)
 
 		# irradiation exchange between porous frit (1) and Al bottom plate (2)
 		# porous frit properties (1)
@@ -820,6 +864,7 @@ function flux(f,u,edge,data)
 	
 	μ,λf=dynvisc_thermcond_mix(data, T, X)
 	λbed=kbed(data,λf)*λf
+	#λbed=lambda_eff_AC(data,λf)
 
 	# Darcy flow
 	ud=-k/μ * δp
@@ -842,11 +887,17 @@ function flux(f,u,edge,data)
 	# use species molar fluxes for thermal drift contribution
 	conv=0.0
 	for i=1:ng
-		conv += J[i] * heatcap_gas(Fluids[i], T)
+		# use species enthalpy (incl. Δh_formation) for conv. therm. eng. flux 1/3
+		conv += J[i] * enthalpy_gas(Fluids[i], T)
+		#conv += J[i] * heatcap_gas(Fluids[i], T)
 	end
-	Bp,Bm = fbernoulli_pm(conv/λbed)
+	# use species enthalpy (incl. Δh_formation) for conv. therm. eng. flux 2/3
+	Bp,Bm = fbernoulli_pm(conv/λbed/T)
+	#Bp,Bm = fbernoulli_pm(conv/λbed)
 	# thermal energy flux
-	f[iT]= λbed*(Bm*(u[iT,1]-data.Tamb)-Bp*(u[iT,2]-data.Tamb))		
+	# use species enthalpy (incl. Δh_formation) for conv. therm. eng. flux 3/3
+	f[iT]= λbed*(Bm*u[iT,1]-Bp*u[iT,2])		
+	#f[iT]= λbed*(Bm*(u[iT,1]-data.Tamb)-Bp*(u[iT,2]-data.Tamb))		
 	
 	#f[ip] via reaction: ∑pi = p
 end
@@ -890,7 +941,8 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	end # inlet composition
 
 	# volume specific cat mass loading, UPV lab scale PC reactor
-	mcats::Float64 =1234.568*ufac"kg/m^3"
+	#mcats::Float64 =1234.568*ufac"kg/m^3"
+	mcats::Float64=20.0*ufac"kg/m^3" # madium scale loading
 	isreactive::Bool = 1
 	#isreactive::Bool = 0
 		
@@ -942,12 +994,13 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 
 	# Solid Boro-Silikatglas
 	ρs::Float64=2.23e3*ufac"kg/m^3" # density of non-porous Boro-Solikatglas 3.3
-	λs::Float64=1.4*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2
+	#λs::Float64=1.4*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2
+	λs::Float64=1.13*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2
 	cs::Float64=0.8e3*ufac"J/(kg*K)" # heat capacity of non-porous SiO2
 	
-	#ϕ::Float64=0.36 # porosity, class 2
-	ϕ::Float64=0.33 # porosity, class 0
-	
+	ϕ::Float64=0.36 # porosity, exp determined
+	#ϕ::Float64=0.33 # porosity, VitraPor sintetered filter class 0
+	ψ::Float64=0.26 # flattening coefficient in 
 	
 	# approximation from Wesselingh, J. A., & Krishna, R. (2006). Mass Transfer in Multicomponent Mixtures
 	γ_τ::Float64=ϕ^1.5 # constriction/tourtuosity factor
@@ -983,6 +1036,19 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	
 end;
 
+# ╔═╡ dd4f0f2a-03cc-400a-8e3f-45aa9eb7de87
+let
+	data=ModelData(λs=1.13*ufac"W/(m*K)")
+	(;Tamb,ϕ)=data
+	#λf=thermcond_gas(Air, Tamb)
+	λf=0.021
+	λeff_VDI=kbed(data,λf)*λf
+	
+	λeff_VDI_flattening=kbed_VDI_flattening(data,λf)*λf
+
+	λeff_AC = lambda_eff_AC(data,λf)
+end
+
 # ╔═╡ b2df1087-6628-4889-8cd6-c5ee7629cd93
 md"""
 ## Temperature Plot
@@ -997,7 +1063,9 @@ md"""
 function SolAlongLine(data,sol)
 		
 	#grid=prism_sq(data)
-	grid=prism_sq_(data)
+	#grid=prism_sq_(data)
+	grid=grid_fun(data)
+	
 	mid_x=argmin(abs.(grid[Coordinates][1,:] .-data.wi/4))
 	mid_x=grid[Coordinates][1,mid_x]
 	mid_y=argmin(abs.(grid[Coordinates][2,:] .-data.le/4))
@@ -1110,8 +1178,9 @@ end
 # ╔═╡ 333b5c80-259d-47aa-a441-ee7894d6c407
 function main(;data=ModelData())
 
+	grid=grid_fun(data)
 	#grid=prism_sq(data)
-	grid=prism_sq_(data)
+	#grid=prism_sq_(data)
 
 	ngas=data.ng
 	iT=data.iT
@@ -1172,27 +1241,39 @@ function main(;data=ModelData())
 				 
 				
 	 	# specific catalyst loading
-	 	mcats=[10.0, 1300.0]*ufac"kg/m^3"
+	 	#mcats=[10.0, 1300.0]*ufac"kg/m^3"
+		 mcats=[10.0, 20.0]*ufac"kg/m^3"
 	 	data.mcats = minimum(mcats) + par*(maximum(mcats)-minimum(mcats))
 
 	 	# irradiation flux density
 	 	Glamps=[1.0, 100.0]*ufac"kW/m^2"
 	 	data.Glamp = minimum(Glamps) + par*(maximum(Glamps)-minimum(Glamps))
-
-		 
 	 end
+
+	function post(sol,oldsol, t, Δt) # update values of Tglass and Tplate for post processing
+	 	ng=data.ng
+	 	iT=data.iT
+
+		# set glass emperature
+		Tbot_avg,Tfrit_avg,Tcat_avg = T_avg(sol,sys,grid,data)[[Γ_bottom,Γ_top_frit,Γ_top_cat]]
+		data.Tglass = WindowTemperature(data, Tcat_avg, Tfrit_avg)
+
+		# set bottom plate temperature
+		MoleFrac_avg=X_avg_bottom(sol,sys,grid,data)
+		data.Tplate = PlateTemperature(data, Tbot_avg, MoleFrac_avg)
+	end
 	
 	 control=SolverControl( ;
 	 				  		handle_exceptions=true,
 							Δp_min=1.0e-4,					  
 	 				  		Δp=0.1,
 	 				  		Δp_grow=1.2,
-	 				  		Δu_opt=10000.0, # large value, due to unit Pa of pressure?
+	 				  		Δu_opt=100000.0, # large value, due to unit Pa of pressure?
 	 				  		)
 	
 	# #sol=solve(sys;inival,)
 	
-	 sol=solve(sys;inival, embed=[0.0,1.0],pre,control)
+	 sol=solve(sys;inival, embed=[0.0,1.0],pre,post,control)
 
 	
 	sol,grid,sys,data
@@ -1224,25 +1305,9 @@ Cutplane at ``z=`` $(@bind zcut PlutoUI.Slider(range(0.0,data_embed.h,length=101
 #=╠═╡
 let
 	vis=GridVisualizer(resolution=(600,400),zoom=1.9)
-	#gridplot!(vis, prism_sq(ModelData(),nref=0,cath=2*ufac"mm"), zplane=zcut)
-	gridplot!(vis, prism_sq_(ModelData(),nref=0,cath=2*ufac"mm"), zplane=zcut)
+	gridplot!(vis, grid_fun(ModelData(),nref=0,cath=2*ufac"mm"), zplane=zcut)
 	reveal(vis)
 end
-  ╠═╡ =#
-
-# ╔═╡ dd4f0f2a-03cc-400a-8e3f-45aa9eb7de87
-#=╠═╡
-let
-	data=data_embed
-	(;Tamb,X0)=data
-	μ,λf=dynvisc_thermcond_mix(data, Tamb, X0)
-	λbed=kbed(data,λf)*λf
-end
-  ╠═╡ =#
-
-# ╔═╡ 9f549296-ba92-4656-a117-b5ce2f7ad102
-#=╠═╡
-dynvisc_thermcond_mix(data_embed, 750.0, data_embed.X0)
   ╠═╡ =#
 
 # ╔═╡ bcaf83fb-f215-428d-9c84-f5b557fe143f
@@ -1258,9 +1323,9 @@ Heat is transported within the domain via conduction and convective transport. B
 """
   ╠═╡ =#
 
-# ╔═╡ 9a26c94f-938a-44ab-9f7e-0a9798879fb8
+# ╔═╡ c156aa60-a5e5-4f10-8928-e8ffabd5456b
 #=╠═╡
-WindowTemperature(data_embed, 773.15, 773.15)
+data_embed.Tglass-273.15
   ╠═╡ =#
 
 # ╔═╡ 3bd80c19-0b49-43f6-9daa-0c87c2ea8093
@@ -1287,18 +1352,20 @@ let
 	cols = distinguishable_colors(ng+1, [RGB(1,1,1), RGB(0,0,0)], dropseed=true)
 	pcols = map(col -> (red(col), green(col), blue(col)), cols)
 
-	p1=Plots.plot(title="Partial Pressures", size=(450,450), xguide="Height / cm", yguide="Pressure / bar",legend=:outertopright,)
+	p1=Plots.plot(title="Partial Pressures", size=(450,450), xguide="Height / mm", yguide="Pressure / bar",legend=:outertopright,)
 	for i in 1:ng
-		Plots.plot!(p1, grid_./ufac"cm", vec(sol_[i])./ufac"bar", label="$(gn[i])", lw=2, ls=:auto)
+		Plots.plot!(p1, grid_./ufac"mm", vec(sol_[i])./ufac"bar", label="$(gn[i])", lw=2, ls=:auto)
 	end
-	Plots.plot!(p1, grid_./ufac"cm", vec(sol_[ip])./ufac"bar", color=cols[ip], label="total p", lw=2)
-	lens!([0.45, .50001], [0.24, 0.27], inset = (1, bbox(0.15, 0.1, 0.5, 0.5)))
+	Plots.plot!(p1, grid_./ufac"mm", vec(sol_[ip])./ufac"bar", color=cols[ip], label="total p", lw=2)
+	lens!(10*[0.45, .5], [0.14, 0.17], inset = (1, bbox(0.1, 0.15, 0.25, 0.25)))
+	lens!(10*[0.45, .5], [0.34, 0.37], inset = (1, bbox(0.5, 0.15, 0.25, 0.25)))
 
 	p2 = Plots.plot(xguide="Height / cm", yguide="Pressure / bar",legend=:bottomright)
 	Plots.plot!(p2, grid_./ufac"cm", vec(sol_[ip])./ufac"bar", color=cols[ip], label="total p", lw=2)
 
-	Plots.plot(p1,p2, layout=(1,2), size=(700,450))
-	#Plots.savefig(p, "../img/out/pi_pt_flip.svg")
+	p=Plots.plot(p1, size=(500,300))
+	#Plots.plot(p1,p2, layout=(1,2), size=(700,450))
+	#Plots.savefig(p, "../img/out/pi_flip_lowcat.svg")
 	
 end
   ╠═╡ =#
@@ -1347,7 +1414,8 @@ Chemical species flows through porous frit from bottom and top:
 # ╔═╡ fec9ca6d-d815-4b50-bec7-f8fb3d8195ba
 function TopPlane(data,sol)
 
-	grid=prism_sq_(data)
+	#grid=prism_sq_(data)
+	grid=grid_fun(data)
 	wi=data.wi/2
 	
 	bid = maximum(grid[BFaceRegions])+1
@@ -1373,7 +1441,8 @@ end
 # ╔═╡ 746e1a39-3c9b-478f-b371-3cb8333e93b1
 function CutPlane(data,sol)
 
-	grid=prism_sq_(data)
+	#grid=prism_sq_(data)
+	grid=grid_fun(data)
 	wi=data.wi/2
 	
 	bid = maximum(grid[BFaceRegions])+1
@@ -1401,10 +1470,9 @@ end
 let
 	sol_xy, grid_xy = TopPlane(data_embed,sol)
 	sol_xz, grid_xz = CutPlane(data_embed,sol)
-	vis=GridVisualizer(layout=(1,2), resolution=(700, 300))
+	vis=GridVisualizer(layout=(1,2), resolution=(700, 300),)
 	scalarplot!(vis[1,1], grid_xy, sol_xy[data_embed.iT] .-273.15, colormap= :inferno, show=true)
 	scalarplot!(vis[1,2], grid_xz, sol_xz[data_embed.iT] .-273.15, aspect=4, colormap= :inferno, show=true)
-
 end
   ╠═╡ =#
 
@@ -1611,9 +1679,10 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╠═11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 # ╠═863c9da7-ef45-49ad-80d0-3594eca4a189
 # ╟─2ed3223e-a604-410e-93d4-016580f49093
-# ╠═390c7839-618d-4ade-b9be-ee9ed09a77aa
+# ╟─390c7839-618d-4ade-b9be-ee9ed09a77aa
 # ╠═ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
 # ╠═e2e8ed00-f53f-476c-ab5f-95b9ec2f5094
+# ╠═e21b9d37-941c-4f2c-9bdf-956964428f90
 # ╠═0a911687-aff4-4c77-8def-084293329f35
 # ╠═ff58b0b8-2519-430e-8343-af9a5adcb135
 # ╟─985718e8-7ed7-4c5a-aa13-29462e52d709
@@ -1626,8 +1695,8 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─8528e15f-cce7-44d7-ac17-432f92cc5f53
 # ╠═dd4f0f2a-03cc-400a-8e3f-45aa9eb7de87
 # ╠═ed7941c4-0485-4d84-ad5b-383eb5cae70a
+# ╟─b403fcdb-24e4-4120-a87a-697ed46f36b8
 # ╟─a6afe118-dcbd-4126-8646-c7268acfacf3
-# ╠═9f549296-ba92-4656-a117-b5ce2f7ad102
 # ╠═78cf4646-c373-4688-b1ac-92ed5f922e3c
 # ╟─a60ce05e-8d92-4172-b4c1-ac3221c54fe5
 # ╟─24374b7a-ce77-45f0-a7a0-c47a224a0b06
@@ -1642,10 +1711,10 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─ed3609cb-8483-4184-a385-dca307d13f17
 # ╟─8139166e-42f9-41c3-a360-50d3d4e5ee86
 # ╟─44d91c2e-8082-4a90-89cc-81aba783d5ac
-# ╟─58d0610b-1739-4260-8d16-5a31ba362d69
+# ╠═58d0610b-1739-4260-8d16-5a31ba362d69
 # ╟─d9dee38e-6036-46b8-bc06-e545baa06789
-# ╟─e58ec04f-023a-4e00-98b8-f9ae85ca506f
-# ╟─80d2b5db-792a-42f9-b9c2-91d0e18cfcfb
+# ╠═e58ec04f-023a-4e00-98b8-f9ae85ca506f
+# ╠═80d2b5db-792a-42f9-b9c2-91d0e18cfcfb
 # ╟─b1ae3b4d-59ca-420f-a1a0-dc698b52e5b0
 # ╟─b1ef2a89-27db-4f21-a2e3-fd6356c394da
 # ╟─4dae93b2-be63-4ee9-bc1e-871a31ade811
@@ -1654,10 +1723,10 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╠═2d51f54b-4cff-4253-b17f-217e3261f36d
 # ╠═fdaeafb6-e29f-41f8-8468-9c2b03b9eed7
 # ╟─2e631f58-6a4b-4c6d-86ad-b748fd2d463a
-# ╠═a395374d-5897-4764-8499-0ebe7f2b4239
+# ╟─a395374d-5897-4764-8499-0ebe7f2b4239
 # ╟─7db215d7-420e-435b-8889-43c4fff150e0
 # ╠═291624ee-5e68-4dfb-9550-dd62e80afc29
-# ╠═9a26c94f-938a-44ab-9f7e-0a9798879fb8
+# ╠═c156aa60-a5e5-4f10-8928-e8ffabd5456b
 # ╟─8b485112-6b1a-4b38-af91-deb9b79527e0
 # ╟─25edaf7b-4051-4934-b4ad-a4655698a6c7
 # ╟─3fe2135d-9866-4367-8faa-56cdb42af7ed
