@@ -11,7 +11,7 @@ export Air, N2, Ar, H2, CO2, CO, H2O, CH4
 
 include("modelprops.jl")
 #export AbstractModelData, ModelData, RePrPe, kbed, hsf, DK_eff
-export AbstractModelData, RePrPe, kbed, hsf, DK_eff
+export AbstractModelData, RePrPe, kbed, kbed_VDI_flattening, lambda_eff_AC, hsf, DK_eff
 
 
 include("kinetics.jl")

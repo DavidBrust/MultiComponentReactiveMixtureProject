@@ -109,6 +109,7 @@ S3P = KineticsData{typeof(RRS3P)}()
 # R1: CH4 + H2O = CO + 3 H2
 # R2: CO + H2O = CO2 + H2
 # R3: CH4 + 2 H2O = CO2 + 4 H2
+
 # temporary variables
 ng = 6; gnames = [:CO, :H2, :CH4, :H2O, :CO2, :N2]; gn = Dict(1:ng .=> gnames); nr = 3; rnames = [:R1, :R2, :R3]; rn = Dict(1:nr .=> rnames);
 XuFroment1989 = KineticsData{typeof(RRXuFroment)}(

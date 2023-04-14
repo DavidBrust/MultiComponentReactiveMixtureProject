@@ -107,6 +107,30 @@ function kbed!(kbed,ϕ,λs,λf)
 	kbed[1] = 1.0-sqrt(1.0-ϕ)+sqrt(1.0-ϕ)*kc
 end
 
+# mostly equivalent to VDI Heat Atlas 2010, ch. D6.3 eqs. (5a-5e). with addition
+# of flattening coefficient ψ, that might be relevant for sintered materials
+function kbed_VDI_flattening(data,λf)
+	(;ϕ,ψ,λs) = data
+	B=1.25*((1.0-ϕ)/ϕ)^(10.0/9.0)
+	kp=λs/λf
+	N=1.0-(B/kp)
+	kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
+	1 - sqrt(1-ϕ) + sqrt(1-ϕ)*(ψ*kp+(1-ψ)*kc)
+end
+
+# effective thermal conductivity for porous materials with random structure
+# as proposed by Andrii Cheilytko (Andrii.Cheilytko@dlr.de)
+function lambda_eff_AC(data,λf)
+	(;ϕ,λs) = data
+    # contact angle between particles in packing
+	ky=1/sin(45*π/180)
+    # initial version, developed for unordered foams
+	# Ψ=ky*(1-ϕ)*(1-λf/λs+sqrt((1-λf/λs)^2+4))/2+ky*ϕ*(1-λs/λf+sqrt((1-λs/λf)^2+4))/2
+    # version developed for open volumetric receivers with open channel structure
+    Ψ=1/ky*(ϕ-1)*(λs-λf)/(λs*λf)*(λf*(ϕ-1)-λs*ϕ)
+	λeff = (λs*λf/(λs*ϕ+λf*(1-ϕ)))*(ϕ*λs/λf+(1-ϕ)+Ψ)*(ϕ+λf/λs*(1-ϕ)+Ψ)/(ϕ*λs/λf+2*Ψ+(1-ϕ)*λf/λs+1)
+end
+
 #"""
 #When working with a heterogeneous phase model (separate energy balances for both fluid and porous solid material), the exchange of energe between the phases can be described by an interfacial heat transfer coefficient. It can be calculated according to:
 #
