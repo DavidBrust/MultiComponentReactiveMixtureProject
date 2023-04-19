@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.22
+# v0.19.24
 
 using Markdown
 using InteractiveUtils
@@ -20,7 +20,7 @@ begin
 	Pkg.activate(joinpath(@__DIR__,".."))
 	
 	using LessUnitful
-	using Plots
+	using Plots, LaTeXStrings
 	using PlutoUI
 	using Colors
 	using Statistics
@@ -29,6 +29,15 @@ begin
 	using FixedBed
 	
 end;
+
+# ╔═╡ 0fa3775d-4957-4644-8c9f-039a27b895b1
+begin
+	scalefontsizes()
+	scalefontsizes(1.3)
+	plot_font = "Computer Modern"
+	default(fontfamily=plot_font,
+		linewidth=2, framestyle=:box, label=nothing, grid=false)
+end
 
 # ╔═╡ f80fa3a7-a0f6-40b0-95eb-505502f770a6
 begin
@@ -116,8 +125,27 @@ function kbed_VDI(data,λf)
 	1.0-sqrt(1.0-ϕ)+sqrt(1.0-ϕ)*kc
 end
 
-# ╔═╡ 643b3f87-9283-4174-be00-12fcea4e9984
-@bind ψ Slider(range(0,1,length=101), show_value=true, default=0.26)
+# ╔═╡ 8c13c9a2-3859-4eac-9732-adae7da2fab3
+md"""
+# Effective thermal conductivity AC 2
+Andrii proposed a new calculation approcah for $\lambda_{\text{eff}}$ that was originally developed for open volumetric receivers with open channel structure.
+"""
+
+# ╔═╡ 12fffc7d-ae4d-4988-8051-a75a605b8ad2
+md"""
+```math
+\lambda_{\text{eff}} = \frac{\frac{\lambda_f \lambda_s}{\lambda_s \phi + \lambda_f(1- \phi)}}{\frac{\lambda_s}{\lambda_f}\phi + 2 \psi + \frac{\lambda_f}{\lambda_s}(1-\phi)+1} \left[ \frac{\lambda_s}{\lambda_f} \phi +(1-\phi) + \psi \right] \left[ \phi + \frac{\lambda_f}{\lambda_s} (1-\phi) + \psi \right]
+
+```
+"""
+
+# ╔═╡ 294e2e7c-6926-4ed6-a2a5-27ca024170b6
+md"""
+with the geometry dependent parameter
+```math
+\psi=\frac{1}{k_y}(\phi-1)\frac{\lambda_s-\lambda_f}{\lambda_s \lambda_f}[\lambda_f(\phi-1) -\lambda_s\phi]
+```
+"""
 
 # ╔═╡ 26f7b04c-4e3a-42e5-ae27-c6ede74a77cb
 function lambda_eff_AC(data,λf)
@@ -130,6 +158,9 @@ function lambda_eff_AC(data,λf)
     Ψ=1/ky*(ϕ-1)*(λs-λf)/(λs*λf)*(λf*(ϕ-1)-λs*ϕ)
 	λeff = (λs*λf/(λs*ϕ+λf*(1-ϕ)))*(ϕ*λs/λf+(1-ϕ)+Ψ)*(ϕ+λf/λs*(1-ϕ)+Ψ)/(ϕ*λs/λf+2*Ψ+(1-ϕ)*λf/λs+1)
 end
+
+# ╔═╡ 643b3f87-9283-4174-be00-12fcea4e9984
+@bind ψ Slider(range(0,1,length=101), show_value=true, default=0.26)
 
 # ╔═╡ b8835dc4-a71c-4e50-b090-6ece3bd8cc71
 Base.@kwdef mutable struct ModelData <:AbstractModelData
@@ -200,8 +231,11 @@ end;
 # ╔═╡ 15d388f1-0258-481d-a902-3292f40b11b0
 let
 	data=ModelData()
+	(;Tamb)=data
+	#λf=thermcond_gas(Air, Tamb)
 	λf=0.021
 	lambda_eff_AC(data,λf)
+	#kbed_VDI_flattening(data,λf,ψ)*λf
 end
 
 # ╔═╡ 3b0dd4c8-1a6c-48e0-9864-e3010c6f8a51
@@ -211,7 +245,7 @@ let
 	λbed_VDI=zeros(lp)
 	λbed_VDI_flattening=zeros(lp)
 	λeff_AC=zeros(lp)
-	λeff_tight_backfill=zeros(lp)
+	#λeff_tight_backfill=zeros(lp)
 	λeff_schuetz=zeros(lp)
 	
 	(;Tamb,λs,ϕ)=ModelData()
@@ -221,16 +255,16 @@ let
 		λbed_VDI[i] = kbed_VDI(data,λf)*λf
 		λbed_VDI_flattening[i] = kbed_VDI_flattening(data,λf,ψ)*λf
 		λeff_AC[i] = lambda_eff_AC(data,λf)
-		λeff_tight_backfill[i] = lambda_eff_tight_backfill(data,λf)
+		#λeff_tight_backfill[i] = lambda_eff_tight_backfill(data,λf)
 		λeff_schuetz[i] = lambda_eff_schuetz(data,λf)
 	end
 	
 
-	p=plot(xguide="Porosity / %", yguide="Effective thermal conductivity / W m-1 K-1", legend=:outertopright)
+	p=plot(xguide="Porosity / %", yguide=L"\lambda_\textrm{eff}~/~\mathrm{W}(\mathrm{m~K})^{-1}", legend=:outertopright)
 	plot!(p,100*phis,λbed_VDI, label="VDI heat atlas", ls=:auto)
 	plot!(p,100*phis,λbed_VDI_flattening, label="VDI heat atlas\nflattening", ls=:auto)
 	plot!(p,100*phis,λeff_AC, label="Cheilytko", ls=:auto)
-	plot!(p,100*phis,λeff_tight_backfill, label="Chudnovsky\nTight Backfill", ls=:auto)
+	#plot!(p,100*phis,λeff_tight_backfill, label="Chudnovsky\nTight Backfill", ls=:auto)
 	plot!(p,100*phis,λeff_schuetz, label="Schuetz", ls=:auto)
 
 	plot!(p,[100ϕ_meas],[λeff_meas_mean],yerror=[λeff_meas_std], m=:circle, label="λeff exp")
@@ -238,10 +272,10 @@ let
 	lens!(p,[33, 39], [0.37, 0.41], inset = (1, bbox(0.3, 0.15, 0.3, 0.3)))
 
 	hline!(p,100*phis,[λs,λs],ls=:dash,c=:black,label=:none)
-	annotate!(p,90, 0.95*λs, "λs="*string(λs))
+	annotate!(p,88, 0.95*λs, text(L"\lambda_{\textrm{s}}="*string(λs),plot_font,12))
 
 	hline!(p,100*phis,[λf,λf],ls=:dash,c=:black,label=:none)
-	annotate!(p,15, 0.07, "λf="*string(round(λf, sigdigits=2)))
+	annotate!(p,13, 0.07, text(L"\lambda_{\textrm{f}}="*string(round(λf, sigdigits=2)),plot_font,12) )
 
 	#savefig(p, "../img/out/lambda_eff_comp.pdf")
 end
@@ -251,6 +285,7 @@ ModelData()
 
 # ╔═╡ Cell order:
 # ╠═21925980-d94a-11ed-0a02-0fb6d3fd6888
+# ╠═0fa3775d-4957-4644-8c9f-039a27b895b1
 # ╠═f80fa3a7-a0f6-40b0-95eb-505502f770a6
 # ╟─5779b6f9-0d08-4111-8131-5a95c8290da2
 # ╠═cb9ae049-3cff-4844-b85b-e465aaf58385
@@ -260,9 +295,12 @@ ModelData()
 # ╠═15e11af7-1f81-4d06-83b9-f7acc6c2ad97
 # ╠═81d9a193-3683-44d1-899a-810e02bdb1c7
 # ╠═81bf69c2-7ef1-4964-a852-c13ea51b3785
-# ╠═643b3f87-9283-4174-be00-12fcea4e9984
+# ╟─8c13c9a2-3859-4eac-9732-adae7da2fab3
+# ╟─12fffc7d-ae4d-4988-8051-a75a605b8ad2
+# ╠═294e2e7c-6926-4ed6-a2a5-27ca024170b6
 # ╠═26f7b04c-4e3a-42e5-ae27-c6ede74a77cb
 # ╠═15d388f1-0258-481d-a902-3292f40b11b0
+# ╠═643b3f87-9283-4174-be00-12fcea4e9984
 # ╠═3b0dd4c8-1a6c-48e0-9864-e3010c6f8a51
 # ╠═2374882b-ef7e-47f3-911e-1d929febc851
 # ╠═b8835dc4-a71c-4e50-b090-6ece3bd8cc71
