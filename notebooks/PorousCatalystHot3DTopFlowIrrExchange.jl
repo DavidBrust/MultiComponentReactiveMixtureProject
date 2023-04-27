@@ -81,9 +81,13 @@ function prism_sq_(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data
 	W=collect(0:hw:(w/2.0))
 	#hh=h/5.0*2.0^(-nref)
 	#H=collect(0:hh:h)
-	hmin=h/100.0
-    hmax=h/5.0
- 	H=geomspace(0.0,h,hmax,hmin)
+	#hmin=h/100.0
+    #hmax=h/5.0
+ 	#H=geomspace(0.0,h,hmax,hmin)
+	zCL=h-cath
+	Hfrit=collect(0:h/20:zCL)
+	HCL=collect(zCL:h/100:h)
+	H=glue(Hfrit,HCL)
     
 	grid=simplexgrid(W,W,H)
 	
@@ -146,19 +150,6 @@ md"""
 The above form of the DGM neglects thermal diffusion and is formulated for a mixture of ideal gases. The driving force for transport of species $i$ relative to the other species (diffusive transport) then reduces to $\nabla p_i$. Transport of species due to the viscous flow through the porous material in the direction of a negative pressure gradient is captured by D'arcy law (convective transport).
 """
 
-# ╔═╡ b403fcdb-24e4-4120-a87a-697ed46f36b8
-md"""
-```math
-\begin{align}
-- \nabla \left(\lambda_{\text{eff}} \nabla T - c_p \left( T-T_{\text{ref}} \right) \frac{p}{RT} \vec u_{\text D}\right) + R_{\text{th}} &= 0
-
-\end{align}
-
-```
-
-where ``\lambda_{\text{eff}}`` is the effective thermal conductivity in ``\frac{\text{W}}{\text{mK}}``, ``c_p`` is the isobaric heat capacity of an ideal gas in ``\frac{\text J}{\text{molK}}``, ``\vec u_{\text D}`` is the D'arcy velocity in ``\frac{\text m}{\text s}`` and ``R_{\text{th}}`` is the volumetric heat source/sink term ``\frac{\text{W}}{\text{m}^3}`` from chemical reactions.
-"""
-
 # ╔═╡ a6afe118-dcbd-4126-8646-c7268acfacf3
 md"""
 The numerical fluxes $\textbf{J}$ are computed using the backslash operator (Julia solver for linear systems) 
@@ -177,13 +168,17 @@ function reaction(f,u,node,data)
 
 	
 	if node.region == 2 && data.isreactive # catalyst layer
-		(;iT,Fluids,kinpar,mcats) = data
+		(;iT,Fluids,kinpar,lcats) = data
 		(;rni,nuij,ΔHi) = kinpar
 		
 		pi = u[1:ng]./ufac"bar"
 		# negative sign: sign convention of VoronoiFVM: source term < 0 
-		# ri returns reaction rate in mol/(h gcat)
-		RR = -mcats*ri(kinpar,u[iT],pi)*ufac"mol/hr"*ufac"1/g"
+		# for Xu/Froment 1989 kinetics, ri returns reaction rate in mol/(h gcat)
+		unitc=1.0
+		if kinpar == XuFroment1989
+			unitc=ufac"mol/hr"*ufac"1/g"
+		end
+		RR = -lcats*ri(kinpar,u[iT],pi)*unitc
 		## Xu & Froment 1989 kinetics
 		# R1: CH4 + H2O = CO + 3 H2
 		# R2: CO + H2O = CO2 + H2
@@ -370,7 +365,6 @@ const uc_window = SurfaceOpticalProps(
 # ╔═╡ 2d51f54b-4cff-4253-b17f-217e3261f36d
 #  optical parameters for catalyst layer in upper chamber (uc)
 const uc_cat = SurfaceOpticalProps(
-	# quartz glass windows
 	alpha_IR=0.7, # measurement (ideally at high T) integrated over IR
 	tau_IR=0.0, # opaque surface
 	alpha_vis=0.7, # measurement (ideally at high T) integrated over vis
@@ -380,7 +374,6 @@ const uc_cat = SurfaceOpticalProps(
 # ╔═╡ fdaeafb6-e29f-41f8-8468-9c2b03b9eed7
 # optical parameters for uncoated frit in upper chamber (uc)
 const uc_frit = SurfaceOpticalProps(
-	# quartz glass windows
 	alpha_IR=0.2, # measurement (ideally at high T) integrated over IR
 	tau_IR=0.0, # opaque surface
 	alpha_vis=0.2, # measurement (ideally at high T) integrated over vis
@@ -922,8 +915,8 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	
 	# catalyst / chemistry data
 	# kinetic parameters, S3P="simple 3 parameter" kinetics fit to UPV lab scale experimental data
-	# kinpar::AbstractKineticsData = S3P
-	kinpar::AbstractKineticsData = XuFroment1989
+	kinpar::AbstractKineticsData = S3P
+	#kinpar::AbstractKineticsData = XuFroment1989
 	
 	# number of gas phase species
 	ng::Int64		 		= kinpar.ng
@@ -945,9 +938,11 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 		x/sum(x)
 	end # inlet composition
 
+	mcat::Float64=3.3*ufac"g" # total catalyst loading
+	#mcat::Float64=200.0*ufac"mg" 
 	# volume specific cat mass loading, UPV lab scale PC reactor
-	#mcats::Float64 =1234.568*ufac"kg/m^3"
-	mcats::Float64=20.0*ufac"kg/m^3" # madium scale loading
+	lcats::Float64 =1000.0*ufac"kg/m^3"
+	#mcats::Float64=80.0*ufac"kg/m^3" # 200 mg cat total loading, 250μm CL 
 	isreactive::Bool = 1
 	#isreactive::Bool = 0
 		
@@ -961,7 +956,8 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	# frit thickness (applies to 2D & 3D)
 	h::Float64=0.5*ufac"cm"
 	# catalyst layer thickness (applies to 2D & 3D)
-	cath::Float64 = 500.0*ufac"μm"
+	#cath::Float64 = 500.0*ufac"μm"
+	cath::Float64 = 250.0*ufac"μm"
 
 	# upper and lower chamber heights for calculation of conduction b.c.
 	uc_h::Float64=17.0*ufac"mm"
@@ -1027,6 +1023,8 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	pn::Float64 = 1.0*ufac"bar"
 	Tn::Float64 = 273.15*ufac"K"
 
+	#Qflow::Float64=0.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
+	#Qflow::Float64=340.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
 	Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
 	#Qflow::Float64=50000.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
 
@@ -1041,17 +1039,22 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	
 end;
 
-# ╔═╡ dd4f0f2a-03cc-400a-8e3f-45aa9eb7de87
+# ╔═╡ 40df8b89-d39c-447e-839a-4e7fd2521c9a
 let
-	data=ModelData(λs=1.13*ufac"W/(m*K)")
-	(;Tamb,ϕ)=data
-	#λf=thermcond_gas(Air, Tamb)
-	λf=0.021
-	λeff_VDI=kbed(data,λf)*λf
-	
-	λeff_VDI_flattening=kbed_VDI_flattening(data,λf)*λf
+	(;kinpar,p,X0)=ModelData(kinpar=XuFroment1989)
+	T=400.0+273.15
+	p/ufac"bar"
+	pi=p/ufac"bar"*X0
+	ri(kinpar,T,pi)*ufac"mol/hr"*ufac"1/g"
+end
 
-	#λeff_AC = lambda_eff_AC(data,λf)
+# ╔═╡ 0da21fea-fbab-4fc0-958c-234d05cc0c71
+let
+	(;kinpar,p,X0)=ModelData(kinpar=S3P)
+	T=800.0+273.15
+	p/ufac"bar"
+	pi=p/ufac"bar"*X0
+	ri(kinpar,T,pi)
 end
 
 # ╔═╡ b2df1087-6628-4889-8cd6-c5ee7629cd93
@@ -1062,6 +1065,11 @@ md"""
 # ╔═╡ 2790b550-3105-4fc0-9070-d142c19678db
 md"""
 ## Partial Pressure Plot
+"""
+
+# ╔═╡ 31add356-6854-43c5-9ebd-ef10add6cc3d
+md"""
+### CO molar fraction in Cross-section
 """
 
 # ╔═╡ bd7552d2-2c31-4834-97d9-ccdb4652242f
@@ -1128,6 +1136,20 @@ function MoleFlows(sol,sys,data)
 	Itop=integrate(sys,top,sol; boundary=true)[:,[Γ_top_frit,Γ_top_cat]] 
 	Itop=sum(Itop, dims=2)
 	Ibot[1:data.ng],Itop[1:data.ng]
+end
+
+# ╔═╡ ed0c6737-1237-40d0-81df-32d6a842cbb0
+function cat_mass(data)
+	data.mcat
+end
+
+# ╔═╡ 7f2276d5-bb78-487c-868a-0486595d0113
+function avg_RR(sol,sys,data)
+	# sign convention: source term <0
+	PRs=-integrate(sys,reaction,sol;)[:,2] # mol/s
+	# catalyst mass specific prodcution rate of CO
+
+	PRs[1] / cat_mass(data) # mol/ (s kgcat)
 end
 
 # ╔═╡ a6e61592-7958-4094-8614-e77446eb2223
@@ -1351,17 +1373,12 @@ function main(;data=ModelData())
 	function pre(sol,par)
 
 		# set glass emperature
-		#Tbot_avg,Tfrit_avg,Tcat_avg = T_avg(sol,sys,grid,data)[[Γ_bottom,Γ_top_frit,Γ_top_cat]]
-		#data.Tglass = WindowTemperature(data, Tcat_avg, Tfrit_avg)
 		data.Tglass = WindowTemperature_(sol,sys,data)
 
 		# set bottom plate temperature
-		#MoleFrac_avg=X_avg_bottom(sol,sys,grid,data)
-		#data.Tplate = PlateTemperature(data, Tbot_avg, MoleFrac_avg)
 		data.Tplate = PlateTemperature_(sol,sys,data)
 		
-		 
-	 	# iteratively adapt bottom outflow boundary condition
+		# iteratively adapt bottom outflow boundary condition
 	 	function Intbot(f,u,bnode,data)			
 	 		X=zeros(eltype(u), ng)
 	 		mole_frac!(bnode,data,X,u)
@@ -1386,12 +1403,17 @@ function main(;data=ModelData())
 
 				 
 				
-	 	# specific catalyst loading
+	 	# calculate volume specific catalyst loading lcat in kg/ m^3
+		(;catwi,cath,mcat)=data
+		Vcat = catwi^2*cath # m^3
+		lcat = mcat/Vcat # kg/m^3"
 	 	#mcats=[10.0, 1300.0]*ufac"kg/m^3"
-		 mcats=[10.0, 20.0]*ufac"kg/m^3"
-	 	data.mcats = minimum(mcats) + par*(maximum(mcats)-minimum(mcats))
+		 #mcats=[10.0, 20.0]*ufac"kg/m^3"
+		lcats=[10.0, lcat]*ufac"kg/m^3"
+	 	data.lcats = minimum(lcats) + par*(maximum(lcats)-minimum(lcats))
 
 	 	# irradiation flux density
+		#Glamps=[1.0, 50.0]*ufac"kW/m^2"
 	 	Glamps=[1.0, 100.0]*ufac"kW/m^2"
 	 	data.Glamp = minimum(Glamps) + par*(maximum(Glamps)-minimum(Glamps))
 	 end
@@ -1452,6 +1474,17 @@ begin
 end;
   ╠═╡ =#
 
+# ╔═╡ eb6b5e4e-977e-4f2f-a7eb-38f8798f126e
+#=╠═╡
+let
+	(;h,cath) = data_embed
+	zCL=h-cath
+	Hfrit=collect(0:h/20:zCL)
+	HCL=collect(zCL:h/100:h)
+	glue(Hfrit,HCL)
+end
+  ╠═╡ =#
+
 # ╔═╡ 985718e8-7ed7-4c5a-aa13-29462e52d709
 # ╠═╡ skip_as_script = true
 #=╠═╡
@@ -1465,9 +1498,14 @@ Cutplane at ``z=`` $(@bind zcut PlutoUI.Slider(range(0.0,data_embed.h,length=101
 #=╠═╡
 let
 	vis=GridVisualizer(resolution=(600,400),zoom=1.9)
-	gridplot!(vis, grid_fun(ModelData(),nref=0,cath=2*ufac"mm"), zplane=zcut)
+	gridplot!(vis, grid_fun(ModelData()), zplane=zcut)
 	reveal(vis)
 end
+  ╠═╡ =#
+
+# ╔═╡ af43e849-0198-4ce6-9e7c-8164ef9c61ff
+#=╠═╡
+data_embed.kinpar
   ╠═╡ =#
 
 # ╔═╡ bcaf83fb-f215-428d-9c84-f5b557fe143f
@@ -1490,7 +1528,7 @@ let
 	#vis=GridVisualizer(resolution=(600,400), title="Temperature °C", Plotter=PyPlot)
     vis=GridVisualizer(resolution=(600,400), title="Temperature °C")
 	
-	scalarplot!(vis, grid, sol[iT,:].- 273.15, show=true)
+	scalarplot!(vis, grid, sol[iT,:].- 273.15, levels= 10, levelalpha=1.0, show=true)
 
 	reveal(vis)
 	#save("../img/out/Temeprature.png", reveal(vis), Plotter=PyPlot)
@@ -1562,6 +1600,26 @@ Chemical species flows through porous frit from bottom and top:
 | $(data_embed.gn[5]) | $(abs(round(ndot_top[5]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_bot[5]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
 | $(data_embed.gn[6]) | $(abs(round(ndot_top[6]/ufac"mol/hr")))  |   $(round(ndot_bot[6]/ufac"mol/hr"))   |  mol/hr  |
 
+
+"""
+  ╠═╡ =#
+
+# ╔═╡ 84093807-8ea9-4290-8bf7-bd94c5c28691
+#=╠═╡
+md"""
+### Total reaction turnover
+We obtain the total CO production rate (mol/hr) in the flow reactor from integration of the reaction rate over the domain (volume) of the catalyst layer. When dividing by the total catalyst mass in the reactor, we obtain the average catalyst mass specific reaction rate for rWGS.
+
+__Total catalyst mass__ in the catalyst layer:
+- __$(round(cat_mass(data_embed)/ufac"g",sigdigits=2))__ g
+
+Average catalyst mass specific __reaction rate__:
+- __$(round(avg_RR(sol,sys,data_embed)/ufac"mol/hr/g",sigdigits=2))__ mol/(__hr__ $\cdot$ __g__cat)
+- __$(round(avg_RR(sol,sys,data_embed),sigdigits=2))__ mol/(__s $\cdot$ kg__cat)
+
+The obtained values for average catalyst mass specific reaction rates for the rWGS reaction look reasonable when comparing with other photo-thermal catalysts operated at high light concentrations:
+__Lou, D., et al. (2021).__ "A core-shell catalyst design boosts the performance of photothermal reverse water gas shift catalysis." Science China Materials 64(9): 2212-2220.
+	
 
 """
   ╠═╡ =#
@@ -1653,6 +1711,16 @@ function CutPlane(data,sol)
 
 	sol_p, grid_2D
 end
+
+# ╔═╡ 60b475d1-219e-4037-bd36-e0671cfa1893
+#=╠═╡
+let
+	data=data_embed
+	(;gni,ip)=data
+	sol_xz, grid_xz = CutPlane(data_embed,sol)
+	scalarplot(grid_xz, sol_xz[gni[:CO]] ./sol_xz[ip], show=true)
+end
+  ╠═╡ =#
 
 # ╔═╡ 30393c90-298c-412d-86ce-e36106613d35
 #=╠═╡
@@ -1761,10 +1829,20 @@ md"""
 # ╔═╡ 47161886-9a5c-41ac-abf5-bbea82096d5a
 function STCefficiency(sol,sys,data,grid)
 	ndot_bot,ndot_top = MoleFlows(sol,sys,data)
+	# R1 = RWGS in S3P kinetic model
 	# R2 = RWGS in Xu & Froment kinetic model
-	STC_Atot = ndot_bot[data.gni[:CO]] * -data.kinpar.ΔHi[:R2] / (data.Glamp*data.Ac/4)
+	(;gni,kinpar,Glamp,Ac) = data
+	DHi = 0.0
+	if kinpar == XuFroment1989
+		DHi = kinpar.ΔHi[:R2]
+	elseif kinpar == S3P
+		DHi = kinpar.ΔHi[:R1]
+	end
+	#STC_Atot = ndot_bot[data.gni[:CO]] * -data.kinpar.ΔHi[:R2] / (data.Glamp*data.Ac/4)
+	STC_Atot = ndot_bot[gni[:CO]] * -DHi / (Glamp*Ac/4)
 	catA, _ = CatDims(grid)
-	STC_Acat = ndot_bot[data.gni[:CO]] * -data.kinpar.ΔHi[:R2] / (data.Glamp*catA)
+	#STC_Acat = ndot_bot[data.gni[:CO]] * -data.kinpar.ΔHi[:R2] / (data.Glamp*catA)
+	STC_Acat = ndot_bot[gni[:CO]] * -DHi / (Glamp*catA)
 	STC_Atot, STC_Acat
 end
 
@@ -1871,6 +1949,7 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─390c7839-618d-4ade-b9be-ee9ed09a77aa
 # ╠═ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
 # ╠═e2e8ed00-f53f-476c-ab5f-95b9ec2f5094
+# ╠═eb6b5e4e-977e-4f2f-a7eb-38f8798f126e
 # ╠═e21b9d37-941c-4f2c-9bdf-956964428f90
 # ╠═0a911687-aff4-4c77-8def-084293329f35
 # ╠═ff58b0b8-2519-430e-8343-af9a5adcb135
@@ -1882,11 +1961,12 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─8f4843c6-8d2b-4e24-b6f8-4eaf3dfc9bf0
 # ╟─66b55f6b-1af5-438d-aaa8-fe4745e85426
 # ╟─8528e15f-cce7-44d7-ac17-432f92cc5f53
-# ╠═dd4f0f2a-03cc-400a-8e3f-45aa9eb7de87
 # ╠═ed7941c4-0485-4d84-ad5b-383eb5cae70a
-# ╟─b403fcdb-24e4-4120-a87a-697ed46f36b8
 # ╟─a6afe118-dcbd-4126-8646-c7268acfacf3
 # ╠═78cf4646-c373-4688-b1ac-92ed5f922e3c
+# ╠═40df8b89-d39c-447e-839a-4e7fd2521c9a
+# ╠═0da21fea-fbab-4fc0-958c-234d05cc0c71
+# ╠═af43e849-0198-4ce6-9e7c-8164ef9c61ff
 # ╟─a60ce05e-8d92-4172-b4c1-ac3221c54fe5
 # ╟─24374b7a-ce77-45f0-a7a0-c47a224a0b06
 # ╟─4865804f-d385-4a1a-9953-5ac66ea50057
@@ -1897,7 +1977,7 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─906ad096-4f0c-4640-ad3e-9632261902e3
 # ╟─39e74955-aab6-4bba-a1b8-b2307b45e673
 # ╟─6798d5e2-b8c7-4f54-aa71-6ea1ccab78fb
-# ╟─ed3609cb-8483-4184-a385-dca307d13f17
+# ╠═ed3609cb-8483-4184-a385-dca307d13f17
 # ╟─8139166e-42f9-41c3-a360-50d3d4e5ee86
 # ╟─44d91c2e-8082-4a90-89cc-81aba783d5ac
 # ╟─58d0610b-1739-4260-8d16-5a31ba362d69
@@ -1945,6 +2025,8 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╠═3bd80c19-0b49-43f6-9daa-0c87c2ea8093
 # ╟─2790b550-3105-4fc0-9070-d142c19678db
 # ╠═bea97fb3-9854-411c-8363-15cbef13d033
+# ╟─31add356-6854-43c5-9ebd-ef10add6cc3d
+# ╠═60b475d1-219e-4037-bd36-e0671cfa1893
 # ╠═bd7552d2-2c31-4834-97d9-ccdb4652242f
 # ╟─e81e803a-d831-4d62-939c-1e4a4fdec74f
 # ╟─c4521a0c-c5af-43cd-97bc-a4a7a42d27b1
@@ -1955,6 +2037,9 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─b06a7955-6c91-444f-9bf3-72cfb4a011ec
 # ╠═6ae6d894-4923-4408-9b77-1067ba9e2aff
 # ╠═7ab38bc2-9ca4-4206-a4c3-5fed673557f1
+# ╟─84093807-8ea9-4290-8bf7-bd94c5c28691
+# ╠═ed0c6737-1237-40d0-81df-32d6a842cbb0
+# ╠═7f2276d5-bb78-487c-868a-0486595d0113
 # ╟─a6e61592-7958-4094-8614-e77446eb2223
 # ╟─2739bcff-3fb0-4169-8a1a-2b0a14998cec
 # ╠═30393c90-298c-412d-86ce-e36106613d35
