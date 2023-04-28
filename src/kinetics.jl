@@ -58,7 +58,8 @@ Base.@kwdef mutable struct KineticsData{F<:Function} <:AbstractKineticsData
         [1 1 0], # CO2
         [0 0 0], # N2
     )
-    RR::F = RRS3P # RR function
+    # RR::F = RRS3P # RR function
+    RR::F = RRS3P_ # RR function
     # values of reaction rate constants @ Tref
 	ki_ref::Dict{Symbol,Float64} = Dict(:R1=>-1.51715, :R2=>-11.2379, :R3=>-Inf)
     Tki_ref::Dict{Symbol,Float64} = Dict( rnames .=> [648.0, 648.0, 648.0]*ufac"K")
@@ -90,6 +91,28 @@ function RRS3P(kindata::AbstractKineticsData,T,p)
 	] / DEN(kindata,T,p)^2
 end
 
+function RRS3P_(i::Int,kindata::AbstractKineticsData,T,p)
+    n=kindata.gni
+    # r=kindata.rni
+	# K=Ki(kindata, T)
+	# ki(kindata,T) .* @views [
+	# 	1/p[n[:H2]]*(p[n[:CO]]*p[n[:H2O]]-p[n[:H2]]*p[n[:CO2]]/K[r[:R1]]),
+	# 	1/p[n[:H2]]^3.5*(p[n[:CH4]]*p[n[:H2O]]^2-p[n[:H2]]^4*p[n[:CO2]]/K[r[:R2]]),
+	# 	1/p[n[:H2]]^2.5*(p[n[:CH4]]*p[n[:H2O]]-p[n[:H2]]^3*p[n[:CO]]/K[r[:R3]])
+	# ] / DEN(kindata,T,p)^2
+
+    pexp=zero(eltype(p))
+    if i==1
+        pexp = 1/p[n[:H2]]*(p[n[:CO]]*p[n[:H2O]]-p[n[:H2]]*p[n[:CO2]]/Keq(i,kindata,T))
+    elseif i==2
+        pexp = 1/p[n[:H2]]^3.5*(p[n[:CH4]]*p[n[:H2O]]^2-p[n[:H2]]^4*p[n[:CO2]]/Keq(i,kindata,T))
+    elseif i==3
+        pexp = 1/p[n[:H2]]^2.5*(p[n[:CH4]]*p[n[:H2O]]-p[n[:H2]]^3*p[n[:CO]]/Keq(i,kindata,T))
+    end
+
+    kpre(i,kindata,T) * pexp / DEN(kindata,T,p)^2
+end
+
 # reaction rate expression for kinetic model of Xu & Froment 1989 (different order of reaction compared to S3P)
 function RRXuFroment(kindata::KineticsData,T,p)
     n=kindata.gni
@@ -102,7 +125,8 @@ function RRXuFroment(kindata::KineticsData,T,p)
 	] / DEN(kindata,T,p)^2
 end
 
-S3P = KineticsData{typeof(RRS3P)}()
+#S3P = KineticsData{typeof(RRS3P)}()
+S3P = KineticsData{typeof(RRS3P_)}()
 
 ## Xu & Froment 1989 kinetics
 # different ordering of the 3 reactions compared to S3P kinetics:
@@ -178,6 +202,14 @@ function Ki(kindata::AbstractKineticsData, T)
 	Ki
 end
 
+function Keq(i,kindata::AbstractKineticsData, T)
+    Ki_ref = kindata.Ki_ref
+    TKi_ref = kindata.TKi_ref
+    ΔHi = kindata.ΔHi
+    rn = kindata.rn
+    Ki_ref[rn[i]] * exp(-ΔHi[rn[i]]/ph"R"*(1.0/T - 1.0/TKi_ref[rn[i]]))
+end
+
 
 # function ki(T,par)
 # 	ki_ref=exp.(par[1])
@@ -202,6 +234,17 @@ function ki(kindata::AbstractKineticsData, T)
         # @. ki_ref*exp(-1000*Ei/ph"R"*(1/T-1/Tki_ref))
     end
 	ki
+end
+
+function kpre(i,kindata::AbstractKineticsData, T)
+
+    ki_ref = kindata.ki_ref
+    Tki_ref = kindata.Tki_ref
+    Ei = kindata.Ei
+    rn = kindata.rn
+
+    exp(ki_ref[rn[i]]) * exp(-Ei[rn[i]]/ph"R"*(1.0/T - 1.0/Tki_ref[rn[i]]))
+
 end
 
 #Species indices:
@@ -266,5 +309,9 @@ end
 
 function ri(kindata::AbstractKineticsData,T,p)
     kindata.RR(kindata,T,p)
+end
+
+function rr(i,kindata::AbstractKineticsData,T,p)
+    kindata.RR(i,kindata,T,p)
 end
 
