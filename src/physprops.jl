@@ -31,9 +31,17 @@ function dynvisc_mix(data, T, x)
         if x[i] > 0
             mumix += x[i] * mu[i] / sumyFij
         end
-    end
+   end
     mumix
 end
+
+#
+# By default, ngas(data) returns data.ng. For the ModelData type from FixAllocations
+# it uses the definition from the notebook
+function ngas(data::Any)
+    data.ng
+end
+
 
 #combined function returning mixture dynamic viscosity as well as thermal conductivity
 # compute them together because they require the calculation of a common intermediate value
@@ -41,25 +49,31 @@ end
 # mixture dynamic viscosity according to Wilke mixing rule
 # mixture thermal conductivity according to mixing rule of Wassiljeva, Mason, and Saxena
 # Poling BE, Prausnitz JM, O’Connell JP (2001) The properties of gases and liquids, 5th ed. McGraw-Hill, New York
-
 function dynvisc_thermcond_mix(data, T, x)
-    ng = data.ng
+    ng = ngas(data)
     Fluid = data.Fluids
-    mumix = 0
-    lambdamix = 0
+
+    #  !!!ALLOC for types stubility & correctness
+    #  !!!ALLOC initialize with zero(eltype) instead of 0.0
+    mumix=zero(eltype(x))
+    lambdamix=zero(eltype(x))
     # mu = zeros(Float64, ng)
     # lambda = zeros(Float64, ng)
     # M = zeros(Float64, ng)
-    mu = zeros(typeof(T), ng)
-    lambda = zeros(typeof(T), ng)
-    M = zeros(typeof(T), ng)
-    for i=1:ng
+
+    
+    # !!!ALLOC Use MVectors with static size information instef of Vector
+    mu=MVector{ngas(data),eltype(x)}(undef)
+    lambda=MVector{ngas(data),eltype(x)}(undef)
+    M=MVector{ngas(data),eltype(x)}(undef)
+
+    for i=1:ngas(data)
         mu[i] = dynvisc_gas(Fluid[i], T)
         lambda[i] = thermcond_gas(Fluid[i], T)
         M[i] = data.Fluids[i].MW
     end
     for i=1:ng
-        sumyFij = 0
+        sumyFij = zero(T)
         for j=1:ng
             Fij = (1+(mu[i]/mu[j])^0.5*(M[j]/M[i])^0.25)^2 / sqrt(8*(1+M[i]/M[j]))
             sumyFij += x[j]*Fij
@@ -71,6 +85,7 @@ function dynvisc_thermcond_mix(data, T, x)
     end
     mumix, lambdamix
 end
+
 
 function dynvisc_gas!(muf, i, Fluid, T)
 	(;A,B,C,D,E) = Fluid.DynVisc
@@ -138,7 +153,7 @@ function heatcap_gas(Fluid, T)
 end
 
 function heatcap_mix(Fluids, T, x)
-    cpmix = 0
+    cpmix = zero(eltype(x))
     ng=length(x)
     for i=1:ng
         cpmix += x[i] * heatcap_gas(Fluids[i], T)

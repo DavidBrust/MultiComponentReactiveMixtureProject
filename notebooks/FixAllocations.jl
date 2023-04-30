@@ -1,18 +1,28 @@
 ### A Pluto.jl notebook ###
-# v0.19.22
+# v0.19.25
 
 using Markdown
 using InteractiveUtils
+
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+end
 
 # ╔═╡ 11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 begin
 	using Pkg
 	Pkg.activate(joinpath(@__DIR__,".."))
-	
+	using Revise
 	using VoronoiFVM
 	using ExtendableGrids, GridVisualize
 	using LinearAlgebra, LinearSolve, LinearSolvePardiso
-	using StrideArrays
+    using StaticArrays
 	using LessUnitful
 	
 	using PlutoVista
@@ -26,7 +36,7 @@ begin
 end;
 
 # ╔═╡ 863c9da7-ef45-49ad-80d0-3594eca4a189
-PlutoUI.TableOfContents(title="Photo-Catalytic Reactor")
+PlutoUI.TableOfContents(title="Photo-Catalytic Reactor",depth=5)
 
 # ╔═╡ 2ed3223e-a604-410e-93d4-016580f49093
 md"""
@@ -110,48 +120,26 @@ The above form of the DGM neglects thermal diffusion and is formulated for a mix
 
 # ╔═╡ a6afe118-dcbd-4126-8646-c7268acfacf3
 md"""
-The numerical fluxes $\textbf{J}$ are computed using the backslash operator (Julia solver for linear systems) 
-
-$\textbf{J} 
+The numerical fluxes $\textbf{J}$ could be computed using the backslash operator (Julia solver for linear systems) 
+``\textbf{J} 
 = 
 M
 \ \backslash\ 
-\textbf{F}$
+\textbf{F}``.
+However, this allocates a return vector (and internally a pivoting vector).
+
+For a non-allocating variant, VoronoiFVM allows to perform `J.=F ; inplace_linsolve!(M,J)`
+
+In order to be stack allocated, temporary arrays as M, F, J shall be created as `MArray` (available from StaticArrays.jl) with size information known at compile time.
+I addition, the call to `inplace_linsolve` needs to be inlined. Conveniently, with Julia 1.8, "call-site  inlining" is available.
+
+An alternative is to use `StrideArray` and `@gc_preserve`, see 
+https://discourse.julialang.org/t/what-is-stridearrays-jl/97146/23
+
+Compared to StrideArrays.jl, StaticArrays.jl is the more mature package. Moreover, `@gc_preserve` dose not work for calls with return values. So it seems to be reasonable to stick to `MArray` and inlining, the more with Julia 1.8, callsite inline is aviablable. 
+
 
 """
-
-# ╔═╡ 78cf4646-c373-4688-b1ac-92ed5f922e3c
-function reaction(f,u,node,data)
-	(;ng,ip,isreactive)=data
-	
-	if node.region == 2 && isreactive # catalyst layer
-		(;iT,mcats,kinpar)=data
-		rni=data.kinpar.rni # reaction indices from names
-				
-		pi = u[1:ng]./ufac"bar"
-		# negative sign: sign convention of VoronoiFVM: source term < 0 
-		# ri returns reaction rate in mol/(h gcat)
-		RR = -mcats*ri(kinpar,u[iT],pi)*ufac"mol/hr"*ufac"1/g"
-		
-		## Xu & Froment 1989 kinetics
-		# 
-		# R1: CH4 + H2O = CO + 3 H2
-		# R2: CO + H2O = CO2 + H2
-		# R3: CH4 + 2 H2O = CO2 + 4 H2
-
-		for i=1:ng
-			f[i] = sum(kinpar.nuij[i,:] .* RR)
-		end
-		
-		# temperature eq. / heat source
-		ΔHi=kinpar.ΔHi
-		f[iT] = -(RR[rni[:R1]]*ΔHi[:R1]+RR[rni[:R2]]*ΔHi[:R2] +RR[rni[:R3]]*ΔHi[:R3])
-	end
-	
-	# ∑xi = 1
-	f[ip]=u[ip]-sum(u[1:ng])
-	
-end
 
 # ╔═╡ a60ce05e-8d92-4172-b4c1-ac3221c54fe5
 md"""
@@ -219,241 +207,27 @@ md"""
 Boundary conditions for the transport of gas phase species cover in and outflow boundary conditions at the bottom and top surfaces of the modelling domain with no-flux conditins applied elsewhere. In the catalyst layer, volumetric catalytic reactions take place.
 """
 
-# ╔═╡ 40906795-a4dd-4e4a-a62e-91b4639a48fa
-function bottom(f,u,bnode,data)
-	if bnode.region==Γ_bottom # bottom boundary
-		(;ng,iT,Eps_ir,Tamb,u0,X0,pn,Tn)=data
-		
-		f[iT] = Eps_ir*ph"σ"*(u[iT]^4 - Tamb^4)
-		
-		for i=1:ng
-			# specify flux at boundary: flow velocity is normal to bot boundary	
-			f[i] = -u0*X0[i]*pn/(ph"R"*data.Tn)
-			
-		end
-	end
-end
-
 # ╔═╡ edd9fdd1-a9c4-4f45-8f63-9681717d417f
 function side(f,u,bnode,data)
 	# side wall boundary condition
 	(;iT,α_w,Tamb)=data
 	
-	boundary_robin!(f,u,bnode;species=iT,region=[Γ_side_back,Γ_side_right], factor=α_w, value=Tamb*α_w)	
+	boundary_robin!(f,u,bnode;species=iT,region=(Γ_side_back,Γ_side_right), factor=α_w, value=Tamb*α_w)	
 end
 
 # ╔═╡ 02b76cda-ffae-4243-ab40-8d0fe1325776
 md"""
-##### Auxiliary functions
+# Auxiliary functions
 """
-
-# ╔═╡ 5dfe1a6e-7515-47bd-90b0-a9cc01f0e883
-function mole_frac(node,data,u::VoronoiFVM.EdgeUnknowns)
-	ng=data.ng
-	sump=zero(eltype(u))
-	X=zeros(eltype(u), ng)
-	for i=1:ng
-		X[i] = 0.5*(u[i,1]+u[i,2])
-		sump += X[i]
-	end
-	X .= X / sump
-end
-
-# ╔═╡ 7d705c9c-6653-4050-b32e-ea96ff972657
-function mole_frac!(node,data,X,u::VoronoiFVM.EdgeUnknowns)
-	ng=data.ng
-	sump=zero(eltype(u))
-	#X=zeros(eltype(u), ng)
-	for i=1:ng
-		X[i] = 0.5*(u[i,1]+u[i,2])
-		sump += X[i]
-	end
-	for i=1:ng
-		X[i] = X[i] / sump
-	end
-	nothing
-end
-
-# ╔═╡ 42fc2eaf-b48d-4aa4-acf7-851b38b2940c
-function mole_frac(node,data,u::VoronoiFVM.BNodeUnknowns)
-	ng=data.ng
-	sump=zero(eltype(u))
-	X=zeros(eltype(u), ng)
-	for i=1:ng
-		X[i] = u[i]
-		sump += X[i]
-	end
-	X .= X / sump
-end
-
-# ╔═╡ e4997de1-672a-4060-97b8-b4aa000f5112
-function mole_frac!(node,data,X,u::VoronoiFVM.BNodeUnknowns)
-	ng=data.ng
-	sump=zero(eltype(u))
-	#X=zeros(eltype(u), ng)
-	for i=1:ng
-		X[i] = u[i]
-		sump += X[i]
-	end
-	for i=1:ng
-		X[i] = X[i] / sump
-	end
-	nothing
-end
-
-# ╔═╡ 7da59e27-62b9-4b89-b315-d88a4fd34f56
-function top(f,u,bnode,data)
-	# top boundaries (cat layer & frit)
-	if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat 
-		(;ng,ip,iT,Tamb,Fluids,utop,Eps_ir,Abs_lamp_frit,Abs_lamp_cat,Tau_quartz,G_lamp)=data
-		
-		flux_rerad = Eps_ir*ph"σ"*(u[iT]^4 - Tamb^4)
-		
-		X = StrideArray{eltype(u)}(undef, (ng))
-		mole_frac!(bnode,data,X,u)
-		
-		cf=heatcap_mix(Fluids, u[iT], X)		
-		flux_convec=utop*u[ip]/(ph"R"*u[iT])*cf*(u[iT]-Tamb)
-
-		abs = 0.0
-		if bnode.region==Γ_top_frit
-			abs=Abs_lamp_frit
-		else # catalyst layer
-			abs=Abs_lamp_cat
-		end
-		f[iT] = -abs*Tau_quartz*G_lamp + flux_rerad + flux_convec
-		
-		
-		# flow velocity is normal to top boundary
-		for i=1:ng
-			f[i] = utop*u[i]/(ph"R"*u[iT])
-		end
-	end
-end
-
-# ╔═╡ 29d66705-3d9f-40b1-866d-dd3392a1a268
-function bcond(f,u,bnode,data)
-	top(f,u,bnode,data)
-	bottom(f,u,bnode,data)
-	side(f,u,bnode,data)	
-end
-
-# ╔═╡ 2191bece-e186-4d8e-8a21-3830441baf11
-function D_matrix(data, T, p)
-	ng=data.ng
-	v = zeros(typeof(T),ng,ng)
-	
-	for i=1:(ng-1)
-		for j=(i+1):ng
-			v[j,i] = binary_diff_coeff_gas(data.Fluids[j], data.Fluids[i], T, p)
-		end
-	end
-	Symmetric(v, :L)
-end
-
-# ╔═╡ bdf5e360-cc20-443a-8929-5cd2b64fd749
-function D_matrix!(data, D, T, p)
-	ng=data.ng
-	for i=1:(ng-1)
-		for j=(i+1):ng
-			Dji = binary_diff_coeff_gas(data.Fluids[j], data.Fluids[i], T, p)
-			D[j,i] = Dji
-			D[i,j] = Dji
-			#v[j,i] = binary_diff_coeff_gas(data.Fluids[j], data.Fluids[i], T, p)
-		end
-	end
-	nothing
-end
-
-# ╔═╡ b6381008-0280-404c-a86c-9c9c3c9f82eb
-function M_matrix(data,T,p,x)
-	ng=data.ng
-	D=data.γ_τ*D_matrix(data,T,p)
-	M=zeros(eltype(x), ng, ng)
-	for i=1:ng
-		M[i,i] = -1/DK_eff(data,T,i)
-		for j=1:ng
-			if j != i
-				M[i,i] -= x[j]/D[i,j]
-				M[i,j] = x[i]/D[i,j]
-			end
-		end	
-	end
-	M
-end
-
-# ╔═╡ 101b88bc-f382-4c60-a890-6b9e0265d206
-function M_matrix!(M,D,T,p,x,data)
-	ng=data.ng
-	D_matrix!(data, D, T, p)
-	for i=1:ng
-		M[i,i] = -1/DK_eff(data,T,i)
-		for j=1:ng
-			if j != i
-				M[i,i] -= x[j]/(data.γ_τ*D[i,j])
-				M[i,j] = x[i]/(data.γ_τ*D[i,j])
-			end
-		end	
-	end
-	nothing
-end
-
-# ╔═╡ ed7941c4-0485-4d84-ad5b-383eb5cae70a
-function flux(f,u,edge,data)
-	(;ng,ip,iT,k,Fluids,Tamb) = data
-	
-	#F=zeros(eltype(u), ng)
-	F = StrideArray{eltype(u)}(undef, (ng))
-	
-	#X=zeros(eltype(u), ng)
-	X = StrideArray{eltype(u)}(undef, (ng))
-
-	pk,pl = u[ip,1],u[ip,2]
-	δp = pk-pl
-	pm = 0.5*(pk+pl)
-
-	Tm=0.5*(u[iT,1]+u[iT,2])
-	
-	mole_frac!(edge,data,X,u)
-	#X=mole_frac(edge,data,u)
-	
-	
-	cf=heatcap_mix(Fluids, Tm, X)
-	μ,λf=dynvisc_thermcond_mix(data, Tm, X)
-	λbed=kbed(data,λf)*λf
-
-	# Darcy flow
-	ud=-k/μ * δp
-	# vh=project(edge,(0,ud)) # 2D
-	vh=project(edge,(0,0,ud)) # 3D
-	# convective enthalpy flux
-	conv=vh*pm/(ph"R"*Tm)*cf/λbed
-	
-	Bp,Bm = fbernoulli_pm(conv)
-	# temperature flux
-	f[iT]= λbed*(Bm*(u[iT,1]-Tamb)-Bp*(u[iT,2]-Tamb))		
-
-	
-	for i=1:ng
-		DK = DK_eff(data,Tm,i)
-		bp,bm=fbernoulli_pm(vh/DK)		
-		F[i] = -(bm*u[i,1]-bp*u[i,2])/(ph"R"*Tm)
-	end
-		
-	M = StrideArray{eltype(u)}(undef, (ng,ng))
-	D = StrideArray{eltype(u)}(undef, (ng,ng))
-	M_matrix!(M,D,Tm,pm,X,data)
-	
-	# computation of fluxes J
-	J = M \ F
-	
-	f[1:ng] = J	
-	#f[ip] via reaction: ∑pi = p
-end
 
 # ╔═╡ 44aa5b49-d595-4982-bbc8-100d2f199415
 md"""
 # System Setup and Solution
+"""
+
+# ╔═╡ 7759971e-2f5a-439b-a6cf-8150538a0034
+md"""
+Reactive: $(@bind reactive PlutoUI.CheckBox())
 """
 
 # ╔═╡ e25e7b7b-47b3-457c-995b-b2ee4a87710a
@@ -462,13 +236,14 @@ md"""
 """
 
 # ╔═╡ 3a35ac76-e1b7-458d-90b7-d59ba4f43367
-Base.@kwdef mutable struct ModelData <:AbstractModelData
+begin
+	# !!!ALLOC We need ng as a "static" parameter (known at compile time)
+	# !!!ALLOC so we make it a type parameter instead of a struct entry
+    Base.@kwdef mutable struct ModelData{NG} <:AbstractModelData
 	
 	# catalyst / chemistry data
 	kinpar::AbstractKineticsData = XuFroment1989
 	
-	# number of gas phase species
-	ng::Int64		 		= S3P.ng
 	# names and fluid indices
 	gn::Dict{Int, Symbol} 	= S3P.gn
 	# inverse names and fluid indices
@@ -477,7 +252,7 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	Fluids::Vector{FluidProps} = S3P.Fluids
 	#Fluids::Vector{AbstractFluidProps} = [N2]
 	X0::Vector{Float64} = let
-		x=zeros(Float64, ng)
+		x=zeros(Float64, NG)
 		x[gni[:H2]] = 1.0
 		x[gni[:CO2]] = 1.0
 		x/sum(x)
@@ -488,7 +263,7 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	isreactive::Bool = 1
 	#isreactive::Bool = 0
 
-	ip::Int64=ng+1 # index of total pressure variable
+	ip::Int64=NG+1 # index of total pressure variable
 	iT::Int64=ip+1 # index of Temperature variable
 
 	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
@@ -559,12 +334,227 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	
 end;
 
+# !!!ALLOC Method to be called instead of data.ng
+FixedBed.ngas(::ModelData{NG}) where NG = NG
+
+# !!!ALLOC Additional constructo taking ng as parameter	
+ModelData(;ng=S3P.ng, kwargs...) = ModelData{ng}(;kwargs...)
+end;
+
+# ╔═╡ 78cf4646-c373-4688-b1ac-92ed5f922e3c
+function reaction(f,u,node,data)
+	(;ip,isreactive)=data
+	ng=ngas(data)
+	if  node.region == 2 && isreactive # catalyst layer
+		(;iT,mcats,kinpar)=data
+		rni=data.kinpar.rni # reaction indices from names
+	        pi = MVector{ngas(data),eltype(u)}(undef)
+                for i=1:ng
+ 	    	   pi[i] = u[i]/ufac"bar"
+                end
+		# negative sign: sign convention of VoronoiFVM: source term < 0 
+		# ri returns reaction rate in mol/(h gcat)
+		@views RR = @inline -mcats*ri(kinpar,u[iT],pi)*ufac"mol/hr"*ufac"1/g"
+		
+		## Xu & Froment 1989 kinetics
+		# 
+		# R1: CH4 + H2O = CO + 3 H2
+		# R2: CO + H2O = CO2 + H2
+		# R3: CH4 + 2 H2O = CO2 + 4 H2
+
+		for i=1:ng
+		 @views f[i] = sum(kinpar.nuij[i,:] .* RR)
+		end
+		
+		# temperature eq. / heat source
+		ΔHi=kinpar.ΔHi
+		f[iT] = -(RR[rni[:R1]]*ΔHi[:R1]+RR[rni[:R2]]*ΔHi[:R2] +RR[rni[:R3]]*ΔHi[:R3])
+	end
+	
+	# ∑xi = 1
+	@views f[ip]=u[ip]-sum(u[1:ng])
+end
+
+# ╔═╡ 40906795-a4dd-4e4a-a62e-91b4639a48fa
+function bottom(f,u,bnode,data)
+	if bnode.region==Γ_bottom # bottom boundary
+		(;iT,Eps_ir,Tamb,u0,X0,pn,Tn)=data
+		ng=ngas(data)
+		f[iT] = Eps_ir*ph"σ"*(u[iT]^4 - Tamb^4)
+		
+		for i=1:ng
+			# specify flux at boundary: flow velocity is normal to bot boundary	
+			f[i] = -u0*X0[i]*pn/(ph"R"*data.Tn)
+			
+		end
+	end
+end
+
+# ╔═╡ 7d705c9c-6653-4050-b32e-ea96ff972657
+function mole_frac!(node,data,X,u::VoronoiFVM.EdgeUnknowns)
+	ng=ngas(data)
+	sump=zero(eltype(u))
+	#X=zeros(eltype(u), ng)
+	for i=1:ng
+		X[i] = 0.5*(u[i,1]+u[i,2])
+		sump += X[i]
+	end
+	for i=1:ng
+		X[i] = X[i] / sump
+	end
+	nothing
+end
+
+# ╔═╡ e4997de1-672a-4060-97b8-b4aa000f5112
+function mole_frac!(node,data,X,u::VoronoiFVM.BNodeUnknowns)
+	ng=ngas(data)
+	sump=zero(eltype(u))
+	#X=zeros(eltype(u), ng)
+	for i=1:ng
+		X[i] = u[i]
+		sump += X[i]
+	end
+	for i=1:ng
+		X[i] = X[i] / sump
+	end
+	nothing
+end
+
+# ╔═╡ 7da59e27-62b9-4b89-b315-d88a4fd34f56
+function top(f,u,bnode,data)
+	# top boundaries (cat layer & frit)
+	if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat 
+		(;ip,iT,Tamb,Fluids,utop,Eps_ir,Abs_lamp_frit,Abs_lamp_cat,Tau_quartz,G_lamp)=data
+		ng=ngas(data)
+		flux_rerad = Eps_ir*ph"σ"*(u[iT]^4 - Tamb^4)
+		
+		X =MVector{ngas(data),eltype(u)}(undef)
+		@inline mole_frac!(bnode,data,X,u)
+		
+		@inline cf=heatcap_mix(Fluids, u[iT], X)		
+		flux_convec=utop*u[ip]/(ph"R"*u[iT])*cf*(u[iT]-Tamb)
+
+		abs = 0.0
+		if bnode.region==Γ_top_frit
+			abs=Abs_lamp_frit
+		else # catalyst layer
+			abs=Abs_lamp_cat
+		end
+		f[iT] = -abs*Tau_quartz*G_lamp + flux_rerad + flux_convec
+		
+		
+		# flow velocity is normal to top boundary
+		for i=1:ng
+			f[i] = utop*u[i]/(ph"R"*u[iT])
+		end
+	end
+end
+
+# ╔═╡ 29d66705-3d9f-40b1-866d-dd3392a1a268
+function bcond(f,u,bnode,data)
+    top(f,u,bnode,data)
+    bottom(f,u,bnode,data)
+    side(f,u,bnode,data)	
+end
+
+# ╔═╡ bdf5e360-cc20-443a-8929-5cd2b64fd749
+function D_matrix!(data, D, T, p)
+	ng=ngas(data)
+	for i=1:(ng-1)
+		for j=(i+1):ng
+			Dji = binary_diff_coeff_gas(data.Fluids[j], data.Fluids[i], T, p)
+			D[j,i] = Dji
+			D[i,j] = Dji
+			#v[j,i] = binary_diff_coeff_gas(data.Fluids[j], data.Fluids[i], T, p)
+		end
+	end
+	nothing
+end
+
+# ╔═╡ 101b88bc-f382-4c60-a890-6b9e0265d206
+function M_matrix!(M,D,T,p,x,data)
+	ng=ngas(data)
+	# !!!ALLOC all methods to be called with arrays to be stack allocated
+	# have to  be inlined - here we use callsite inline from Julia 1.8
+	@inline D_matrix!(data, D, T, p)
+	for i=1:ng
+		M[i,i] = -1/DK_eff(data,T,i)
+		for j=1:ng
+			if j != i
+				M[i,i] -= x[j]/(data.γ_τ*D[i,j])
+				M[i,j] = x[i]/(data.γ_τ*D[i,j])
+			end
+		end	
+	end
+	nothing
+end
+
+# ╔═╡ ed7941c4-0485-4d84-ad5b-383eb5cae70a
+    function flux(f,u,edge,data)
+    (;ip,iT,k,Fluids,Tamb) = data
+        ng=ngas(data)
+
+        # !!!ALLOC Use MVector with static size information instef of Vector
+        F = MVector{ngas(data),eltype(u)}(undef)
+	X = MVector{ngas(data),eltype(u)}(undef)
+        
+	pk,pl = u[ip,1],u[ip,2]
+	δp = pk-pl
+	pm = 0.5*(pk+pl)
+        
+	Tm=0.5*(u[iT,1]+u[iT,2])
+        f[iT]=((u[iT,1]-Tamb)-(u[iT,2]-Tamb))	
+
+	# !!!ALLOC All functions which take MVectors to be stack allocated
+        # as argument must be inlined. Here, we use the new "callsite inline"
+        # wich is new with Julia 1.8.
+        
+	@inline mole_frac!(edge,data,X,u)
+	@inline cf=heatcap_mix(Fluids, Tm, X)
+	@inline μ,λf=dynvisc_thermcond_mix(data, Tm, X)
+ 	λbed=kbed(data,λf)*λf
+        
+	# Darcy flow
+	ud=-k/μ * δp
+	# vh=project(edge,(0,ud)) # 2D
+	vh=project(edge,(zero(eltype(u)),zero(eltype(u)),ud)) # 3D
+	# convective enthalpy flux
+	conv=vh*pm/(ph"R"*Tm)*cf/λbed
+	
+	Bp,Bm = fbernoulli_pm(conv)
+	# temperature flux
+	f[iT]= λbed*(Bm*(u[iT,1]-Tamb)-Bp*(u[iT,2]-Tamb))		
+
+        # !!!ALLOC Use MMatriy with static size information instef of Matrix
+	M = MMatrix{ngas(data),ngas(data),eltype(u)}(undef)
+	D = MMatrix{ngas(data),ngas(data),eltype(u)}(undef)
+	@inline M_matrix!(M,D,Tm,pm,X,data)
+   	
+	for i=1:ng
+	    DK = DK_eff(data,Tm,i)
+	    bp,bm=fbernoulli_pm(vh/DK)		
+	    F[i] = -(bm*u[i,1]-bp*u[i,2])/(ph"R"*Tm)
+	end
+	
+	# computation of fluxes J
+
+	# !!!ALLOC All functions which take MMatriy to be stack allocated
+        # as argument must be inlined. Here, we use the new "callsite inline"
+        # wich is new with Julia 1.8
+        # inplace_linsolve  is made available from VoronoiFVM 1.3.2
+       @inline inplace_linsolve!(M,F)
+
+	
+	@views f[1:ng] .= F	
+    #f[ip] via reaction: ∑pi = p
+
+end
+
 # ╔═╡ 333b5c80-259d-47aa-a441-ee7894d6c407
 function main(;data=ModelData())
 
 	grid=prism_sq(data)
-
-	ngas=data.ng
+	
 	iT=data.iT
 	
 	sys=VoronoiFVM.System( 	grid;
@@ -573,11 +563,11 @@ function main(;data=ModelData())
 							reaction=reaction,
 							bcondition=bcond
 							)
-	enable_species!(sys; species=collect(1:(ngas+2))) # gas phase species + p + T
+	enable_species!(sys; species=collect(1:(ngas(data)+2))) # gas phase species + p + T
 	
 	inival=unknowns(sys)
 	inival[:,:].=1.0*data.p
-	for i=1:ngas
+	for i=1:ngas(data)
 		inival[i,:] .*= data.X0[i]
 	end
 	inival[iT,:] .= data.Tamb
@@ -585,13 +575,13 @@ function main(;data=ModelData())
 	sol=solve(sys;inival,)
 	
 	 function pre(sol,par)
-	 	ng=data.ng
+	 	ng=ngas(data)
 	 	iT=data.iT
 	 	# iteratively adapt top outflow boundary condition
 	 	function Inttop(f,u,bnode,data)
 			
-	 		
-			X=mole_frac(bnode,data,u)
+	 		X=zeros(eltype(u),ngas(data))
+			mole_frac!(bnode,data,X,u)
 	 		# top boundary(cat/frit)
 	 		if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat  
 	 			for i=1:ng
@@ -624,14 +614,14 @@ function main(;data=ModelData())
 	 				  		handle_exceptions=true,
 							Δp_min=1.0e-4,					  
 	 				  		Δp=0.1,
-	 				  		Δp_grow=1.2,
+	 				  		Δp_grow=1.5,
 	 				  		Δu_opt=100000.0, # large value, due to unit Pa of pressure?
+		 verbose="an" # log allocations and newton convergence
 	 				  		)
 	
 	# #sol=solve(sys;inival,)
-	
-	 sol=solve(sys;inival, embed=[0.0,1.0],pre,control)
-
+embed=[0.0,1.0]
+	 sol=solve(sys;inival,embed,pre,control)
 	
 	sol,grid,sys,data
 end;
@@ -640,7 +630,7 @@ end;
 # ╠═╡ skip_as_script = true
 #=╠═╡
 begin
-	sol_,grid,sys,data_embed=main(data=ModelData());
+	sol_,grid,sys,data_embed=main(data=ModelData(isreactive=reactive));
 	if sol_ isa VoronoiFVM.TransientSolution
 		sol = copy(sol_(sol_.t[end]))
 	else
@@ -663,7 +653,7 @@ Cutplane at ``z=`` $(@bind zcut Slider(range(0.0,data_embed.h,length=101),defaul
 let
 	vis=GridVisualizer(resolution=(600,400), zoom=1.9, )
 	#zcut = data.h-data.cath/2
-	gridplot!(vis, prism_sq(ModelData(),nref=0,cath=2*ufac"mm"), zplane=zcut)
+	gridplot!(vis, prism_sq(ModelData{S3P.ng}(),nref=0,cath=2*ufac"mm"), zplane=zcut)
 	reveal(vis)
 	#save("../img/out/domain.svg", vis)
 end
@@ -718,8 +708,8 @@ function SolAlongLine(data,sol)
 	grid1D = grid1D[3,:] # extract z-coordinate
 
 
-	sol_p = []
-	for i=1:(data.ng+2)
+        sol_p = []
+	for i=1:(ngas(data)+2)
 		push!(sol_p, sol[i,Nodes])
 	end
 
@@ -731,14 +721,14 @@ end
 let
 	sol_, grid_,midx,midy = SolAlongLine(data_embed,sol)
 	
-	(;ng, gn, ip)=data_embed
+	(;gn, ip)=data_embed
 	c1 = colorant"red"
 	c2 = colorant"blue"
-	cols=range(c1, stop=c2, length=ng+1)
+	cols=range(c1, stop=c2, length=ngas(data_embed)+1)
 
 	vis=GridVisualizer(title="At position x= $(midx), y= $(midy)")
 	#vis=GridVisualizer(Plotter=PyPlot)
-	for i in 1:ng
+	for i in 1:ngas(data_embed)
 		scalarplot!(vis, grid_, sol_[i], color=cols[i], label="$(gn[i])", clear=false, legend=:best)
 	end
 
@@ -765,7 +755,7 @@ end
 # ╟─66b55f6b-1af5-438d-aaa8-fe4745e85426
 # ╟─8528e15f-cce7-44d7-ac17-432f92cc5f53
 # ╠═ed7941c4-0485-4d84-ad5b-383eb5cae70a
-# ╟─a6afe118-dcbd-4126-8646-c7268acfacf3
+# ╠═a6afe118-dcbd-4126-8646-c7268acfacf3
 # ╠═78cf4646-c373-4688-b1ac-92ed5f922e3c
 # ╟─a60ce05e-8d92-4172-b4c1-ac3221c54fe5
 # ╟─24374b7a-ce77-45f0-a7a0-c47a224a0b06
@@ -784,16 +774,13 @@ end
 # ╠═edd9fdd1-a9c4-4f45-8f63-9681717d417f
 # ╠═29d66705-3d9f-40b1-866d-dd3392a1a268
 # ╟─02b76cda-ffae-4243-ab40-8d0fe1325776
-# ╠═5dfe1a6e-7515-47bd-90b0-a9cc01f0e883
 # ╠═7d705c9c-6653-4050-b32e-ea96ff972657
-# ╠═42fc2eaf-b48d-4aa4-acf7-851b38b2940c
 # ╠═e4997de1-672a-4060-97b8-b4aa000f5112
-# ╠═2191bece-e186-4d8e-8a21-3830441baf11
 # ╠═bdf5e360-cc20-443a-8929-5cd2b64fd749
-# ╠═b6381008-0280-404c-a86c-9c9c3c9f82eb
 # ╠═101b88bc-f382-4c60-a890-6b9e0265d206
 # ╟─44aa5b49-d595-4982-bbc8-100d2f199415
 # ╠═333b5c80-259d-47aa-a441-ee7894d6c407
+# ╟─7759971e-2f5a-439b-a6cf-8150538a0034
 # ╠═aa498412-e970-45f2-8b11-249cc5c2b18d
 # ╟─e25e7b7b-47b3-457c-995b-b2ee4a87710a
 # ╠═3a35ac76-e1b7-458d-90b7-d59ba4f43367
