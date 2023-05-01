@@ -1,2 +1,4 @@
 img/out*
 data/out/*
+Manifest.toml
+\#*
