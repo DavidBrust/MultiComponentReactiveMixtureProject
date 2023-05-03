@@ -79,30 +79,6 @@ end
 
 # ╔═╡ e21b9d37-941c-4f2c-9bdf-956964428f90
 const grid_fun = prism_sq
-#const grid_fun = prism_sq_
-
-# ╔═╡ e2e8ed00-f53f-476c-ab5f-95b9ec2f5094
-function prism_sq_(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.catwi)
-	
-	hw=w/2.0/5.0*2.0^(-nref)
-	W=collect(0:hw:(w/2.0))
-	#hh=h/5.0*2.0^(-nref)
-	#H=collect(0:hh:h)
-	#hmin=h/100.0
-    #hmax=h/5.0
- 	#H=geomspace(0.0,h,hmax,hmin)
-	zCL=h-cath
-	Hfrit=collect(0:h/20:zCL)
-	HCL=collect(zCL:h/100:h)
-	H=glue(Hfrit,HCL)
-    
-	grid=simplexgrid(W,W,H)
-	
-	# catalyst layer region
-	cellmask!(grid,[0.0,0.0,h-cath],[catwi/2,catwi/2,h],2)
-	# catalyst layer boundary
-	bfacemask!(grid,[0.0,0.0,h],[catwi/2,catwi/2,h],Γ_top_cat)	
-end
 
 # ╔═╡ 2554b2fc-bf5c-4b8f-b5e9-8bc261fe597b
 md"""
@@ -222,14 +198,6 @@ In the DGM the solid porous matrix is considered as another species in the ideal
 md"""
 Calculation of Knudsen diffusion coefficients according to __Wesselingh, J. A., & Krishna, R. (2006).__ Mass Transfer in Multicomponent Mixtures (ch. 21, Fig. 21.8)
 """
-
-# ╔═╡ 722e681c-225a-4484-b0b8-c85d4536e5f9
-function DK_eff(data,T,i)
-	ϕ=data.ϕ # porosity
-	dp=data.dp # avg. particle size (assumed to be = pore size)
-	DK=dp*ϕ^1.5/(1.0-ϕ)*sqrt(8.0*ph"R"*T/(9.0*π*data.Fluids[i].MW))
-	#Bern(DK)
-end
 
 # ╔═╡ 3bf71cea-4f73-47da-b5ed-2cae3ec3d18b
 md"""
@@ -1042,24 +1010,6 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	
 end;
 
-# ╔═╡ 40df8b89-d39c-447e-839a-4e7fd2521c9a
-let
-	(;kinpar,p,X0)=ModelData(kinpar=XuFroment1989)
-	T=400.0+273.15
-	p/ufac"bar"
-	pi=p/ufac"bar"*X0
-	ri(kinpar,T,pi)*ufac"mol/hr"*ufac"1/g"
-end
-
-# ╔═╡ 0da21fea-fbab-4fc0-958c-234d05cc0c71
-let
-	(;kinpar,p,X0)=ModelData(kinpar=S3P)
-	T=800.0+273.15
-	p/ufac"bar"
-	pi=p/ufac"bar"*X0
-	ri(kinpar,T,pi)
-end
-
 # ╔═╡ b2df1087-6628-4889-8cd6-c5ee7629cd93
 md"""
 ## Temperature Plot
@@ -1495,11 +1445,6 @@ let
 	gridplot!(vis, grid_fun(ModelData()), zplane=zcut)
 	reveal(vis)
 end
-  ╠═╡ =#
-
-# ╔═╡ af43e849-0198-4ce6-9e7c-8164ef9c61ff
-#=╠═╡
-data_embed.kinpar
   ╠═╡ =#
 
 # ╔═╡ bcaf83fb-f215-428d-9c84-f5b557fe143f
@@ -1942,7 +1887,6 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─2ed3223e-a604-410e-93d4-016580f49093
 # ╟─390c7839-618d-4ade-b9be-ee9ed09a77aa
 # ╠═ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
-# ╠═e2e8ed00-f53f-476c-ab5f-95b9ec2f5094
 # ╠═e21b9d37-941c-4f2c-9bdf-956964428f90
 # ╠═0a911687-aff4-4c77-8def-084293329f35
 # ╠═ff58b0b8-2519-430e-8343-af9a5adcb135
@@ -1957,13 +1901,9 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╠═ed7941c4-0485-4d84-ad5b-383eb5cae70a
 # ╟─a6afe118-dcbd-4126-8646-c7268acfacf3
 # ╠═78cf4646-c373-4688-b1ac-92ed5f922e3c
-# ╠═40df8b89-d39c-447e-839a-4e7fd2521c9a
-# ╠═0da21fea-fbab-4fc0-958c-234d05cc0c71
-# ╠═af43e849-0198-4ce6-9e7c-8164ef9c61ff
 # ╟─a60ce05e-8d92-4172-b4c1-ac3221c54fe5
 # ╟─24374b7a-ce77-45f0-a7a0-c47a224a0b06
 # ╟─4865804f-d385-4a1a-9953-5ac66ea50057
-# ╠═722e681c-225a-4484-b0b8-c85d4536e5f9
 # ╟─3bf71cea-4f73-47da-b5ed-2cae3ec3d18b
 # ╟─bcaf83fb-f215-428d-9c84-f5b557fe143f
 # ╟─7f94d703-2759-4fe1-a8c8-ddf26732a6ca
