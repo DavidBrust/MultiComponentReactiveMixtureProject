@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.25
+# v0.19.24
 
 using Markdown
 using InteractiveUtils
@@ -29,7 +29,6 @@ begin
 	using PlutoUI
 	using Colors
 
-	using Revise
 	using FixedBed
 	
 	GridVisualize.default_plotter!(PlutoVista)
@@ -37,6 +36,13 @@ end;
 
 # ╔═╡ 863c9da7-ef45-49ad-80d0-3594eca4a189
 PlutoUI.TableOfContents(title="Photo-Catalytic Reactor",depth=5)
+
+# ╔═╡ 3235c072-ed6e-4eb7-821a-523f2520ddda
+md"""
+Check the box to start the simulation:
+
+__Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=true))
+"""
 
 # ╔═╡ 2ed3223e-a604-410e-93d4-016580f49093
 md"""
@@ -57,10 +63,17 @@ end;
 # ╔═╡ ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
 function prism_sq(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.catwi)
 	
-	hw=w/2.0/5.0*2.0^(-nref)
-	hh=h/5.0*2.0^(-nref)
+	hw=(w/2.0)/5.0*2.0^(-nref)
 	W=collect(0:hw:(w/2.0))
-    H=collect(0:hh:h)
+	
+	zCL=h-cath
+	hhfrit=zCL/5.0
+	Hfrit=collect(0:hhfrit:zCL)
+	
+	hhCL=cath/5.0
+	HCL=collect(zCL:hhCL:h)
+	H=glue(Hfrit,HCL)
+	
 	grid=simplexgrid(W,W,H)
 	
 	# catalyst layer region
@@ -207,6 +220,9 @@ md"""
 Boundary conditions for the transport of gas phase species cover in and outflow boundary conditions at the bottom and top surfaces of the modelling domain with no-flux conditins applied elsewhere. In the catalyst layer, volumetric catalytic reactions take place.
 """
 
+# ╔═╡ 560feb9c-bd0f-414c-bb6f-ef5fd7cb3c49
+MVector
+
 # ╔═╡ edd9fdd1-a9c4-4f45-8f63-9681717d417f
 function side(f,u,bnode,data)
 	# side wall boundary condition
@@ -227,7 +243,7 @@ md"""
 
 # ╔═╡ 7759971e-2f5a-439b-a6cf-8150538a0034
 md"""
-Reactive: $(@bind reactive PlutoUI.CheckBox())
+Reactive: $(@bind reactive PlutoUI.CheckBox(default=true))
 """
 
 # ╔═╡ e25e7b7b-47b3-457c-995b-b2ee4a87710a
@@ -242,7 +258,8 @@ begin
     Base.@kwdef mutable struct ModelData{NG} <:AbstractModelData
 	
 	# catalyst / chemistry data
-	kinpar::AbstractKineticsData = XuFroment1989
+	kinpar::FixedBed.KinData{nreac(S3P)} = S3P
+	#kinpar::AbstractKineticsData = XuFroment1989
 	
 	# names and fluid indices
 	gn::Dict{Int, Symbol} 	= S3P.gn
@@ -282,7 +299,7 @@ begin
 	# frit thickness (applies to 2D & 3D)
 	h::Float64=0.5*ufac"cm"
 	# catalyst layer thickness (applies to 2D & 3D)
-	cath::Float64 = 1000.0*ufac"μm"
+	cath::Float64 = 250.0*ufac"μm"
 	
 
 	# prism / 3D
@@ -347,28 +364,29 @@ function reaction(f,u,node,data)
 	ng=ngas(data)
 	if  node.region == 2 && isreactive # catalyst layer
 		(;iT,mcats,kinpar)=data
+		(;rni,nuij,ΔHi)=kinpar
 		rni=data.kinpar.rni # reaction indices from names
-	        pi = MVector{ngas(data),eltype(u)}(undef)
-                for i=1:ng
- 	    	   pi[i] = u[i]/ufac"bar"
-                end
+		pi = MVector{ngas(data),eltype(u)}(undef)
+		
+		for i=1:ng
+			pi[i] = u[i]/ufac"bar"
+		end
+		# Ki =MVector{nreac(data),eltype(u)}(undef)
+		
 		# negative sign: sign convention of VoronoiFVM: source term < 0 
 		# ri returns reaction rate in mol/(h gcat)
-		@views RR = @inline -mcats*ri(kinpar,u[iT],pi)*ufac"mol/hr"*ufac"1/g"
-		
-		## Xu & Froment 1989 kinetics
-		# 
-		# R1: CH4 + H2O = CO + 3 H2
-		# R2: CO + H2O = CO2 + H2
-		# R3: CH4 + 2 H2O = CO2 + 4 H2
+
+		RR = @inline -mcats*ri(data,u[iT],pi)*ufac"mol/(hr*g)"
 
 		for i=1:ng
-		 @views f[i] = sum(kinpar.nuij[i,:] .* RR)
+			f[i] = zero(eltype(u))
+			for j=1:nreac(kinpar)
+				f[i] += nuij[i,j] * RR[j]
+			end			
 		end
-		
+				
 		# temperature eq. / heat source
-		ΔHi=kinpar.ΔHi
-		f[iT] = -(RR[rni[:R1]]*ΔHi[:R1]+RR[rni[:R2]]*ΔHi[:R2] +RR[rni[:R3]]*ΔHi[:R3])
+		f[iT] = @inbounds -(RR[rni[:R1]]*ΔHi[:R1]+RR[rni[:R2]]*ΔHi[:R2] +RR[rni[:R3]]*ΔHi[:R3])
 	end
 	
 	# ∑xi = 1
@@ -616,12 +634,13 @@ function main(;data=ModelData())
 	 				  		Δp=0.1,
 	 				  		Δp_grow=1.5,
 	 				  		Δu_opt=100000.0, # large value, due to unit Pa of pressure?
-		 verbose="an" # log allocations and newton convergence
+							verbose="an", # log allocations and newton convergence
+		 					method_linear = KrylovJL_BICGSTAB(),
+                     		precon_linear = A -> factorize(A, UMFPACKFactorization())
 	 				  		)
 	
-	# #sol=solve(sys;inival,)
-embed=[0.0,1.0]
-	 sol=solve(sys;inival,embed,pre,control)
+	embed=[0.0,1.0]
+	sol=solve(sys;inival,embed,pre,control)
 	
 	sol,grid,sys,data
 end;
@@ -630,11 +649,13 @@ end;
 # ╠═╡ skip_as_script = true
 #=╠═╡
 begin
-	sol_,grid,sys,data_embed=main(data=ModelData(isreactive=reactive));
-	if sol_ isa VoronoiFVM.TransientSolution
-		sol = copy(sol_(sol_.t[end]))
-	else
-		sol = copy(sol_)
+	if RunSim
+		sol_,grid,sys,data_embed=main(data=ModelData(isreactive=reactive));
+		if sol_ isa VoronoiFVM.TransientSolution
+			sol = copy(sol_(sol_.t[end]))
+		else
+			sol = copy(sol_)
+		end
 	end
 end;
   ╠═╡ =#
@@ -652,9 +673,11 @@ Cutplane at ``z=`` $(@bind zcut Slider(range(0.0,data_embed.h,length=101),defaul
 #=╠═╡
 let
 	vis=GridVisualizer(resolution=(600,400), zoom=1.9, )
-	#zcut = data.h-data.cath/2
-	gridplot!(vis, prism_sq(ModelData{S3P.ng}(),nref=0,cath=2*ufac"mm"), zplane=zcut)
+	grid_=prism_sq(ModelData{S3P.ng}(),nref=1)
+
+	gridplot!(vis, grid_, zplane=zcut)
 	reveal(vis)
+	
 	#save("../img/out/domain.svg", vis)
 end
   ╠═╡ =#
@@ -680,17 +703,52 @@ md"""
 # ╔═╡ 3bd80c19-0b49-43f6-9daa-0c87c2ea8093
 #=╠═╡
 let
-	iT=data_embed.iT
+	(;ip,iT)=data_embed
     vis=GridVisualizer()
-	scalarplot!(vis, grid, sol[iT,:].- 273.15, show=true)
+	scalarplot!(vis, grid, sol[iT,:].- 273.15, levelalpha=0, show=true)
+	#scalarplot!(vis, grid, sol[ip,:]./ufac"bar", levelalpha=0.5, show=true)
 
 end
   ╠═╡ =#
+
+# ╔═╡ f8e6847c-c021-4eee-89f1-f0453ed1bf40
+FixedBed.XuFroment
 
 # ╔═╡ 2790b550-3105-4fc0-9070-d142c19678db
 md"""
 ## Partial Pressure Plot
 """
+
+# ╔═╡ 71f06a02-d27b-4057-8e82-438fe88bfd21
+#=╠═╡
+let
+	data=data_embed
+	grid=prism_sq(data)
+	(;wi,h,iT) =data
+	y_=0.06
+	
+	bid = maximum(grid[BFaceRegions])+1
+	bfacemask!(grid, [0,y_,0],[wi/2,y_,h],bid)
+
+	# keep x-z coordinates of parent grid
+	function _3to2(a,b)
+		a[1]=b[1]
+		a[2]=b[3]
+	end
+	#grid_1D  = subgrid(grid, [bid], boundary=true, transform=_3to1) 
+	grid2D  = subgrid(grid, [bid], boundary=true, transform=_3to2) 
+	grid2D[Coordinates]
+	sol2D = view(sol[iT, :], grid2D)
+	#sol
+	scalarplot(grid2D, sol2D)
+	
+
+	#gridplot(grid,yplane=0.024)
+
+	
+	#bedgemask!(    grid::ExtendableGrid,    xa,    xb,    ireg::Int64;    tol) -> ExtendableGrid
+end
+  ╠═╡ =#
 
 # ╔═╡ bd7552d2-2c31-4834-97d9-ccdb4652242f
 function SolAlongLine(data,sol)
@@ -741,7 +799,8 @@ end
 
 # ╔═╡ Cell order:
 # ╠═11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
-# ╠═863c9da7-ef45-49ad-80d0-3594eca4a189
+# ╟─863c9da7-ef45-49ad-80d0-3594eca4a189
+# ╠═3235c072-ed6e-4eb7-821a-523f2520ddda
 # ╟─2ed3223e-a604-410e-93d4-016580f49093
 # ╠═ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
 # ╠═0a911687-aff4-4c77-8def-084293329f35
@@ -755,7 +814,7 @@ end
 # ╟─66b55f6b-1af5-438d-aaa8-fe4745e85426
 # ╟─8528e15f-cce7-44d7-ac17-432f92cc5f53
 # ╠═ed7941c4-0485-4d84-ad5b-383eb5cae70a
-# ╠═a6afe118-dcbd-4126-8646-c7268acfacf3
+# ╟─a6afe118-dcbd-4126-8646-c7268acfacf3
 # ╠═78cf4646-c373-4688-b1ac-92ed5f922e3c
 # ╟─a60ce05e-8d92-4172-b4c1-ac3221c54fe5
 # ╟─24374b7a-ce77-45f0-a7a0-c47a224a0b06
@@ -769,6 +828,7 @@ end
 # ╟─ed3609cb-8483-4184-a385-dca307d13f17
 # ╟─8139166e-42f9-41c3-a360-50d3d4e5ee86
 # ╟─44d91c2e-8082-4a90-89cc-81aba783d5ac
+# ╠═560feb9c-bd0f-414c-bb6f-ef5fd7cb3c49
 # ╠═7da59e27-62b9-4b89-b315-d88a4fd34f56
 # ╠═40906795-a4dd-4e4a-a62e-91b4639a48fa
 # ╠═edd9fdd1-a9c4-4f45-8f63-9681717d417f
@@ -786,6 +846,8 @@ end
 # ╠═3a35ac76-e1b7-458d-90b7-d59ba4f43367
 # ╟─b2df1087-6628-4889-8cd6-c5ee7629cd93
 # ╠═3bd80c19-0b49-43f6-9daa-0c87c2ea8093
+# ╠═f8e6847c-c021-4eee-89f1-f0453ed1bf40
 # ╟─2790b550-3105-4fc0-9070-d142c19678db
 # ╠═bea97fb3-9854-411c-8363-15cbef13d033
+# ╠═71f06a02-d27b-4057-8e82-438fe88bfd21
 # ╠═bd7552d2-2c31-4834-97d9-ccdb4652242f

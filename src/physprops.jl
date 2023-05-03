@@ -94,45 +94,8 @@ function dynvisc_gas!(muf, i, Fluid, T)
     nothing
 end
 
-#Thermal conductivity of gases at low pressures, W/(m*K)
-function thermcond_gas!(lambdaf, i, Fluid, T)
-	(;A,B,C,D,E) = Fluid.ThermCond
-	# VDI heat atlas 2010 D3.1 Equation (5)
-	lambdaf[i] = A+B*T+C*T^2+D*T^3+E*T^4 * ufac"W/(m*K)"
-    nothing
-end
 
-function dynvisc_thermcond_mix!(mumix, muf, lambdamix, lambdaf, Fluids, T, x)
-    ng = length(x)
-    # Fluid = data.Fluids
-    mumix[1] = zero(eltype(mumix))
-    lambdamix[1] = zero(eltype(lambdamix))
-    # mu = zeros(Float64, ng)
-    # lambda = zeros(Float64, ng)
-    # M = zeros(Float64, ng)
-    # mu = zeros(typeof(T), ng)
-    # lambda = zeros(typeof(T), ng)
-    # M = zeros(typeof(T), ng)
-    for i=1:ng
-        # mu[i] = dynvisc_gas(Fluid[i], T)
-        dynvisc_gas!(muf, i, Fluids[i], T)
-        # lambda[i] = thermcond_gas(Fluid[i], T)
-        thermcond_gas!(lambdaf, i, Fluids[i], T)
-    end
-    for i=1:ng
-        sumyFij = 0
-        for j=1:ng
-            Mi, Mj = Fluids[i].MW, Fluids[j].MW
-            Fij = (1+(muf[i]/muf[j])^0.5*(Mj/Mi)^0.25)^2 / sqrt(8*(1+Mi/Mj))
-            sumyFij += x[j]*Fij
-        end
-        if x[i] > 0
-            mumix[1] += x[i] * muf[i] / sumyFij
-            lambdamix[1] += x[i] * lambdaf[i] / sumyFij
-        end
-    end
-    nothing
-end
+
 
 #Thermal conductivity of gases at low pressures, W/(m*K)
 function thermcond_gas(Fluid, T)
@@ -190,6 +153,18 @@ function enthalpy_mix(Fluids, T, x)
     for i=1:ng
         Fluid=Fluids[i]
         hmix += x[i] * enthalpy_gas(Fluid, T)
+    end
+    hmix
+end
+
+function enthalpy_mix(data, T, x)
+    ng = ngas(data)
+    (;Fluids)=data
+    hmix=zero(eltype(x))
+    #    hmix = 0
+    #ng=length(x)
+    for i=1:ng
+        hmix += x[i] * enthalpy_gas(Fluids[i], T)
     end
     hmix
 end

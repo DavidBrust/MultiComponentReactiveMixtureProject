@@ -18,5 +18,6 @@ export AbstractModelData, RePrPe, kbed, kbed_VDI_flattening, lambda_eff_AC, hsf,
 
 
 include("kinetics.jl")
-export AbstractKineticsData, ri, rr, S3P, XuFroment1989
+export AbstractKineticsData, ri, rr, S3P, XuFroment1989, XuFroment
+export nreac
 end
