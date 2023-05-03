@@ -220,9 +220,6 @@ md"""
 Boundary conditions for the transport of gas phase species cover in and outflow boundary conditions at the bottom and top surfaces of the modelling domain with no-flux conditins applied elsewhere. In the catalyst layer, volumetric catalytic reactions take place.
 """
 
-# ╔═╡ 560feb9c-bd0f-414c-bb6f-ef5fd7cb3c49
-MVector
-
 # ╔═╡ edd9fdd1-a9c4-4f45-8f63-9681717d417f
 function side(f,u,bnode,data)
 	# side wall boundary condition
@@ -828,7 +825,6 @@ end
 # ╟─ed3609cb-8483-4184-a385-dca307d13f17
 # ╟─8139166e-42f9-41c3-a360-50d3d4e5ee86
 # ╟─44d91c2e-8082-4a90-89cc-81aba783d5ac
-# ╠═560feb9c-bd0f-414c-bb6f-ef5fd7cb3c49
 # ╠═7da59e27-62b9-4b89-b315-d88a4fd34f56
 # ╠═40906795-a4dd-4e4a-a62e-91b4639a48fa
 # ╠═edd9fdd1-a9c4-4f45-8f63-9681717d417f
@@ -840,7 +836,7 @@ end
 # ╠═101b88bc-f382-4c60-a890-6b9e0265d206
 # ╟─44aa5b49-d595-4982-bbc8-100d2f199415
 # ╠═333b5c80-259d-47aa-a441-ee7894d6c407
-# ╟─7759971e-2f5a-439b-a6cf-8150538a0034
+# ╠═7759971e-2f5a-439b-a6cf-8150538a0034
 # ╠═aa498412-e970-45f2-8b11-249cc5c2b18d
 # ╟─e25e7b7b-47b3-457c-995b-b2ee4a87710a
 # ╠═3a35ac76-e1b7-458d-90b7-d59ba4f43367

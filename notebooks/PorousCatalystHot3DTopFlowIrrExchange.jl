@@ -9,6 +9,7 @@ begin
 	using Pkg
 	Pkg.activate(joinpath(@__DIR__,".."))
 	
+	using Revise
 	using VoronoiFVM
 	using ExtendableGrids, GridVisualize
 	using NLsolve
@@ -18,9 +19,7 @@ begin
 	
 	using PlutoVista, Plots
 	using PlutoUI
-	using Colors
-
-	using Revise
+	
 	using FixedBed
 	
 	GridVisualize.default_plotter!(PlutoVista)
@@ -915,7 +914,7 @@ Base.@kwdef mutable struct ModelData <:AbstractModelData
 	
 	# catalyst / chemistry data
 	# kinetic parameters, S3P="simple 3 parameter" kinetics fit to UPV lab scale experimental data
-	kinpar::AbstractKineticsData = S3P
+	kinpar::AbstractKineticsData = S3P_
 	#kinpar::AbstractKineticsData = XuFroment1989
 	
 	# number of gas phase species

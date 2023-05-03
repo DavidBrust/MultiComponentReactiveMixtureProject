@@ -974,7 +974,7 @@ function bottom(f,u,bnode,data)
 
 		# use species enthalpy (incl. Δh_formation) for conv. therm. eng. flux 1/2
 		#hmix=enthalpy_mix(Fluids, u[iT], X)
-		@inline hmix=enthalpy_mix(data, u[iT], X)
+		@inline hmix=enthalpy_mix(Fluids, u[iT], X)
 		flux_entahlpy=ubot*u[ip]/(ph"R"*u[iT])*hmix
 		#cf=heatcap_mix(Fluids, u[iT], X)		
 		#flux_entahlpy=ubot*u[ip]/(ph"R"*u[iT])*cf*(u[iT]-Tamb)
@@ -1495,7 +1495,7 @@ function main(;data=ModelData())
 	
 	
 	embed=[0.0,1.0]
-	#sol=solve(sys;inival,embed,pre,control)
+	sol=solve(sys;inival,embed,pre,control)
 	#sol_end_embed=sol(sol.t[end])
 	
 	

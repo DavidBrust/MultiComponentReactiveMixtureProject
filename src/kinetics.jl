@@ -59,8 +59,8 @@ Base.@kwdef mutable struct KineticsData{F<:Function} <:AbstractKineticsData
         [1 1 0], # CO2
         [0 0 0], # N2
     )
-    # RR::F = RRS3P # RR function
-    RR::F = RRS3P_ # RR function
+    RR::F = RRS3P # RR function
+    #RR::F = RRS3P_ # RR function
     # values of reaction rate constants @ Tref
 	ki_ref::Dict{Symbol,Float64} = Dict(:R1=>-1.51715, :R2=>-11.2379, :R3=>-Inf)
     Tki_ref::Dict{Symbol,Float64} = Dict( rnames .=> [648.0, 648.0, 648.0]*ufac"K")
@@ -163,7 +163,7 @@ function RRXuFroment(kindata::KineticsData,T,p)
 	] / DEN(kindata,T,p)^2
 end
 
-#S3P = KineticsData{typeof(RRS3P)}()
+S3P_ = KineticsData{typeof(RRS3P)}()
 # S3P::AbstractKineticsData = KineticsData{typeof(RRS3P_)}()
 
 ## Xu & Froment 1989 kinetics
