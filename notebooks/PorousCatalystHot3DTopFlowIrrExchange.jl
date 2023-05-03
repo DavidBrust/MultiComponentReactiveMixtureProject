@@ -58,14 +58,17 @@ end;
 # ╔═╡ ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
 function prism_sq(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.catwi)
 	
-	hw=w/2.0/10.0*2.0^(-nref)
+	hw=(w/2.0)/5.0*2.0^(-nref)
 	W=collect(0:hw:(w/2.0))
-	#hh=h/5.0*2.0^(-nref)
-	#H=collect(0:hh:h)
-	hmin=h/20.0
-    hmax=h/5.0
- 	H=geomspace(0.0,h,hmax,hmin)
-    
+	
+	zCL=h-cath
+	hhfrit=zCL/5.0
+	Hfrit=collect(0:hhfrit:zCL)
+	
+	hhCL=cath/5.0
+	HCL=collect(zCL:hhCL:h)
+	H=glue(Hfrit,HCL)
+	
 	grid=simplexgrid(W,W,H)
 	
 	# catalyst layer region
@@ -73,6 +76,10 @@ function prism_sq(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.
 	# catalyst layer boundary
 	bfacemask!(grid,[0.0,0.0,h],[catwi/2,catwi/2,h],Γ_top_cat)	
 end
+
+# ╔═╡ e21b9d37-941c-4f2c-9bdf-956964428f90
+const grid_fun = prism_sq
+#const grid_fun = prism_sq_
 
 # ╔═╡ e2e8ed00-f53f-476c-ab5f-95b9ec2f5094
 function prism_sq_(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.catwi)
@@ -96,10 +103,6 @@ function prism_sq_(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data
 	# catalyst layer boundary
 	bfacemask!(grid,[0.0,0.0,h],[catwi/2,catwi/2,h],Γ_top_cat)	
 end
-
-# ╔═╡ e21b9d37-941c-4f2c-9bdf-956964428f90
-#const grid_fun = prism_sq
-const grid_fun = prism_sq_
 
 # ╔═╡ 2554b2fc-bf5c-4b8f-b5e9-8bc261fe597b
 md"""
@@ -1426,11 +1429,13 @@ function main(;data=ModelData())
 	 				  		Δp=0.1,
 	 				  		Δp_grow=1.2,
 	 				  		Δu_opt=100000.0, # large value, due to unit Pa of pressure?
+		 					verbose="an"
 	 				  		)
 	
 	
-	#sol=solve(sys;inival, embed=[0.0,1.0],pre,post,control)
-	sol=solve(sys;inival, embed=[0.0,1.0],pre,control)
+	
+	embed=[0.0,1.0]
+	sol=solve(sys;inival,embed,pre,control)
 	sol_end_embed=sol(sol.t[end])
 	
 	
@@ -1472,17 +1477,6 @@ begin
 		sol = copy(sol_)
 	end
 end;
-  ╠═╡ =#
-
-# ╔═╡ eb6b5e4e-977e-4f2f-a7eb-38f8798f126e
-#=╠═╡
-let
-	(;h,cath) = data_embed
-	zCL=h-cath
-	Hfrit=collect(0:h/20:zCL)
-	HCL=collect(zCL:h/100:h)
-	glue(Hfrit,HCL)
-end
   ╠═╡ =#
 
 # ╔═╡ 985718e8-7ed7-4c5a-aa13-29462e52d709
@@ -1949,7 +1943,6 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─390c7839-618d-4ade-b9be-ee9ed09a77aa
 # ╠═ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
 # ╠═e2e8ed00-f53f-476c-ab5f-95b9ec2f5094
-# ╠═eb6b5e4e-977e-4f2f-a7eb-38f8798f126e
 # ╠═e21b9d37-941c-4f2c-9bdf-956964428f90
 # ╠═0a911687-aff4-4c77-8def-084293329f35
 # ╠═ff58b0b8-2519-430e-8343-af9a5adcb135
