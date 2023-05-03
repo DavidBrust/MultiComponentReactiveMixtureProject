@@ -95,30 +95,6 @@ end
 
 # ╔═╡ e21b9d37-941c-4f2c-9bdf-956964428f90
 const grid_fun = prism_sq
-#const grid_fun = prism_sq_
-
-# ╔═╡ e2e8ed00-f53f-476c-ab5f-95b9ec2f5094
-function prism_sq_(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.catwi)
-	
-	hw=w/2.0/5.0*2.0^(-nref)
-	W=collect(0:hw:(w/2.0))
-	#hh=h/5.0*2.0^(-nref)
-	#H=collect(0:hh:h)
-	#hmin=h/100.0
-    #hmax=h/5.0
- 	#H=geomspace(0.0,h,hmax,hmin)
-	zCL=h-cath
-	Hfrit=collect(0:h/20:zCL)
-	HCL=collect(zCL:h/100:h)
-	H=glue(Hfrit,HCL)
-    
-	grid=simplexgrid(W,W,H)
-	
-	# catalyst layer region
-	cellmask!(grid,[0.0,0.0,h-cath],[catwi/2,catwi/2,h],2)
-	# catalyst layer boundary
-	bfacemask!(grid,[0.0,0.0,h],[catwi/2,catwi/2,h],Γ_top_cat)	
-end
 
 # ╔═╡ 2554b2fc-bf5c-4b8f-b5e9-8bc261fe597b
 md"""
@@ -2001,7 +1977,6 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─2ed3223e-a604-410e-93d4-016580f49093
 # ╟─390c7839-618d-4ade-b9be-ee9ed09a77aa
 # ╠═ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
-# ╠═e2e8ed00-f53f-476c-ab5f-95b9ec2f5094
 # ╠═e21b9d37-941c-4f2c-9bdf-956964428f90
 # ╠═0a911687-aff4-4c77-8def-084293329f35
 # ╠═ff58b0b8-2519-430e-8343-af9a5adcb135
