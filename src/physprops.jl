@@ -481,7 +481,7 @@ end
 # calculation according to VDI heat atlas 2010 D1.6 Equation (66), p. 140
 # use standard conditions (T=25°C, p=1 atm) as reference state
 # set enthalpy at reference state to standard enthalpy of formation
-function enthalpy_gas(Fluid, T)
+function enthalpy_gas(Fluid::FluidProps, T)
     (;ΔHform)=Fluid
     Tref = 298.15*ufac"K"
     # cp_Tref = heatcap_gas(Fluid, Tref)
@@ -494,7 +494,16 @@ end
 
 # ideal gas mixture enthalpy
 # calculation according to VDI heat atlas 2010 D1.6 Equation (67), p. 140
-function enthalpy_mix(Fluids, T, x)
+# function enthalpy_mix(Fluids, T, x)
+#     hmix = zero(eltype(x))
+#     ng=length(x)
+#     for i=1:ng
+#         hmix += x[i] * enthalpy_gas(Fluids[i], T)
+#     end
+#     hmix
+# end
+
+function enthalpy_mix(Fluids::Vector{FluidProps}, T, x)
     hmix = zero(eltype(x))
     ng=length(x)
     for i=1:ng
@@ -503,17 +512,7 @@ function enthalpy_mix(Fluids, T, x)
     hmix
 end
 
-function enthalpy_mix(data, T, x)
-    ng = ngas(data)
-    (;Fluids)=data
-    hmix=zero(eltype(x))
-    #    hmix = 0
-    #ng=length(x)
-    for i=1:ng
-        hmix += x[i] * enthalpy_gas(Fluids[i], T)
-    end
-    hmix
-end
+
 
 function heatcap_mix!(cmix, cf, Fluids, T, x)
     cmix[1] = zero(eltype(cmix))
