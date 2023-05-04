@@ -1044,21 +1044,21 @@ function HeatFluxes_EB_VI_plot(heatflows)
 
     DH_sens = DH-DH_reaction
 
-    labels = ["Top Conv", "Top Emit", "Top Refl", "Top Trans", "Sides Conv", "Bottom Conv", "Bottom Emit", "ΔHSensible","ΔHReaction"]
+    labels = ["Top Trans", "Top Refl", "Top Conv", "Top Emit",  "Sides Conv", "Bottom Conv", "Bottom Emit", "ΔHSensible","ΔHReaction"]
     
     x = [string(x) for x in 1:length(labels)]
 
     labelsx = [x*": "* l for (l,x) in zip(labels,x)]
 
-    flows=[Qconv0,Qemit0,Qrefl0,(Qtrans_10+Qtrans_20),Qsides,Qconv4,Qemit4,DH_sens,DH_reaction]
+    flows=[(Qtrans_10+Qtrans_20),Qrefl0,Qconv0,Qemit0,Qsides,Qconv4,Qemit4,DH_sens,DH_reaction]
 
     y = flows / Qin * 100.0
         
     p=Plots.plot(size=(400,300), yguide="Heat flow contribution / %")
     Plots.plot!(p, permutedims(x), permutedims(y); st=:bar, label=permutedims(labelsx))    
     Plots.annotate!(p, x, y, round.(y, sigdigits=2), :bottom)
-    Plots.annotate!(p, 2.0, 30.0,
-        "Σ flows = "*string(round(sum(flows)/Qin*100.0,sigdigits=3))*" %", :left
+    Plots.annotate!(p, 12.0, 22.5,
+        "Σ flows = "*string(round(sum(flows)/Qin*100.0,sigdigits=3))*" %", :right
         )    
 
 end
