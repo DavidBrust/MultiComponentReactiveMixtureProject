@@ -276,7 +276,7 @@ These irradiation fluxes through the surfaces will be implemented in the code as
 #=╠═╡
 md"""
 ### Top chamber
-$(LocalResource("../img/irrad_top_chamber_view_factors.png"))
+$(LocalResource("../img/irrad_top_chamber_view_factors_no_rho1IR.png"))
 ```math
 \begin{align}
 F_2 &=-\epsilon_2\sigma T_2^4 + \alpha_2^{\text{vis}} G_1^{\text{vis}} + \alpha_2^{\text{IR}} G_1^{\text{IR}} \\
@@ -322,12 +322,23 @@ Base.@kwdef struct SurfaceOpticalProps
 	rho_vis::Float64 = 1.0 - tau_vis - alpha_vis 
 end;
 
+# ╔═╡ 6e6d2817-ac29-4c8d-aac0-b951345ae02f
+md"""
+!!! introduced change here!!!
+
+Set $\rho_1^{\text{IR}}=0$ (reflectivity of quarz window in IR spectrum) allows to avoid the ambiguity that occurs in the calculation of the top boundary condition: what value of temperature should be chosen that enters the emission terms of G2/G3 (catalyst or frit surfaces.)
+"""
+
 # ╔═╡ 9d191a3a-e096-4ad7-aae6-bbd63d478fa2
 # optical parameters for quartz window in upper chamber (uc)
 const uc_window = SurfaceOpticalProps(
 	# quartz glass windows
-	alpha_IR=0.2, # datasheet integrated over spectrum of HFSS
-	tau_IR=0.5,# datasheet integrated over spectrum of HFSS
+	#alpha_IR=0.2, # datasheet integrated over spectrum of HFSS
+	#tau_IR=0.5,# datasheet integrated over spectrum of HFSS
+	#########!!! introduced change here!!!##########
+	alpha_IR=0.3, # datasheet integrated over spectrum of HFSS
+	tau_IR=0.7,# datasheet integrated over spectrum of HFSS
+	#########!!! introduced change here!!!##########
 	alpha_vis=0.0, # quartz glass is transparent in visible spectrum
 	tau_vis=0.9, # datasheet, take reflection losses at adouble interface into account
 	# the calculated value for rho_vis is probably inaccurate since it depends on incidence angle, which differs between the irradiation coming from the lamp (relevant for tau_vis) and the diffuse reflected light coming from the catalyst 
@@ -1145,6 +1156,14 @@ function main(;data=ModelData())
 
 	sol=solve(sys;inival=inival,)
 
+	# update view factors as they manifest in the computational grid
+	# for coarse grids, the computed view-factors might deviate from the geometric values
+	A=areas(sol,sys,grid,data)
+	Acat=A[Γ_top_cat]
+	Afrit=A[Γ_top_frit]
+	data.vf_uc_window_cat = Acat/sum(Acat+Afrit)
+	data.vf_uc_window_frit = Afrit/sum(Acat+Afrit)
+
 	function WindowTemperature_(sol,sys,data)
 		(;ng,iT,Glamp,X0,α_nat_conv,Tamb,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h)=data
 	
@@ -1193,7 +1212,7 @@ function main(;data=ModelData())
 			end
 	
 			function flux_abs_top_frit(f,u,bnode,data)
-				if bnode.region==Γ_top_cat
+				if bnode.region==Γ_top_frit
 					
 					G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
 					
@@ -1921,6 +1940,7 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─b1ef2a89-27db-4f21-a2e3-fd6356c394da
 # ╟─4dae93b2-be63-4ee9-bc1e-871a31ade811
 # ╠═9547ed7c-3304-4c63-a6c1-5f84e0001c54
+# ╟─6e6d2817-ac29-4c8d-aac0-b951345ae02f
 # ╠═9d191a3a-e096-4ad7-aae6-bbd63d478fa2
 # ╠═2d51f54b-4cff-4253-b17f-217e3261f36d
 # ╠═fdaeafb6-e29f-41f8-8468-9c2b03b9eed7
