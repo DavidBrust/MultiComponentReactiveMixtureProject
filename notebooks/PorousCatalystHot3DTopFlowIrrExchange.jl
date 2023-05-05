@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.24
+# v0.19.25
 
 using Markdown
 using InteractiveUtils
@@ -1385,7 +1385,8 @@ function main(;data=ModelData())
 							Δp_min=1.0e-4,					  
 	 				  		Δp=0.1,
 	 				  		Δp_grow=1.2,
-	 				  		Δu_opt=100000.0, # large value, due to unit Pa of pressure?
+	 				  		Δu_opt=100000.0,
+		 					verbose="an", # log allocations and newton convergence
 	 				  		)
 	
 	

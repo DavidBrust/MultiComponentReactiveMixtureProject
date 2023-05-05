@@ -89,13 +89,14 @@ function kbed(data::AbstractModelData)
 	1.0-sqrt(1.0-ϕ)+sqrt(1.0-ϕ)*kc
 end
 
+
 function kbed(data::AbstractModelData,λf)
 	(;ϕ,λs) = data
 	B=1.25*((1.0-ϕ)/ϕ)^(10.0/9.0)
 	kp=λs/λf
 	N=1.0-(B/kp)
 	kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
-	1.0-sqrt(1.0-ϕ)+sqrt(1.0-ϕ)*kc
+	kbed=1.0-sqrt(1.0-ϕ)+sqrt(1.0-ϕ)*kc
 end
 
 function kbed!(kbed,ϕ,λs,λf)

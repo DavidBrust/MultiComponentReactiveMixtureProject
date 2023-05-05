@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.24
+# v0.19.25
 
 using Markdown
 using InteractiveUtils
@@ -310,8 +310,12 @@ end;
 # optical parameters for quartz window in upper chamber (uc)
 const uc_window = SurfaceOpticalProps(
 	# quartz glass windows
-	alpha_IR=0.2, # datasheet integrated over spectrum of HFSS
-	tau_IR=0.5,# datasheet integrated over spectrum of HFSS
+	#alpha_IR=0.2, # datasheet integrated over spectrum of HFSS
+	#tau_IR=0.5,# datasheet integrated over spectrum of HFSS
+	#########!!! introduced change here!!!##########
+	alpha_IR=0.3, # datasheet integrated over spectrum of HFSS
+	tau_IR=0.7,# datasheet integrated over spectrum of HFSS
+	#########!!! introduced change here!!!##########
 	alpha_vis=0.0, # quartz glass is transparent in visible spectrum
 	tau_vis=0.9, # datasheet, take reflection losses at adouble interface into account
 	# the calculated value for rho_vis is probably inaccurate since it depends on incidence angle, which differs between the irradiation coming from the lamp (relevant for tau_vis) and the diffuse reflected light coming from the catalyst 
@@ -371,75 +375,6 @@ with
 
 From this balance, the steady-state window temperature $T_1$ can be obtained.
 """
-
-# ╔═╡ 291624ee-5e68-4dfb-9550-dd62e80afc29
-function WindowTemperature(data, T2, T3)
-	# T2: T cat surface
-	# T3: T frit surface
-	
-	(;ng,iT,Glamp,X0,α_nat_conv,Tamb,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h)=data
-
-	σ=ph"σ"
-	
-	# irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
-	# window properties (1)
-	tau1_vis=uc_window.tau_vis
-	rho1_vis=uc_window.rho_vis
-	rho1_IR=uc_window.rho_IR
-	alpha1_IR=uc_window.alpha_IR
-	alpha1_vis=uc_window.alpha_vis
-	eps1=uc_window.eps
-	# catalyst layer properties (2)
-	rho2_vis=uc_cat.rho_vis
-	rho2_IR=uc_cat.rho_IR
-	alpha2_vis=uc_cat.alpha_vis
-	alpha2_IR=uc_cat.alpha_IR
-	eps2=uc_cat.eps
-	# uncoated frit properties (3)
-	rho3_vis=uc_frit.rho_vis
-	rho3_IR=uc_frit.rho_IR
-	alpha3_vis=uc_frit.alpha_vis
-	alpha3_IR=uc_frit.alpha_IR
-	eps3=uc_frit.eps
-	#view factors
-	ϕ12=vf_uc_window_cat
-	ϕ13=vf_uc_window_frit
-	
-	function f!(F, x)		
-		# surface brigthness of quartz window (1) in vis & IR	
-		G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
-
-		G1_bot_IR = (eps1*σ*x[1]^4 + rho1_IR*(ϕ12*eps2*σ*T2+ϕ13*eps3*σ*T3^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))		
-
-        G2_vis = rho2_vis*G1_bot_vis
-        G2_IR = eps2*σ*T2^4 + rho2_IR*G1_bot_IR
-
-        G3_vis = rho3_vis*G1_bot_vis
-        G3_IR = eps3*σ*T3^4 + rho3_IR*G1_bot_IR
-
-		q_abs_23_IR = alpha1_IR*(ϕ12*G2_IR+ϕ13*G3_IR)
-		q_abs_23_vis = alpha1_vis*(ϕ12*G2_vis+ϕ13*G3_vis)
-
-		# conductive heat flux through top chamber
-		# mean temperature
-        Tm2=0.5*(T2 + x[1])
-		Tm3=0.5*(T3 + x[1])
-        # thermal conductivity at Tm and inlet composition X0 (H2/CO2 = 1/1)
-        _,λf2=dynvisc_thermcond_mix(data, Tm2, X0)
-		_,λf3=dynvisc_thermcond_mix(data, Tm3, X0)
-
-        q_cond_bot = -λf2*(x[1]-T2)/uc_h*ϕ12 -λf3*(x[1]-T3)/uc_h*ϕ13
-		
-		q_conv_top = α_nat_conv*(x[1]-Tamb)
-
-		q_emit = eps1*σ*x[1]^4		
-		
-    	F[1] = -q_conv_top + q_cond_bot - 2*q_emit + q_abs_23_IR + q_abs_23_vis
-	end
-
-	sol = nlsolve(f!, [573.15], autodiff=:forward)
-	sol.zero[1]
-end
 
 # ╔═╡ 8b485112-6b1a-4b38-af91-deb9b79527e0
 # ╠═╡ skip_as_script = true
@@ -511,49 +446,6 @@ The surface brigthness of the frit, that solely lies in the IR spectral range $G
 
 We obtain the mean temperature of the frit $T_1$ from the simulation. From this balance, the steady-state bottom plate temperature $T_2$ can be obtained.
 """
-
-# ╔═╡ a376d672-ac91-4486-855e-2fdef0c80e24
-function PlateTemperature(data, T1, MoleFrac)
-	# T1: T frit surface
-	
-	(;ng,iT,gni,α_nat_conv,Tamb,lc_frit,lc_plate,lc_h)=data
-
-	σ=ph"σ"
-	
-	# irradiation exchange between frit surface (1) & Al bottom plate (2)
-	# frit properties
-	eps1=lc_frit.eps
-	rho1_IR=lc_frit.rho_IR
-	# plate properties
-	alpha2_IR=lc_plate.alpha_IR
-	eps2=lc_plate.eps
-	rho2_IR=lc_plate.rho_IR	
-	
-	
-	function f!(F, x)		
-		# conductive heat flux through bottom chamber
-		# mean temperature
-        Tm=0.5*(T1 + x[1])
-		
-        # thermal conductivity at Tm and outlet composition X (CO/H2/CO2/H2O = 1/1/1/1)		
-        _,λf=dynvisc_thermcond_mix(data, Tm, MoleFrac)		
-        q_cond = -λf*(T1-x[1])/lc_h
-		
-		# convective heat flux through outer reactor wall
-		q_conv = α_nat_conv*(x[1]-Tamb)
-
-		q_emit = eps2*σ*x[1]^4
-
-		G1_IR = (eps1*σ*T1^4 + rho1_IR*eps2*σ*x[1]^4)/(1-rho1_IR*rho2_IR)
-
-		q_abs_1 = alpha2_IR * G1_IR
-
-		F[1] = -q_conv -q_cond - 2*q_emit + q_abs_1
-	end
-
-	sol = nlsolve(f!, [573.15], autodiff=:forward)
-	sol.zero[1]
-end
 
 # ╔═╡ 162122bc-12ae-4a81-8df6-86498041be40
 # optical parameters for uncoated frit in lower chamber (lc) = frit in upper chamber
@@ -1013,11 +905,14 @@ function M_matrix!(M,D,T,p,x,data)
 	# have to  be inlined - here we use callsite inline from Julia 1.8
 	@inline D_matrix!(data, D, T, p)
 	for i=1:ng
-		M[i,i] = -1/DK_eff(data,T,i)
+		#M[i,i] = -1/DK_eff(data,T,i)
+		M[i,i] = 1/DK_eff(data,T,i)
 		for j=1:ng
 			if j != i
-				M[i,i] -= x[j]/(data.γ_τ*D[i,j])
-				M[i,j] = x[i]/(data.γ_τ*D[i,j])
+				#M[i,i] -= x[j]/(data.γ_τ*D[i,j])
+				M[i,i] += x[j]/(data.γ_τ*D[i,j])
+				#M[i,j] = x[i]/(data.γ_τ*D[i,j])
+				M[i,j] = -x[i]/(data.γ_τ*D[i,j])
 			end
 		end	
 	end
@@ -1113,9 +1008,7 @@ md"""
 
 # ╔═╡ bd7552d2-2c31-4834-97d9-ccdb4652242f
 function SolAlongLine(data,sol)
-		
-	#grid=prism_sq(data)
-	#grid=prism_sq_(data)
+	ng=ngas(data)		
 	grid=grid_fun(data)
 	
 	mid_x=argmin(abs.(grid[Coordinates][1,:] .-data.wi/4))
@@ -1131,7 +1024,7 @@ function SolAlongLine(data,sol)
 
 
 	sol_p = []
-	for i=1:(data.ng+2)
+	for i=1:(ng+2)
 		push!(sol_p, sol[i,Nodes])
 	end
 
@@ -1159,8 +1052,9 @@ md"""
 
 # ╔═╡ f39dd714-972c-4d29-bfa8-d2c3795d2eef
 function massflow(data, bflux)
+	ng=ngas(data)
 	mdot=0.0
-	for i=1:data.ng
+	for i=1:ng
 		mdot += bflux[i] * data.Fluids[i].MW
 	end
 	mdot/ufac"kg/hr"
@@ -1168,13 +1062,14 @@ end
 
 # ╔═╡ 6ae6d894-4923-4408-9b77-1067ba9e2aff
 function MoleFlows(sol,sys,data)
+	ng=ngas(data)
 	# bottom - inflow
 	Ibot=integrate(sys,bottom,sol; boundary=true)[:,Γ_bottom]
 	# top: outflow
 	# uncoated outer frit area, inner cat coated area
 	Itop=integrate(sys,top,sol; boundary=true)[:,[Γ_top_frit,Γ_top_cat]] 
 	Itop=sum(Itop, dims=2)
-	Ibot[1:data.ng],Itop[1:data.ng]
+	Ibot[1:ng],Itop[1:ng]
 end
 
 # ╔═╡ ed0c6737-1237-40d0-81df-32d6a842cbb0
@@ -1208,9 +1103,9 @@ function areas(sol,sys,grid,data)
 end
 
 # ╔═╡ 333b5c80-259d-47aa-a441-ee7894d6c407
-function main(;data=ModelData())
+function main(;data=ModelData(),nref=0)
 
-	grid=grid_fun(data)
+	grid=grid_fun(data;nref=nref)
 	(;iT,p,X0,Tamb)=data
 	ng=ngas(data)
 	
@@ -1230,6 +1125,14 @@ function main(;data=ModelData())
 	inival[iT,:] .= Tamb
 
 	sol=solve(sys;inival,verbose="an")
+
+	# update view factors as they manifest in the computational grid
+	# for coarse grids, the computed view-factors might deviate from the geometric values
+	A=areas(sol,sys,grid,data)
+	Acat=A[Γ_top_cat]
+	Afrit=A[Γ_top_frit]
+	data.vf_uc_window_cat = Acat/sum(Acat+Afrit)
+	data.vf_uc_window_frit = Afrit/sum(Acat+Afrit)
 
 	function WindowTemperature_(sol,sys,data)
 		(;iT,Glamp,X0,α_nat_conv,Tamb,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h)=data
@@ -1278,7 +1181,7 @@ function main(;data=ModelData())
 			end
 	
 			function flux_abs_top_frit(f,u,bnode,data)
-				if bnode.region==Γ_top_cat
+				if bnode.region==Γ_top_frit
 					
 					G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
 					
@@ -1380,11 +1283,6 @@ function main(;data=ModelData())
 
 			Qcond_34 = 4*integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
 			
-	        #Tm=0.5*(T1 + Tplate)
-			
-	        # thermal conductivity at Tm and outlet composition X (CO/H2/CO2/H2O = 1/1/1/1)		
-	        #_,λf=dynvisc_thermcond_mix(data, Tm, MoleFrac)		
-	        #q_cond = -λf*(T1-x[1])/lc_h
 
 
 			Abot = areas(sol,sys,grid,data)[Γ_bottom]
@@ -1393,14 +1291,6 @@ function main(;data=ModelData())
 			Qemit4 = 4*Abot*lc_plate.eps*σ*Tplate^4		
 	
 			F[1] = -Qconv4 +Qcond_34 -2*Qemit4 +Qabs_34
-
-			
-			# convective heat flux through outer reactor wall
-			#q_conv = α_nat_conv*(x[1]-Tamb)	
-			#q_emit = eps2*σ*x[1]^4	
-			#G1_IR = (eps1*σ*T1^4 + rho1_IR*eps2*σ*x[1]^4)/(1-rho1_IR*rho2_IR)	
-			#q_abs_1 = alpha2_IR * G1_IR	
-			#F[1] = -q_conv -q_cond - 2*q_emit + q_abs_1
 		end
 	
 		sol = nlsolve(f!, [573.15], autodiff=:forward)
@@ -1411,10 +1301,10 @@ function main(;data=ModelData())
 	function pre(sol,par)
 		ng=ngas(data)
 		# set glass emperature
-		#data.Tglass = WindowTemperature_(sol,sys,data)
+		data.Tglass = WindowTemperature_(sol,sys,data)
 
 		# set bottom plate temperature
-		#data.Tplate = PlateTemperature_(sol,sys,data)
+		data.Tplate = PlateTemperature_(sol,sys,data)
 		
 		# iteratively adapt bottom outflow boundary condition
 	 	function Intbot(f,u,bnode,data)			
@@ -1465,35 +1355,34 @@ function main(;data=ModelData())
 	 				  		Δp_grow=1.5,
 	 				  		Δu_opt=100000.0, # large value, due to unit Pa of pressure?
 						verbose="an", # log allocations and newton convergence
-#						method_linear = KrylovJL_BICGSTAB(),
-#						precon_linear = A -> factorize(A, UMFPACKFactorization())
+						method_linear = KrylovJL_BICGSTAB(),
+						precon_linear = A -> factorize(A, UMFPACKFactorization())
 	 )
 	
 	
 	embed=[0.0,1.0]
 	sol=solve(sys;inival,embed,pre,control)
-	#sol_end_embed=sol(sol.t[end])
+	sol_end_embed=sol(sol.t[end])
 	
 	
-	#sol_old=sol_end_embed
-	#ΔT = [Inf,Inf]
+	sol_old=sol_end_embed
+	ΔT = [Inf,Inf]
 	
-	#MAX_ITER=5
-	#ΔT_MAX=0.1*ufac"K"
+	MAX_ITER=5
+	ΔT_MAX=0.1*ufac"K"
 	# iteratively solve system and update glass and plate temperatures
-	#iter=1
-	#while iter <= MAX_ITER && !all(ΔT .< ΔT_MAX)
-	#	Told=[data.Tglass,data.Tplate]
-	#	sol=solve(sys;inival=sol_old)
-	#	data.Tglass = WindowTemperature_(sol,sys,data)
-	#	data.Tplate = PlateTemperature_(sol,sys,data)
-	#	ΔT = abs.(Told .-[data.Tglass,data.Tplate])
-	#	sol_old=sol
-	#	@show iter
-	#	@show ΔT
-	#	iter += 1
-	#end
-	
+	iter=1
+	while iter <= MAX_ITER && !all(ΔT .< ΔT_MAX)
+		Told=[data.Tglass,data.Tplate]
+		sol=solve(sys;inival=sol_old)
+		data.Tglass = WindowTemperature_(sol,sys,data)
+		data.Tplate = PlateTemperature_(sol,sys,data)
+		ΔT = abs.(Told .-[data.Tglass,data.Tplate])
+		sol_old=sol
+		@show iter
+		@show ΔT
+		iter += 1
+	end	
 	
 	sol,grid,sys,data
 end;
@@ -1503,7 +1392,7 @@ end;
 #=╠═╡
 begin
 	if RunSim
-		sol_,grid,sys,data_embed=main(data=ModelData());
+		sol_,grid,sys,data_embed=main(data=ModelData();nref=0);
 		if sol_ isa VoronoiFVM.TransientSolution
 			sol = copy(sol_(sol_.t[end]))
 		else
@@ -1566,9 +1455,10 @@ end
 # ╔═╡ bea97fb3-9854-411c-8363-15cbef13d033
 #=╠═╡
 let
-	sol_, grid_,midx,midy = SolAlongLine(data_embed,sol)
-	
-	(;ng, gn, ip)=data_embed
+	data=data_embed
+	sol_, grid_,midx,midy = SolAlongLine(data,sol)
+	ng=ngas(data)
+	(;gn, ip)=data
 
 	cols = distinguishable_colors(ng+1, [RGB(1,1,1), RGB(0,0,0)], dropseed=true)
 	pcols = map(col -> (red(col), green(col), blue(col)), cols)
@@ -1688,9 +1578,8 @@ end
 
 # ╔═╡ fec9ca6d-d815-4b50-bec7-f8fb3d8195ba
 function TopPlane(data,sol)
-
-	#grid=prism_sq_(data)
-	grid=grid_fun(data)
+	ng=ngas(data)
+	grid=grid_fun(data;nref=0)
 	wi=data.wi/2
 	
 	bid = maximum(grid[BFaceRegions])+1
@@ -1705,7 +1594,7 @@ function TopPlane(data,sol)
 	grid_2D  = subgrid(grid, [bid], boundary=true, transform=_3to2) 
 
 	sol_p = []
-	for i=1:(data.ng+2)
+	for i=1:(ng+2)
 		sol_i = view(sol[i, :], grid_2D)
 		push!(sol_p, collect(sol_i))
 	end
@@ -1715,9 +1604,8 @@ end
 
 # ╔═╡ 746e1a39-3c9b-478f-b371-3cb8333e93b1
 function CutPlane(data,sol)
-
-	#grid=prism_sq_(data)
-	grid=grid_fun(data)
+	ng=ngas(data)
+	grid=grid_fun(data;nref=0)
 	wi=data.wi/2
 	
 	bid = maximum(grid[BFaceRegions])+1
@@ -1732,7 +1620,7 @@ function CutPlane(data,sol)
 	grid_2D  = subgrid(grid, [bid], boundary=true, transform=_3to2) 
 
 	sol_p = []
-	for i=1:(data.ng+2)
+	for i=1:(ng+2)
 		sol_i = view(sol[i, :], grid_2D)
 		push!(sol_p, collect(sol_i))
 	end
@@ -1973,7 +1861,7 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╔═╡ Cell order:
 # ╠═11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 # ╠═863c9da7-ef45-49ad-80d0-3594eca4a189
-# ╠═94ed0f8b-13c1-4460-a391-5057cff401e0
+# ╟─94ed0f8b-13c1-4460-a391-5057cff401e0
 # ╟─2ed3223e-a604-410e-93d4-016580f49093
 # ╟─390c7839-618d-4ade-b9be-ee9ed09a77aa
 # ╠═ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
@@ -2018,14 +1906,12 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─2e631f58-6a4b-4c6d-86ad-b748fd2d463a
 # ╟─a395374d-5897-4764-8499-0ebe7f2b4239
 # ╟─7db215d7-420e-435b-8889-43c4fff150e0
-# ╠═291624ee-5e68-4dfb-9550-dd62e80afc29
 # ╟─8b485112-6b1a-4b38-af91-deb9b79527e0
 # ╟─25edaf7b-4051-4934-b4ad-a4655698a6c7
 # ╟─3fe2135d-9866-4367-8faa-56cdb42af7ed
 # ╟─652497ee-d07b-45e2-aeaf-87ad5bcc23ad
 # ╟─6bd59a54-f059-4646-b053-0fa41ead87fd
 # ╟─f5d78670-a98b-46a1-8bf3-3d2599cfdd88
-# ╠═a376d672-ac91-4486-855e-2fdef0c80e24
 # ╠═162122bc-12ae-4a81-8df6-86498041be40
 # ╠═221a1ee4-f7e9-4233-b45c-a715c9edae5f
 # ╟─04058f1d-9622-4b59-bf07-93483bc269f2
