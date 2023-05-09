@@ -586,6 +586,7 @@ begin
 	Ac::Float64=wi*le*ufac"m^2" # cross-sectional area, square
 
 	## irradiation data
+	Glamp_target::Float64=100.0*ufac"kW/m^2" # solar simulator irradiation flux
 	Glamp::Float64=1.0*ufac"kW/m^2" # solar simulator irradiation flux
 
 	# upper chamber: quartz window eff. optical properties
@@ -639,6 +640,7 @@ begin
 	Tn::Float64 = 273.15*ufac"K"
 
 	#Qflow::Float64=340.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
+	#Qflow::Float64=1480.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
 	Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
 	
 
@@ -1069,6 +1071,18 @@ md"""
 ##  Average Catalyst Temperature
 """
 
+# ╔═╡ 808aed68-7077-4079-be75-1bea962c716d
+function TmaxSide(sol,sys,grid,data)
+
+    (;iT)=data
+	sub=subgrid(grid,[Γ_side_back,Γ_side_right],boundary=true)
+
+    Tsides = view(sol[iT, :], sub) .- 273.15
+    maximum(Tsides)
+		
+	
+end
+
 # ╔═╡ a55c5ee7-2274-4447-b0b2-58052f064bc9
 function areas(sol,sys,grid,data)
 	iT = data.iT
@@ -1302,25 +1316,20 @@ function main(;data=ModelData(),nref=0)
 		 
 	 	Tavg=sum(integrate(sys,Intbot,sol; boundary=true)[iT,Γ_bottom])/(data.Ac/4)
 		
-	 	ubot_calc=ndotbot*ph"R"*Tavg/(1.0*ufac"bar")/data.Ac
-	 	#ubots=[data.ubot, ubot_calc]*ufac"m/s"
-	 	#data.ubot = minimum(ubots) + par*(maximum(ubots)-minimum(ubots))
-		data.ubot = ubot_calc
+	 	
+		data.ubot = ndotbot*ph"R"*Tavg/(1.0*ufac"bar")/data.Ac
 
 				 
 				
 	 	# calculate volume specific catalyst loading lcat in kg/ m^3
-		(;catwi,cath,mcat)=data
+		(;catwi,cath,mcat,Glamp_target)=data
 		Vcat = catwi^2*cath # m^3
 		lcat = mcat/Vcat # kg/m^3"
-	 	#mcats=[10.0, 1300.0]*ufac"kg/m^3"
-		 #mcats=[10.0, 20.0]*ufac"kg/m^3"
 		lcats=[10.0, lcat]*ufac"kg/m^3"
 	 	data.lcats = minimum(lcats) + par*(maximum(lcats)-minimum(lcats))
 
 	 	# irradiation flux density
-		#Glamps=[1.0, 50.0]*ufac"kW/m^2"
-	 	Glamps=[1.0, 100.0]*ufac"kW/m^2"
+	 	Glamps=[1.0*ufac"kW/m^2", Glamp_target]
 	 	data.Glamp = minimum(Glamps) + par*(maximum(Glamps)-minimum(Glamps))
 	 end
 
@@ -1512,6 +1521,13 @@ The obtained values for average catalyst mass specific reaction rates for the rW
 __Lou, D., et al. (2021).__ "A core-shell catalyst design boosts the performance of photothermal reverse water gas shift catalysis." Science China Materials 64(9): 2212-2220.
 	
 
+"""
+  ╠═╡ =#
+
+# ╔═╡ b22387c4-cda5-424d-99b7-d7deda24c678
+#=╠═╡
+md"""
+__Side wall maximum__ temperature: $(round(TmaxSide(sol,sys,grid,data_embed))) °C
 """
   ╠═╡ =#
 
@@ -1926,7 +1942,9 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─2739bcff-3fb0-4169-8a1a-2b0a14998cec
 # ╠═30393c90-298c-412d-86ce-e36106613d35
 # ╟─9952c815-5459-44ff-b1f8-07ab24ce0c53
+# ╟─b22387c4-cda5-424d-99b7-d7deda24c678
 # ╠═15604034-91fd-4fd4-b09e-e3c5cfe7a265
+# ╠═808aed68-7077-4079-be75-1bea962c716d
 # ╠═5de9edf7-6059-47d5-b917-e7491068ebdc
 # ╠═a55c5ee7-2274-4447-b0b2-58052f064bc9
 # ╠═68e2628a-056a-4ec3-827f-2654f49917d9
