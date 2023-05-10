@@ -586,6 +586,7 @@ begin
 	Ac::Float64=wi*le*ufac"m^2" # cross-sectional area, square
 
 	## irradiation data
+	Glamp_target::Float64=100.0*ufac"kW/m^2" # solar simulator irradiation flux
 	Glamp::Float64=1.0*ufac"kW/m^2" # solar simulator irradiation flux
 
 	# upper chamber: quartz window eff. optical properties
@@ -638,10 +639,10 @@ begin
 	pn::Float64 = 1.0*ufac"bar"
 	Tn::Float64 = 273.15*ufac"K"
 
-	#Qflow::Float64=0.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
 	#Qflow::Float64=340.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
+	#Qflow::Float64=1480.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
 	Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
-	#Qflow::Float64=50000.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
+	
 
 	MWin::Float64 = molarweight_mix(Fluids, X0)
 	mdotin::Float64=MWin*Qflow*pn/(ph"R"*Tn)*ufac"kg/s"
@@ -692,30 +693,9 @@ function reaction(f,u,node,data)
 			end			
 		end
 
-		
-		#RR = -lcats*ri(kinpar,u[iT],pi)*unitc
-		#	## Xu & Froment 1989 kinetics
-		#	# R1: CH4 + H2O = CO + 3 H2
-		#	# R2: CO + H2O = CO2 + H2
-		#	# R3: CH4 + 2 H2O = CO2 + 4 H2
-		#for i=1:ng
-		#	f[i] = sum(nuij[i,:] .* RR)
-		#end
-		
-		
-		#ΔHiT = zeros(size(nuij,2))
-		#for i=1:ng
-		#	ΔHiT .-= enthalpy_gas(Fluids[i],u[iT])*nuij[i,:]
-		#end
-
-		# temperature eq. / heat source
-		# this should be accounted for in the species enthalpies?!
-		#f[iT] = sum(RR .* ΔHiT)
-		#f[iT] = -(RR[rni[:R1]]*ΔHi[:R1]+RR[rni[:R2]]*ΔHi[:R2] +RR[rni[:R3]]*ΔHi[:R3])
 	end
 	
 	# ∑xi = 1
-	#f[ip]=u[ip]-sum(u[1:ng])
 	@views f[ip]=u[ip]-sum(u[1:ng])
 	
 end
@@ -1091,6 +1071,18 @@ md"""
 ##  Average Catalyst Temperature
 """
 
+# ╔═╡ 808aed68-7077-4079-be75-1bea962c716d
+function TmaxSide(sol,sys,grid,data)
+
+    (;iT)=data
+	sub=subgrid(grid,[Γ_side_back,Γ_side_right],boundary=true)
+
+    Tsides = view(sol[iT, :], sub) .- 273.15
+    maximum(Tsides)
+		
+	
+end
+
 # ╔═╡ a55c5ee7-2274-4447-b0b2-58052f064bc9
 function areas(sol,sys,grid,data)
 	iT = data.iT
@@ -1330,25 +1322,20 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 		 
 	 	Tavg=sum(integrate(sys,Intbot,sol; boundary=true)[iT,Γ_bottom])/(data.Ac/4)
 		
-	 	ubot_calc=ndotbot*ph"R"*Tavg/(1.0*ufac"bar")/data.Ac
-	 	#ubots=[data.ubot, ubot_calc]*ufac"m/s"
-	 	#data.ubot = minimum(ubots) + par*(maximum(ubots)-minimum(ubots))
-		data.ubot = ubot_calc
+	 	
+		data.ubot = ndotbot*ph"R"*Tavg/(1.0*ufac"bar")/data.Ac
 
 				 
 				
 	 	# calculate volume specific catalyst loading lcat in kg/ m^3
-		(;catwi,cath,mcat)=data
+		(;catwi,cath,mcat,Glamp_target)=data
 		Vcat = catwi^2*cath # m^3
 		lcat = mcat/Vcat # kg/m^3"
-	 	#mcats=[10.0, 1300.0]*ufac"kg/m^3"
-		 #mcats=[10.0, 20.0]*ufac"kg/m^3"
 		lcats=[10.0, lcat]*ufac"kg/m^3"
 	 	data.lcats = minimum(lcats) + par*(maximum(lcats)-minimum(lcats))
 
 	 	# irradiation flux density
-		#Glamps=[1.0, 50.0]*ufac"kW/m^2"
-	 	Glamps=[1.0, 100.0]*ufac"kW/m^2"
+	 	Glamps=[1.0*ufac"kW/m^2", Glamp_target]
 	 	data.Glamp = minimum(Glamps) + par*(maximum(Glamps)-minimum(Glamps))
 	 end
 
@@ -1435,11 +1422,6 @@ let
 	gridplot!(vis, grid_fun(ModelData{S3P.ng}(),nref=0), zplane=zcut)
 	reveal(vis)
 end
-  ╠═╡ =#
-
-# ╔═╡ af43e849-0198-4ce6-9e7c-8164ef9c61ff
-#=╠═╡
-data_embed.kinpar
   ╠═╡ =#
 
 # ╔═╡ bcaf83fb-f215-428d-9c84-f5b557fe143f
@@ -1556,6 +1538,13 @@ The obtained values for average catalyst mass specific reaction rates for the rW
 __Lou, D., et al. (2021).__ "A core-shell catalyst design boosts the performance of photothermal reverse water gas shift catalysis." Science China Materials 64(9): 2212-2220.
 	
 
+"""
+  ╠═╡ =#
+
+# ╔═╡ b22387c4-cda5-424d-99b7-d7deda24c678
+#=╠═╡
+md"""
+__Side wall maximum__ temperature: $(round(TmaxSide(sol,sys,grid,data_embed))) °C
 """
   ╠═╡ =#
 
@@ -1896,7 +1885,6 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╠═ed7941c4-0485-4d84-ad5b-383eb5cae70a
 # ╟─a6afe118-dcbd-4126-8646-c7268acfacf3
 # ╠═78cf4646-c373-4688-b1ac-92ed5f922e3c
-# ╠═af43e849-0198-4ce6-9e7c-8164ef9c61ff
 # ╟─a60ce05e-8d92-4172-b4c1-ac3221c54fe5
 # ╟─24374b7a-ce77-45f0-a7a0-c47a224a0b06
 # ╟─4865804f-d385-4a1a-9953-5ac66ea50057
@@ -1906,7 +1894,7 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─906ad096-4f0c-4640-ad3e-9632261902e3
 # ╟─39e74955-aab6-4bba-a1b8-b2307b45e673
 # ╟─6798d5e2-b8c7-4f54-aa71-6ea1ccab78fb
-# ╠═ed3609cb-8483-4184-a385-dca307d13f17
+# ╟─ed3609cb-8483-4184-a385-dca307d13f17
 # ╟─8139166e-42f9-41c3-a360-50d3d4e5ee86
 # ╟─44d91c2e-8082-4a90-89cc-81aba783d5ac
 # ╟─58d0610b-1739-4260-8d16-5a31ba362d69
@@ -1971,7 +1959,9 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─2739bcff-3fb0-4169-8a1a-2b0a14998cec
 # ╠═30393c90-298c-412d-86ce-e36106613d35
 # ╟─9952c815-5459-44ff-b1f8-07ab24ce0c53
+# ╟─b22387c4-cda5-424d-99b7-d7deda24c678
 # ╠═15604034-91fd-4fd4-b09e-e3c5cfe7a265
+# ╠═808aed68-7077-4079-be75-1bea962c716d
 # ╠═5de9edf7-6059-47d5-b917-e7491068ebdc
 # ╠═a55c5ee7-2274-4447-b0b2-58052f064bc9
 # ╠═68e2628a-056a-4ec3-827f-2654f49917d9
