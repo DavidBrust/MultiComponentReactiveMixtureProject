@@ -19,10 +19,10 @@ begin
 	using Pkg
 	Pkg.activate(joinpath(@__DIR__,".."))
 	using Revise
-	using VoronoiFVM
-	using ExtendableGrids, GridVisualize
+	using VoronoiFVM, VoronoiFVM.SolverStrategies
+	using ExtendableGrids, GridVisualize,ExtendableSparse,SparseArrays
 	using NLsolve
-	using LinearAlgebra, LinearSolve,LinearSolvePardiso
+	using LinearAlgebra
 	using StaticArrays
 
 	using LessUnitful
@@ -1095,8 +1095,9 @@ function areas(sol,sys,grid,data)
 end
 
 # ╔═╡ 333b5c80-259d-47aa-a441-ee7894d6c407
-function main(;data=ModelData(),nref=0)
+function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:cellwise )
 
+	
 	grid=grid_fun(data;nref=nref)
 	(;iT,p,X0,Tamb)=data
 	ng=ngas(data)
@@ -1105,9 +1106,13 @@ function main(;data=ModelData(),nref=0)
 							data=data,
 							flux=flux,
 							reaction=reaction,
-							bcondition=bcond
+							bcondition=bcond,
+		                    assembly
 							)
 	enable_species!(sys; species=collect(1:(ng+2))) # gas phase species + p + T
+
+	# this is not  good...
+	#precon_linear=BlockPreconditioner(partitioning=partitioning(sys),factorization=UMFPACKFactorization())
 	
 	inival=unknowns(sys)
 	inival[:,:].=1.0*p
@@ -1116,7 +1121,7 @@ function main(;data=ModelData(),nref=0)
 	end
 	inival[iT,:] .= Tamb
 
-	sol=solve(sys;inival,verbose="an")
+	sol=solve(sys;inival,control=control(sys))
 
 	# update view factors as they manifest in the computational grid
 	# for coarse grids, the computed view-factors might deviate from the geometric values
@@ -1291,6 +1296,7 @@ function main(;data=ModelData(),nref=0)
 
 	
 	function pre(sol,par)
+		@info par
 		ng=ngas(data)
 		# set glass emperature
 		data.Tglass = WindowTemperature_(sol,sys,data)
@@ -1335,20 +1341,16 @@ function main(;data=ModelData(),nref=0)
 
 
 	
-	 control=SolverControl( ;
+	 mycontrol=control(sys ;
 	 				  		handle_exceptions=true,
 							Δp_min=1.0e-4,					  
-	 				  		Δp=0.1,
-	 				  		Δp_grow=1.5,
+	 				  		Δp=0.25,
+	 				  		Δp_grow=2,
 	 				  		Δu_opt=100000.0, # large value, due to unit Pa of pressure?
-						verbose="an", # log allocations and newton convergence
-						method_linear = KrylovJL_BICGSTAB(),
-						precon_linear = A -> factorize(A, UMFPACKFactorization())
 	 )
 	
-	
 	embed=[0.0,1.0]
-	sol=solve(sys;inival,embed,pre,control)
+	sol=solve(sys;control=mycontrol,inival,embed,pre,)
 	sol_end_embed=sol(sol.t[end])
 	
 	
@@ -1361,13 +1363,13 @@ function main(;data=ModelData(),nref=0)
 	iter=1
 	while iter <= MAX_ITER && !all(ΔT .< ΔT_MAX)
 		Told=[data.Tglass,data.Tplate]
-		sol=solve(sys;inival=sol_old)
+		sol=solve(sys;inival=sol_old, control=control(sys))
+
 		data.Tglass = WindowTemperature_(sol,sys,data)
 		data.Tplate = PlateTemperature_(sol,sys,data)
 		ΔT = abs.(Told .-[data.Tglass,data.Tplate])
 		sol_old=sol
-		@show iter
-		@show ΔT
+		@info "iter=$(iter), ΔT=$(ΔT)"
 		iter += 1
 	end	
 	
@@ -1379,7 +1381,22 @@ end;
 #=╠═╡
 begin
 	if RunSim
-		sol_,grid,sys,data_embed=main(data=ModelData();nref=0);
+
+		function control(sys;kwargs...)
+			SolverControl(
+#			direct_umfpack(),
+			gmres_umfpack(),
+#			gmres_eqnblock_umfpack(),
+#			gmres_eqnblock_iluzero(),
+			sys;
+			verbose="na",
+			log=true,
+			reltol=1.0e-8,
+			reltol_linear=1.0e-5,
+			kwargs...)
+		end
+		sol_,grid,sys,data_embed=main(;data=ModelData(),nref=0,control,
+		assembly=:edgewise);
 		if sol_ isa VoronoiFVM.TransientSolution
 			sol = copy(sol_(sol_.t[end]))
 		else
@@ -1402,7 +1419,7 @@ Cutplane at ``z=`` $(@bind zcut PlutoUI.Slider(range(0.0,data_embed.h,length=101
 #=╠═╡
 let
 	vis=GridVisualizer(resolution=(600,400),zoom=1.9)
-	gridplot!(vis, grid_fun(ModelData{S3P.ng}()), zplane=zcut)
+	gridplot!(vis, grid_fun(ModelData{S3P.ng}(),nref=0), zplane=zcut)
 	reveal(vis)
 end
   ╠═╡ =#
