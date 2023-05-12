@@ -526,8 +526,9 @@ function heatcap_mix!(cmix, cf, Fluids, T, x)
 end
 
 function molarweight_mix(Fluids, x)
-    wmix =0
-    ng = length(x)
+    # wmix =0
+    wmix=zero(eltype(x))
+    ng=length(x)
     for i=1:ng
         wmix += x[i] * Fluids[i].MW
     end

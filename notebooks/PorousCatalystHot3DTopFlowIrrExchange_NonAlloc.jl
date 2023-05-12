@@ -77,20 +77,25 @@ function prism_sq(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.
 	hw=(w/2.0)/5.0*2.0^(-nref)
 	W=collect(0:hw:(w/2.0))
 	
-	zCL=h-cath
-	hhfrit=zCL/5.0
-	Hfrit=collect(0:hhfrit:zCL)
+	#zCL=h-cath
+	#hhfrit=zCL/5.0
+	#Hfrit=collect(0:hhfrit:zCL)
+	hhfrit=h/5.0
+	Hfrit=collect(0:hhfrit:h)
 	
 	hhCL=cath/5.0
-	HCL=collect(zCL:hhCL:h)
+	#HCL=collect(zCL:hhCL:h)
+	HCL=collect(h:hhCL:h+cath)
 	H=glue(Hfrit,HCL)
 	
 	grid=simplexgrid(W,W,H)
 	
 	# catalyst layer region
-	cellmask!(grid,[0.0,0.0,h-cath],[catwi/2,catwi/2,h],2)
+	#cellmask!(grid,[0.0,0.0,h-cath],[catwi/2,catwi/2,h],2)
+	cellmask!(grid,[0.0,0.0,h],[catwi/2,catwi/2,h+cath],2)
 	# catalyst layer boundary
-	bfacemask!(grid,[0.0,0.0,h],[catwi/2,catwi/2,h],Γ_top_cat)	
+	#bfacemask!(grid,[0.0,0.0,h],[catwi/2,catwi/2,h],Γ_top_cat)	
+	bfacemask!(grid,[0.0,0.0,h+cath],[catwi/2,catwi/2,h+cath],Γ_top_cat)	
 end
 
 # ╔═╡ e21b9d37-941c-4f2c-9bdf-956964428f90
@@ -471,6 +476,45 @@ Becuase the precise flow field is not known in the chambers, the transport of he
 ```
 """
 
+# ╔═╡ 2228bbd4-bc84-4617-a837-2bf9bba76793
+md"""
+## Convective Transport
+Apply convective heat transport through the top and bottom chambers: the heat transport occurs perpendicular to the main direction of flow according to methodology for __Parallel Plate Ducts__ from VDI heat atlas __ch. G2, sec. 8, p. 707__. For this case the dimensionless numbers are defined as:
+
+```math
+\text{Nu}=\frac{\alpha d_{\text h}}{\lambda} \qquad \text{Re}=\frac{w d_{\text h}}{\nu}
+```
+The characteristic dimension for flow through the gap, corresponding to the
+hydraulic diameter, is twice the gap width:
+
+```math
+d_{\text h}=2 s
+```
+
+Assume the asymptotic situation of Hydrodynamically and thermally fully developed laminar flow for a fluid flowing between a heated and an isolated surface:
+
+$(LocalResource("../img/ParallelPlateDuct.png", :width => 200)) 
+This considers the convective heat transfer between the fluid in the chamber and a single surface.
+This situation is addressed by eq. (42) from VDI heat atlas ch. G2, sec. 8, p. 708:
+
+```math
+\text{Nu} = 4.861
+```
+"""
+
+# ╔═╡ 09d976a7-f6c6-465b-86f4-9bc654ae158c
+md"""
+The convective heat flux from the bottom wall into the fluid is expressed via:
+```math
+\dot q_{\text{bot}} = \alpha(T_{\text{bot}} - T_{\text{m}})
+```
+Similarly, the heat flux from the fluid towards the top wall, which is at a lower temperature is obtained:
+```math
+\dot q_{\text{top}} = \alpha(T_{\text{m}}-T_{\text{top}})
+```
+where $T_{\text{m}}=(T_{\text{top}}+T_{\text{bot}})/2$.
+"""
+
 # ╔═╡ 4ebbe06f-0993-4c5c-9af3-76b2b645e592
 md"""
 ## Implementation
@@ -479,9 +523,12 @@ md"""
 # ╔═╡ 0bc79692-8db4-44a2-9433-5b6ce97b656f
 md"""
 #### Practical problem
-A problem regarding the implementation of above irradiation flux boundary conditions in VoronoiFVM.jl arises: in the physics callback functions that define the boundary conditions, only local values of the solution are available. But since irradiation is not acting locally but acts over distances, values from other part of the modeling domain influence the local solution. These interactions cannot be considered in a streight-forward way.
+A problem regarding the implementation of above irradiation flux boundary conditions in VoronoiFVM.jl arises: in the physics callback functions that define the boundary conditions, only local values of the solution are available. But since irradiation is not acting locally but acts over distances, values from other part of the modeling domain influence the local solution. These interactions cannot be considered in a straight-forward way.
 
-In the following, a "simplification" is applied: instead of considering the different temperatures $T_2$ and $T_3$, we consider the single, local temperature $T_{2/3}$ in the calculation of the surface brightness. 
+__The following remedy is currently considered: for the IR spectral range, the quartz window is assumed to be non-reflective ($\rho_1^{\text{IR}}=0$). The incoming IR radiation is either transmitted or absorbed, circumventing the problem of ray-tracing.__
+
+
+Previously, the following, a "simplification" was applied: instead of considering the different temperatures $T_2$ and $T_3$, we consider the single, local temperature $T_{2/3}$ in the calculation of the surface brightness. 
 Instead of the surface brightness $G_1^{\text{IR}}$ as defined above, the following is implemented in the code:
 
 ```math
@@ -662,6 +709,24 @@ end;
 	ModelData(;ng=S3P.ng, kwargs...) = ModelData{ng}(;kwargs...)
 
 end;
+
+# ╔═╡ 985718e8-7ed7-4c5a-aa13-29462e52d709
+# ╠═╡ skip_as_script = true
+#=╠═╡
+md"""
+Cutplane at ``z=`` $(d=ModelData{S3P.ng}(); @bind zcut PlutoUI.Slider(range(0.0,(d.h+d.cath)/ufac"mm",length=106),default=(d.h+d.cath)/ufac"mm",show_value=true)) mm
+"""
+  ╠═╡ =#
+
+# ╔═╡ ff58b0b8-2519-430e-8343-af9a5adcb135
+# ╠═╡ skip_as_script = true
+#=╠═╡
+let
+	vis=GridVisualizer(resolution=(600,400),zoom=1.9)
+	gridplot!(vis, grid_fun(ModelData{S3P.ng}(),nref=0), zplane=zcut*ufac"mm")
+	reveal(vis)
+end
+  ╠═╡ =#
 
 # ╔═╡ 78cf4646-c373-4688-b1ac-92ed5f922e3c
 function reaction(f,u,node,data)
@@ -1406,24 +1471,6 @@ begin
 end;
   ╠═╡ =#
 
-# ╔═╡ 985718e8-7ed7-4c5a-aa13-29462e52d709
-# ╠═╡ skip_as_script = true
-#=╠═╡
-md"""
-Cutplane at ``z=`` $(@bind zcut PlutoUI.Slider(range(0.0,data_embed.h,length=101),default=data_embed.h,show_value=true)) m
-"""
-  ╠═╡ =#
-
-# ╔═╡ ff58b0b8-2519-430e-8343-af9a5adcb135
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	vis=GridVisualizer(resolution=(600,400),zoom=1.9)
-	gridplot!(vis, grid_fun(ModelData{S3P.ng}(),nref=0), zplane=zcut)
-	reveal(vis)
-end
-  ╠═╡ =#
-
 # ╔═╡ bcaf83fb-f215-428d-9c84-f5b557fe143f
 # ╠═╡ skip_as_script = true
 #=╠═╡
@@ -1435,6 +1482,37 @@ To calculate the temperature field within the modelling domain, the thermal ener
 
 Heat is transported within the domain via conduction and convective transport. Because of the treatment of the porous domain as a Quasi-homogenous phase, an effective thermal conductivity is used to describe conduction. The convective heat transport considers both advective flow through the porous medium described by D'arcy's law and the multi-component diffusion flux combined in the total species flux $\vec N_i$.
 """
+  ╠═╡ =#
+
+# ╔═╡ 0e40bdef-033f-4e4c-af9a-1e2ccd007609
+#=╠═╡
+let
+	data=data_embed
+	(;uc_h,wi,Qflow,Tglass,Fluids,Tamb,p,Tn,pn,gni)=data
+	
+	X0 = begin
+		x=zeros(Float64, ngas(data))
+		x[gni[:N2]] = 1.0
+		#x[gni[:H2]] = 1.0
+		#x[gni[:CO2]] = 1.0
+		x/sum(x)
+	end # N2
+	DT=350.0*ufac"K"
+	Tbot=Tglass+DT*ufac"K"
+	Tm=0.5*(Tbot+Tglass)
+
+	dh=2*uc_h
+	#Nu=7.541
+	Nu=4.861
+	eta,lambda = dynvisc_thermcond_mix(data, Tm, X0)
+	alpha=Nu*lambda/dh*ufac"W/(m^2*K)"
+	
+	qbot=alpha*(Tbot-Tm)
+	qtop=alpha*(Tm-Tglass)
+
+	#qcond=lambda*(Tbot-Tglass)/uc_h
+	
+end
   ╠═╡ =#
 
 # ╔═╡ 3bd80c19-0b49-43f6-9daa-0c87c2ea8093
@@ -1920,6 +1998,9 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╠═162122bc-12ae-4a81-8df6-86498041be40
 # ╠═221a1ee4-f7e9-4233-b45c-a715c9edae5f
 # ╟─04058f1d-9622-4b59-bf07-93483bc269f2
+# ╟─2228bbd4-bc84-4617-a837-2bf9bba76793
+# ╟─09d976a7-f6c6-465b-86f4-9bc654ae158c
+# ╠═0e40bdef-033f-4e4c-af9a-1e2ccd007609
 # ╟─4ebbe06f-0993-4c5c-9af3-76b2b645e592
 # ╟─0bc79692-8db4-44a2-9433-5b6ce97b656f
 # ╠═7da59e27-62b9-4b89-b315-d88a4fd34f56
@@ -1956,7 +2037,7 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╠═ed0c6737-1237-40d0-81df-32d6a842cbb0
 # ╠═7f2276d5-bb78-487c-868a-0486595d0113
 # ╟─a6e61592-7958-4094-8614-e77446eb2223
-# ╟─2739bcff-3fb0-4169-8a1a-2b0a14998cec
+# ╠═2739bcff-3fb0-4169-8a1a-2b0a14998cec
 # ╠═30393c90-298c-412d-86ce-e36106613d35
 # ╟─9952c815-5459-44ff-b1f8-07ab24ce0c53
 # ╟─b22387c4-cda5-424d-99b7-d7deda24c678
