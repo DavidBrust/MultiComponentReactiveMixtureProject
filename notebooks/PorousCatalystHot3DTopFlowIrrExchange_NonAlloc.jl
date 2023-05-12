@@ -477,6 +477,8 @@ Becuase the precise flow field is not known in the chambers, the transport of he
 """
 
 # ╔═╡ 2228bbd4-bc84-4617-a837-2bf9bba76793
+# ╠═╡ skip_as_script = true
+#=╠═╡
 md"""
 ## Convective Transport
 Apply convective heat transport through the top and bottom chambers: the heat transport occurs perpendicular to the main direction of flow according to methodology for __Parallel Plate Ducts__ from VDI heat atlas __ch. G2, sec. 8, p. 707__. For this case the dimensionless numbers are defined as:
@@ -501,6 +503,7 @@ This situation is addressed by eq. (42) from VDI heat atlas ch. G2, sec. 8, p. 7
 \text{Nu} = 4.861
 ```
 """
+  ╠═╡ =#
 
 # ╔═╡ 09d976a7-f6c6-465b-86f4-9bc654ae158c
 md"""
@@ -621,9 +624,10 @@ begin
 	#cath::Float64 = 500.0*ufac"μm"
 	cath::Float64 = 250.0*ufac"μm"
 
-	# upper and lower chamber heights for calculation of conduction b.c.
+	# upper and lower chamber heights for calculation of conduction/convection b.c.
 	uc_h::Float64=17.0*ufac"mm"
 	lc_h::Float64=18.0*ufac"mm"
+	Nu::Float64=4.861
 
 	# prism / 3D
 	wi::Float64=12.0*ufac"cm" # prism width/side lenght
@@ -769,7 +773,7 @@ end
 function top(f,u,bnode,data)
 	# top boundaries (cat layer & frit)
 	if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat 
-		(;iT,Glamp,Tglass,X0,Fluids,Tamb,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h)=data
+		(;iT,Glamp,Tglass,X0,Fluids,Tamb,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h,Nu)=data
 		ng=ngas(data)
 		# convective therm. energy flux
 		flux_entahlpy=zero(eltype(u))
@@ -831,13 +835,16 @@ function top(f,u,bnode,data)
         # thermal conductivity at Tm and inlet composition X0 (H2/CO2 = 1/1)
         @inline _,λf=dynvisc_thermcond_mix(data, Tm, X0)
 
-        flux_cond = -λf*(Tglass-u[iT])/uc_h
+        #flux_cond = -λf*(Tglass-u[iT])/uc_h
+		dh=2*uc_h
+		alpha=Nu*λf/dh*ufac"W/(m^2*K)"
+		flux_conv = alpha*(u[iT]-Tm)
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
 
 		# include convective therm. energy flux
 		# use species enthalpy (incl. Δh_formation) for conv. therm. eng. flux 2/2
-		f[iT] = -flux_irrad + flux_cond + flux_entahlpy
-		#f[iT] = -flux_irrad + flux_cond
+		#f[iT] = -flux_irrad + flux_cond + flux_entahlpy
+		f[iT] = -flux_irrad + flux_conv + flux_entahlpy
 		
 		
 
@@ -877,7 +884,7 @@ end
 # ╔═╡ 40906795-a4dd-4e4a-a62e-91b4639a48fa
 function bottom(f,u,bnode,data)
 	if bnode.region==Γ_bottom # bottom boundary
-		(;iT,ip,Fluids,ubot,Tamb,lc_frit,lc_plate,Tplate,lc_h) = data
+		(;iT,ip,Fluids,ubot,Tamb,lc_frit,lc_plate,Tplate,lc_h,Nu) = data
 		ng=ngas(data)
 
 		X=MVector{ngas(data),eltype(u)}(undef)
@@ -908,10 +915,14 @@ function bottom(f,u,bnode,data)
         # thermal conductivity at Tm and outlet composition X
         @inline _,λf=dynvisc_thermcond_mix(data, Tm, X)
 
-        flux_cond = -λf*(u[iT]-Tplate)/lc_h # positive flux in positive z coord.
+        # flux_cond = -λf*(u[iT]-Tplate)/lc_h # positive flux in positive z coord.
+		dh=2*lc_h
+		alpha=Nu*λf/dh*ufac"W/(m^2*K)"
+		flux_conv = alpha*(u[iT]-Tm) # positive flux in negative z coord.
 		
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
-		f[iT] = -flux_irrad + flux_entahlpy - flux_cond
+		# f[iT] = -flux_irrad + flux_entahlpy - flux_cond
+		f[iT] = -flux_irrad + flux_entahlpy + flux_conv
 
 		
 		
@@ -950,13 +961,10 @@ function M_matrix!(M,D,T,p,x,data)
 	# have to  be inlined - here we use callsite inline from Julia 1.8
 	@inline D_matrix!(data, D, T, p)
 	for i=1:ng
-		#M[i,i] = -1/DK_eff(data,T,i)
 		M[i,i] = 1/DK_eff(data,T,i)
 		for j=1:ng
 			if j != i
-				#M[i,i] -= x[j]/(data.γ_τ*D[i,j])
 				M[i,i] += x[j]/(data.γ_τ*D[i,j])
-				#M[i,j] = x[i]/(data.γ_τ*D[i,j])
 				M[i,j] = -x[i]/(data.γ_τ*D[i,j])
 			end
 		end	
@@ -1197,7 +1205,7 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 	data.vf_uc_window_frit = Afrit/sum(Acat+Afrit)
 
 	function WindowTemperature_(sol,sys,data)
-		(;iT,Glamp,X0,α_nat_conv,Tamb,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h)=data
+		(;iT,Glamp,X0,α_nat_conv,Tamb,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h,Nu)=data
 		σ=ph"σ"
 		
 		# irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
@@ -1270,21 +1278,43 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 					q_cond = -λf*(Tglass-u[iT])/uc_h			
 					f[iT] = q_cond			
 				end
+			end
+
+			function flux_convection_top(f,u,bnode,data)
+				if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
+			
+					# mean temperature
+					Tm=0.5*(u[iT] + Tglass)
+			
+					# thermal conductivity at Tm and inlet composition X0 (H2/CO2 = 1/1)
+					@inline _,λf=dynvisc_thermcond_mix(data, Tm, X0)
+			
+					# positive flux in positive z-coordinate
+					dh=2*uc_h
+					alpha=Nu*λf/dh*ufac"W/(m^2*K)"
+					#q_conv = alpha*(u[iT]-Tm)
+					# 2nd variant:
+					q_conv = alpha*(Tm-Tglass)	
+					f[iT] = q_conv			
+				end
 			end		
 			
 			Qabs_10 = 4*integrate(sys,flux_abs_top_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
 			Qabs_20 = 4*integrate(sys,flux_abs_top_frit,sol; boundary=true)[iT,Γ_top_frit]
 	
 	
-			Qcond_10=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
-			Qcond_20=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
+			#Qcond_10=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
+			Qconv_10=4*integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
+			#Qcond_20=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
+			Qconv_20=4*integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
 	
 			Atop = sum(areas(sol,sys,grid,data)[[Γ_top_cat,Γ_top_frit]])
 	
 			Qconv0 = 4*Atop*α_nat_conv*(Tglass-Tamb)
 			Qemit0 = 4*Atop*uc_window.eps*σ*Tglass^4		
 	
-			F[1] = -Qconv0 +Qcond_10 +Qcond_20 - 2*Qemit0 +Qabs_10 +Qabs_20
+			#F[1] = -Qconv0 +Qcond_10 +Qcond_20 - 2*Qemit0 +Qabs_10 +Qabs_20
+			F[1] = -Qconv0 +Qconv_10 +Qconv_20 - 2*Qemit0 +Qabs_10 +Qabs_20
 			
 		end
 	
@@ -1294,7 +1324,7 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 	end
 
 	function PlateTemperature_(sol,sys,data)
-		(;iT,gni,α_nat_conv,Tamb,lc_frit,lc_plate,lc_h)=data
+		(;iT,gni,α_nat_conv,Tamb,lc_frit,lc_plate,lc_h,Nu)=data
 	
 		σ=ph"σ"
 		
@@ -1343,16 +1373,39 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 			    end
 			end
 
-			Qcond_34 = 4*integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
+			function flux_convection_bottom(f,u,bnode,data)
+				 if bnode.region==Γ_bottom
 			
+					X=zeros(eltype(u), ng)
+					mole_frac!(bnode,data,X,u)
+			
+			        Tm=0.5*(u[iT] + Tplate)
+			        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X)
+			
+			        # positive flux in negative z coord. -> pointing towards bottom plate
+					 
+			        # q_cond = -λf*(Tplate-u[iT])/lc_h 			
+			        # f[iT] = q_cond			
 
+					dh=2*lc_h
+					alpha=Nu*λf/dh*ufac"W/(m^2*K)"
+					#q_conv = alpha*(u[iT]-Tm)
+					# 2nd variant:
+					q_conv = alpha*(Tm-Tplate)	
+					f[iT] = q_conv			
+				end
+			end		
 
+			# Qcond_34 = 4*integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
+			Qconv_34 = 4*integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,Γ_bottom]
+			
 			Abot = areas(sol,sys,grid,data)[Γ_bottom]
 	
 			Qconv4 = 4*Abot*α_nat_conv*(Tplate-Tamb)
 			Qemit4 = 4*Abot*lc_plate.eps*σ*Tplate^4		
 	
-			F[1] = -Qconv4 +Qcond_34 -2*Qemit4 +Qabs_34
+			#F[1] = -Qconv4 +Qcond_34 -2*Qemit4 +Qabs_34
+			F[1] = -Qconv4 +Qconv_34 -2*Qemit4 +Qabs_34
 		end
 	
 		sol = nlsolve(f!, [573.15], autodiff=:forward)
@@ -1488,7 +1541,7 @@ Heat is transported within the domain via conduction and convective transport. B
 #=╠═╡
 let
 	data=data_embed
-	(;uc_h,wi,Qflow,Tglass,Fluids,Tamb,p,Tn,pn,gni)=data
+	(;uc_h,Nu,Tglass,Fluids,Tamb,gni)=data
 	
 	X0 = begin
 		x=zeros(Float64, ngas(data))
@@ -1507,8 +1560,8 @@ let
 	eta,lambda = dynvisc_thermcond_mix(data, Tm, X0)
 	alpha=Nu*lambda/dh*ufac"W/(m^2*K)"
 	
-	qbot=alpha*(Tbot-Tm)
-	qtop=alpha*(Tm-Tglass)
+	#qbot=alpha*(Tbot-Tm)
+	#qtop=alpha*(Tm-Tglass)
 
 	#qcond=lambda*(Tbot-Tglass)/uc_h
 	

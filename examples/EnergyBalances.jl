@@ -522,6 +522,26 @@ function flux_conduction_top(f,u,bnode,data)
     end
 end
 
+# convective heat flux through top chamber
+function flux_convection_top(f,u,bnode,data)
+    if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
+        (;iT,Tglass,X0,uc_h,Nu)=data
+        # mean temperature
+        Tm=0.5*(u[iT] + Tglass)
+
+        # thermal conductivity at Tm and inlet composition X0 (H2/CO2 = 1/1)
+        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X0)
+
+        # positive flux in positive z-coordinate
+        dh=2*uc_h
+        alpha=Nu*λf/dh*ufac"W/(m^2*K)"
+        #q_conv = alpha*(u[iT]-Tm)
+        # 2nd variant:
+        q_conv = alpha*(Tm-Tglass)	
+        f[iT] = q_conv			
+    end
+end	
+
 # surface radiosity of underside of frit, facing towards the bottom plate
 # solely in IR, consists of emission and reflection
 function flux_radiation_frit_bottom(f,u,bnode,data)
@@ -585,6 +605,27 @@ function flux_conduction_bottom(f,u,bnode,data)
 
     end
 end
+
+function flux_convection_bottom(f,u,bnode,data)
+    if bnode.region==Γ_bottom
+        (;iT,Tplate,lc_h,Nu)=data
+        ng=ngas(data)
+
+        X=zeros(eltype(u), ng)
+        mole_frac!(bnode,data,X,u)
+
+        Tm=0.5*(u[iT] + Tplate)
+        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X)
+
+        dh=2*lc_h
+        alpha=Nu*λf/dh*ufac"W/(m^2*K)"
+        #q_conv = alpha*(u[iT]-Tm)
+        # 2nd variant:
+        # positive flux in negative z coord. -> pointing towards bottom plate
+        q_conv = alpha*(Tm-Tplate)	
+        f[iT] = q_conv			
+   end
+end		
 
 function flux_abs_top_catalyst_layer(f,u,bnode,data)
     if bnode.region==Γ_top_cat
@@ -788,10 +829,23 @@ end
 
 
 function runSim()
-    #sol_embed,grid,sys,data_embed = main();
-    #sol = sol_embed(1.0) # select final solution at the end of parameter embedding
+    function control(sys;kwargs...)
+        SolverControl(
+#			    direct_umfpack(),
+            gmres_umfpack(),
+    #			gmres_eqnblock_umfpack(),
+    #			gmres_eqnblock_iluzero(),
+            sys;
+            verbose="na",
+            log=true,
+            reltol=1.0e-8,
+            reltol_linear=1.0e-5,
+            kwargs...
+        )
+    end
 
-    sol_,grid,sys,data_embed=main();
+    sol_,grid,sys,data_embed=main(;data=ModelData(),nref=0,control,
+    assembly=:edgewise);
 	if sol_ isa VoronoiFVM.TransientSolution
 		sol = copy(sol_(sol_.t[end]))
 	else
@@ -815,21 +869,25 @@ function HeatFluxes_EB_I(sol,grid,sys,data)
     Hin=4*integrate(sys,flux_enthalpy_top,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
     Hin=sum(Hin)
 
-    Qcond_10=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
-    Qcond_20=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
+    # Qcond_10=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
+    Qconv_10=4*integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
+    # Qcond_20=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
+    Qconv_20=4*integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
 
     QG_01=4*integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_cat]
     QG_02=4*integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_frit]
 
     QG_10=4*integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
     QG_20=4*integrate(sys,flux_frit,sol; boundary=true)[iT,Γ_top_frit]
-    # manually calc Qtop from indiv contributions
-    EB_top= Hin +QG_01 +QG_02 -QG_10 -QG_20 -Qcond_10 -Qcond_20
+
+    # EB_top= Hin +QG_01 +QG_02 -QG_10 -QG_20 -Qcond_10 -Qcond_20
+    EB_top= Hin +QG_01 +QG_02 -QG_10 -QG_20 -Qconv_10 -Qconv_20
       
 
     Hout=4*integrate(sys,flux_enthalpy_bottom,sol; boundary=true)[iT,Γ_bottom]
 
-    Qcond_34=4*integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
+    # Qcond_34=4*integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
+    Qconv_34=4*integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,Γ_bottom]
 
     QG_34=4*integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,Γ_bottom]
     QG_43=4*integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,Γ_bottom]
@@ -837,14 +895,24 @@ function HeatFluxes_EB_I(sol,grid,sys,data)
     Qsides=4*integrate(sys,side,sol; boundary=true)[iT,[Γ_side_right,Γ_side_back]]        
     Qsides=sum(Qsides)
 
-    # manually calc Qtop from indiv contributions
-    EB_bot= -Hout -Qcond_34 -QG_34 +QG_43 
-    
-    #Qbot,Qbot_calc
-    EB = EB_top +EB_bot -Qsides
-    
-    #Qtop,Qbot,Qsides, sum(Qbot+Qtop+Qsides)
-    #Qtop_calc,Qbot_calc,-Qsides, sum([Qtop_calc,Qbot_calc,-Qsides])
+    EB_bot= -Hout -Qcond_34 -QG_34 +QG_43    
+
+    EB = EB_top +EB_bot -Qsides    
+    (
+        Hin=Hin,
+        QG_01=QG_01,
+        QG_02=QG_02,
+        QG_10=-QG_10,
+        QG_20=-QG_20,
+        Qconv_10=-Qconv_10,
+        Qconv_20=-Qconv_20,
+        Hout=-Hout,
+        # Qcond_34=-Qcond_34,
+        Qconv_34=-Qconv_34,
+        QG_34=-QG_34,
+        QG_43=QG_43,
+        Qsides=-Qsides
+    )
     
 
 end
@@ -865,23 +933,39 @@ function HeatFluxes_EB_II(sol,grid,sys,data)
     Qtrans_10=4*integrate(sys,flux_transmission_top_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
     Qtrans_20=4*integrate(sys,flux_transmission_top_frit,sol; boundary=true)[iT,Γ_top_frit]
 
-    ### correct, proven in EB I ###
-    Qcond_10=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
-    Qcond_20=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
+    # Qcond_10=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
+    Qconv_10=4*integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
+    # Qcond_20=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
+    Qconv_20=4*integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
 
     QG_01=4*integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_cat]
     QG_02=4*integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_frit]
 
     QG_10=4*integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
     QG_20=4*integrate(sys,flux_frit,sol; boundary=true)[iT,Γ_top_frit]
-    ### correct, proven in EB I ###
 
-    # calc energy balance II
-    EB_bot = -QG_01 +Qcond_10 +QG_10 -QG_02 +Qcond_20 +QG_20
+
+    # EB_bot = -QG_01 +Qcond_10 +QG_10 -QG_02 +Qcond_20 +QG_20
+    EB_bot = -QG_01 +Qconv_10 +QG_10 -QG_02 +Qconv_20 +QG_20
     EB_top = -Qconv0 -Qemit0 +Qin -Qrefl0 -Qtrans_10 -Qtrans_20
     EB = EB_bot + EB_top
-    #EB = -Qconv0 -Qemit0 +Qin -Qrefl0 -Qtrans_10 -Qtrans_20 -QG_01 +Qcond_10 +QG_10 -QG_02 +Qcond_20 +QG_20
-    
+
+    (
+        QG_01=-QG_01,
+        Qconv_10=Qconv_10,
+        QG_10=QG_10,
+        QG_02=-QG_02,
+        Qconv_20=Qconv_20,
+        QG_20=QG_20,
+        Qconv0=-Qconv0,
+        Qemit0=-Qemit0,
+        Qin=Qin,
+        Qrefl0=-Qrefl0,
+        Qtrans_10=-Qtrans_10,
+        Qtrans_20=-Qtrans_20
+    )
+
+
 end
 
 
@@ -897,22 +981,32 @@ function HeatFluxes_EB_III(sol,grid,sys,data)
     Qconv4 = 4*Abot*α_nat_conv*(Tplate-Tamb)
 	Qemit4 = 4*Abot*lc_plate.eps*σ*Tplate^4		
 
-    ### correct, proven in EB I ###
-    Qcond_34=4*integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
+    # Qcond_34=4*integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
+    Qconv_34=4*integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,Γ_bottom]
 
     QG_34=4*integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,Γ_bottom]
     QG_43=4*integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,Γ_bottom]
-    ### correct, proven in EB I ###
 
     # calc energy balance III
-    EB_top = Qcond_34 -QG_43 +QG_34
+    # EB_top = Qcond_34 -QG_43 +QG_34
+    EB_top = Qconv_34 -QG_43 +QG_34
     EB_bot = -Qconv4 -Qemit4
     
     EB = EB_bot + EB_top
+
+    (
+        Qconv_34=Qconv_34,
+        QG_43=-QG_43,
+        QG_34=QG_34,
+        Qconv4=-Qconv4,
+        Qemit4=-Qemit4
+    )
     
     
 end
 
+# outer energy balance: also consider transmitted and reflected irradiation, that
+# will not change the inner energy of the system
 function HeatFluxes_EB_IV_outer(sol,grid,sys,data)
     (;iT,α_nat_conv,Tglass,Tamb,uc_window,Glamp)=data
     σ=ph"σ"
@@ -929,22 +1023,38 @@ function HeatFluxes_EB_IV_outer(sol,grid,sys,data)
     EB_top = -Qconv0 -Qemit0 +Qin -Qrefl0 -Qtrans_10 -Qtrans_20
 
     # balance of lower side of window        
-    Qcond_10=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
-    Qcond_20=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
+    # Qcond_10=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
+    Qconv_10=4*integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
+    # Qcond_20=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
+    Qconv_20=4*integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
 
     QG_10=4*integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
     QG_20=4*integrate(sys,flux_frit,sol; boundary=true)[iT,Γ_top_frit]
 
     QG_0=4*integrate(sys,flux_window_underside,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
     QG_0=sum(QG_0)
-    EB_bot = Qcond_10 +Qcond_20 +QG_10 +QG_20 -QG_0
+    # EB_bot = Qcond_10 +Qcond_20 +QG_10 +QG_20 -QG_0
+    EB_bot = Qconv_10 +Qconv_20 +QG_10 +QG_20 -QG_0
 
     EB = EB_top +EB_bot
 
+    (
+        Qconv0=-Qconv0,
+        Qemit0=-Qemit0,
+        Qin=Qin,
+        Qrefl0=-Qrefl0,
+        Qtrans_10=-Qtrans_10,
+        Qtrans_20=-Qtrans_20,
+        Qconv_10=Qconv_10,
+        Qconv_20=Qconv_20,
+        QG_10=QG_10,
+        QG_20=QG_20,
+        QG_0=-QG_0
+    )
+
 end
 
-# outer energy balance: also consider transmitted and reflected irradiation, that
-# will not change the inner energy of the system
+
 function HeatFluxes_EB_IV_inner(sol,grid,sys,data)
     (;iT,α_nat_conv,Tglass,Tamb,uc_window)=data
 
@@ -953,15 +1063,27 @@ function HeatFluxes_EB_IV_inner(sol,grid,sys,data)
     Qabs_10 = 4*integrate(sys,flux_abs_top_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
     Qabs_20 = 4*integrate(sys,flux_abs_top_frit,sol; boundary=true)[iT,Γ_top_frit]
 
-    Qcond_10=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
-    Qcond_20=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
+    # Qcond_10=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
+    Qconv_10=4*integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
+    # Qcond_20=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
+    Qconv_20=4*integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
 
     Atop = sum(areas(sol,sys,grid,data)[[Γ_top_cat,Γ_top_frit]])
 
     Qconv0 = 4*Atop*α_nat_conv*(Tglass-Tamb)
     Qemit0 = 4*Atop*uc_window.eps*σ*Tglass^4		
 
-    EB = -Qconv0 +Qcond_10 +Qcond_20 - 2*Qemit0 +Qabs_10 +Qabs_20        
+    # EB = -Qconv0 +Qcond_10 +Qcond_20 - 2*Qemit0 +Qabs_10 +Qabs_20        
+    EB = -Qconv0 +Qconv_10 +Qconv_20 - 2*Qemit0 +Qabs_10 +Qabs_20
+
+    (
+        Qconv0=-Qconv0,
+        Qconv_10=Qconv_10,
+        Qconv_20=Qconv_20,
+        Qemit0=-2*Qemit0,
+        Qabs_10=Qabs_10,
+        Qabs_20=Qabs_20
+    )
 
 end
 
@@ -976,15 +1098,24 @@ function HeatFluxes_EB_V(sol,grid,sys,data)
     Qconv4 = 4*Abot*α_nat_conv*(Tplate-Tamb)
 	Qemit4 = 4*Abot*lc_plate.eps*σ*Tplate^4		
 
-    Qcond_34=4*integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
+    # Qcond_34=4*integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
+    Qconv_34=4*integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,Γ_bottom]
 
     Qabs_34 = 4*integrate(sys,flux_abs_bottom,sol; boundary=true)[iT,Γ_bottom]
 
     # calc energy balance v
-    EB_top = Qcond_34 +Qabs_34 
+    # EB_top = Qcond_34 +Qabs_34 
+    EB_top = Qconv_34 +Qabs_34 
     EB_bot = -Qconv4 -2*Qemit4
     
-    EB = EB_bot + EB_top       
+    EB = EB_bot + EB_top
+    
+    (
+        Qconv_34=Qconv_34,
+        Qabs_34=Qabs_34,
+        Qconv4=-Qconv4,
+        Qemit4=-2*Qemit4,
+    )
 
 end
 
