@@ -13,18 +13,24 @@ begin
 	using CSV
 	using DataFrames
 	using Statistics
+
+	using VoronoiFVM
+	using GridVisualize
+	using ExtendableGrids
 	using PlutoVista, Plots
 	using PlutoUI
 	using Interpolations
 
 	using FixedBed
+
+	GridVisualize.default_plotter!(PlutoVista)
 end;
 
 # ╔═╡ 8e4d183d-fc6b-47b5-9c6a-3b18b14c4297
 begin
 	FluxMap = CSV.read("../data/IrradiationFluxProfiles/IrradFlux.csv", DataFrame, delim=";")
 	M=Matrix(FluxMap)
-end
+end;
 
 # ╔═╡ c2c77844-c43c-4580-877f-62c238fc68bb
 md"""
@@ -87,7 +93,7 @@ begin
 	x10 = range(-5.0,5.0,length=nx10+1)
 	y10 = range(-5.0,5.0,length=ny10+1)
 
-	itp10 = interpolate((x10,y10), M10, Gridded(Linear()))
+	itp10 = Interpolations.interpolate((x10,y10), M10, Gridded(Linear()))
 end
 
 # ╔═╡ a5a0dd80-0171-4540-9b86-b6be242a733d
@@ -143,24 +149,37 @@ function sel12by12(M)
 	x = range(-wi,wi,length=nx+1)
 	y = range(-wi,wi,length=ny+1)
 
-	itp = interpolate((x,y), M_, Gridded(Linear()))
+	itp = Interpolations.interpolate((x,y), M_, Gridded(Linear()))
 
 	M_,itp	
 end
 
+# ╔═╡ bfcdd56d-8421-439e-89cb-a84ca6e659e8
+md"""
+# Irradiation FLux Profile
+"""
+
 # ╔═╡ b10b6dcd-cddd-47f0-b6c8-00f79eb7b3fa
 let
 	M12, itp12 = sel12by12(M)
+
+	wi=12.0*ufac"cm"
+	nx,ny=size(M12)
+	x_ = range(-wi/2,wi/2,length=nx)
+	y_ = range(-wi/2,wi/2,length=ny)
 	
-	p=Plots.plot(layout=(1,2))
-	Plots.contour!(p[1,1],M12, lw=0, aspect_ratio = 1, fill = true)
+	p=Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm", colorbar_title="Irradiation Flux / kW m-2", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"))
+	
+	p1=Plots.contour!(p,x_./ufac"cm",y_./ufac"cm",M12, lw=0, aspect_ratio = 1, fill = true)	
 
-	wi=6.0*ufac"cm"
-	x_ = range(-wi,wi,length=20)
-	y_ = range(-wi,wi,length=20)
+	
+	x_ = range(-wi/2,wi/2,length=20)
+	y_ = range(-wi/2,wi/2,length=20)
 
-	Plots.contour!(p[1,2],x_,y_,itp12(x_,y_), lw=0, aspect_ratio = 1, fill = true)
-	p
+	p=Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm", colorbar_title="Irradiation Flux / kW m-2", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"))
+	
+	p2=Plots.contour!(p,x_/ufac"cm",y_/ufac"cm",itp12(x_,y_), lw=0, aspect_ratio = 1, fill = true)
+	Plots.plot(p1,p2)
 end
 
 # ╔═╡ Cell order:
@@ -178,4 +197,5 @@ end
 # ╠═777c6089-7a78-4dfb-8017-cb3bc69f8ab3
 # ╟─832c53d5-c004-4f71-8947-4146529442f7
 # ╠═19951420-f1c2-47ea-9be0-a5db4ceebac0
+# ╟─bfcdd56d-8421-439e-89cb-a84ca6e659e8
 # ╠═b10b6dcd-cddd-47f0-b6c8-00f79eb7b3fa

@@ -6,18 +6,21 @@ using DataFrames, CSV
 include("../notebooks/PorousCatalystHot3DTopFlowIrrExchange_NonAlloc.jl")
 
 
-function flux_in_aperture(f,u,bnode,data)
+
+function flux_in_profile(f,u,bnode,data)
     if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
-        iT=data.iT
-        f[iT] = data.Glamp
+        (;iT,FluxIntp)=data
+        
+        @views x,y,z = bnode.coord[:,bnode.index]		
+        f[iT] = FluxIntp(x,y)
     end
 end
 
-function flux_radiation_top(f,u,bnode,data,T2,T3)
-    if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
 
-        (;iT,Glamp,Tglass,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
-        σ=ph"σ"
+function radiosity_window(f,u,bnode,data)
+    if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
+        (;iT,FluxIntp,FluxEmbed,Tglass,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
+
 
         # irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
         # window properties (1)
@@ -38,125 +41,30 @@ function flux_radiation_top(f,u,bnode,data,T2,T3)
         ϕ12=vf_uc_window_cat
         ϕ13=vf_uc_window_frit
 
-
-        # surface brigthness of quartz window inwards / towards catalyst facing surface (1) in vis & IR	
-        G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
-
-		#G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*u[iT]^4+ϕ13*eps3*σ*u[iT]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
-        G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*T2^4+ϕ13*eps3*σ*T3^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
-
-                    
-
-        G2_vis = rho2_vis*G1_bot_vis
-        #G2_IR = eps2*σ*u[iT]^4 + rho2_IR*G1_bot_IR
-        G2_IR = eps2*σ*T2^4 + rho2_IR*G1_bot_IR
-
-        G3_vis = rho3_vis*G1_bot_vis
-        #G3_IR = eps3*σ*u[iT]^4 + rho3_IR*G1_bot_IR
-        G3_IR = eps3*σ*T3^4 + rho3_IR*G1_bot_IR
-
-        # surface brigthness of quartz window outward facing surface (1) in vis & IR	
-        G1_top_vis = rho1_vis*Glamp + tau1_vis*(ϕ12*G2_vis + ϕ13*G3_vis)
-        G1_top_IR = tau1_IR*(ϕ12*G2_IR + ϕ13*G3_IR) + eps1*σ*Tglass^4
-
-    
-        iT=data.iT
-        f[iT] = G1_top_vis + G1_top_IR
-    end
-end
-
-# G0_bot, IR/vis : surface radiosities of glass underside
-function flux_window_underside(f,u,bnode,data,T2,T3)
-    if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
-
-        (;iT,Glamp,Tglass,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
-        σ=ph"σ"
-
-        # irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
-        # window properties (1)
-        tau1_vis=uc_window.tau_vis
-        rho1_vis=uc_window.rho_vis
-        tau1_IR=uc_window.tau_IR
-        rho1_IR=uc_window.rho_IR
-        eps1=uc_window.eps
-        # catalyst layer properties (2)
-        rho2_vis=uc_cat.rho_vis
-        rho2_IR=uc_cat.rho_IR
-        eps2=uc_cat.eps
-        # uncoated frit properties (3)
-        rho3_vis=uc_frit.rho_vis
-        rho3_IR=uc_frit.rho_IR
-        eps3=uc_frit.eps
-        #view factors
-        ϕ12=vf_uc_window_cat
-        ϕ13=vf_uc_window_frit
-
+        # obtain local irradiation flux value from interpolation + embedding
+		@views x,y,z = bnode.coord[:,bnode.index]		
+		Glamp =FluxEmbed*FluxIntp(x,y)
+		
 
         # surface radiosity of quartz window inwards / towards catalyst facing, vis & IR	
         G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
 
-		#G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*u[iT]^4+ϕ13*eps3*σ*u[iT]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
-        G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*T2^4+ϕ13*eps3*σ*T3^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
+        G1_bot_IR = (eps1*ph"σ"*Tglass^4 + rho1_IR*(ϕ12*eps2*ph"σ"*u[iT]^4+ϕ13*eps3*ph"σ"*u[iT]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
 
-        f[iT] = G1_bot_vis + G1_bot_IR
-
-        # G2_vis = rho2_vis*G1_bot_vis
-        # #G2_IR = eps2*σ*u[iT]^4 + rho2_IR*G1_bot_IR
-        # G2_IR = eps2*σ*T2^4 + rho2_IR*G1_bot_IR
-
-        # G3_vis = rho3_vis*G1_bot_vis
-        # #G3_IR = eps3*σ*u[iT]^4 + rho3_IR*G1_bot_IR
-        # G3_IR = eps3*σ*T3^4 + rho3_IR*G1_bot_IR
-
-        # # surface brigthness of quartz window outward facing surface (1) in vis & IR	
-        # # G1_top_vis = rho1_vis*Glamp + tau1_vis*(ϕ12*G2_vis + ϕ13*G3_vis)
-        # # G1_top_IR = tau1_IR*(ϕ12*G2_IR + ϕ13*G3_IR) + eps1*σ*Tglass^4
-
-        # # transmitted radiosity through top window
-        # G1_top_vis = tau1_vis * (ϕ12*G2_vis + ϕ13*G3_vis)
-        # G1_top_IR = tau1_IR * (ϕ12*G2_IR + ϕ13*G3_IR)
-    
-        # iT=data.iT
-        # f[iT] = G1_top_vis + G1_top_IR
+        G1_bot_vis,G1_bot_IR
     end
 end
+
 
 
 # G0_bot, IR/vis : surface radiosities of glass underside
 function flux_window_underside(f,u,bnode,data)
     if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
+        (;iT)=data
 
-        (;iT,Glamp,Tglass,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
-        σ=ph"σ"
-
-        # irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
-        # window properties (1)
-        tau1_vis=uc_window.tau_vis
-        rho1_vis=uc_window.rho_vis
-        tau1_IR=uc_window.tau_IR
-        rho1_IR=uc_window.rho_IR
-        eps1=uc_window.eps
-        # catalyst layer properties (2)
-        rho2_vis=uc_cat.rho_vis
-        rho2_IR=uc_cat.rho_IR
-        eps2=uc_cat.eps
-        # uncoated frit properties (3)
-        rho3_vis=uc_frit.rho_vis
-        rho3_IR=uc_frit.rho_IR
-        eps3=uc_frit.eps
-        #view factors
-        ϕ12=vf_uc_window_cat
-        ϕ13=vf_uc_window_frit
-
-
-        # surface radiosity of quartz window inwards / towards catalyst facing, vis & IR	
-        G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
-
-		G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*u[iT]^4+ϕ13*eps3*σ*u[iT]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
-        #G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*T2^4+ϕ13*eps3*σ*T3^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
+        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
 
         f[iT] = G1_bot_vis + G1_bot_IR
-
     end
 end
 
@@ -164,342 +72,91 @@ end
 # G2_IR/vis : surface radiosities of catalyst layer 
 function flux_catalyst_layer(f,u,bnode,data)
     if bnode.region==Γ_top_cat
-
-        (;iT,Glamp,Tglass,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
-        σ=ph"σ"
-
-        # irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
-        # window properties (1)
-        tau1_vis=uc_window.tau_vis
-        rho1_vis=uc_window.rho_vis
-        tau1_IR=uc_window.tau_IR
-        rho1_IR=uc_window.rho_IR
-        eps1=uc_window.eps
+        (;iT,uc_cat)=data
         # catalyst layer properties (2)
         rho2_vis=uc_cat.rho_vis
         rho2_IR=uc_cat.rho_IR
         eps2=uc_cat.eps
-        # uncoated frit properties (3)
-        rho3_vis=uc_frit.rho_vis
-        rho3_IR=uc_frit.rho_IR
-        eps3=uc_frit.eps
-        #view factors
-        ϕ12=vf_uc_window_cat
-        ϕ13=vf_uc_window_frit
 
-
-        # surface radiosity of quartz window inwards / towards catalyst facing, vis & IR	
-        G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
-
-        # this is not correct, stricly speaking: using the local values of temperature u[iT] for both, T2 and T3
-        # potential remedy: after calculatioin, store averaged values from prev solution in data struct, for use as constants in next
-        # simulation?
-		G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*u[iT]^4+ϕ13*eps3*σ*u[iT]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
-        #G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*T2^4+ϕ13*eps3*σ*T3^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
-
+        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
 
         G2_vis = rho2_vis*G1_bot_vis
 
-        # consider, wheter to uncomment this: use integrated average value or integrate with actual value
-        G2_IR = eps2*σ*u[iT]^4 + rho2_IR*G1_bot_IR
-        #G2_IR = eps2*σ*T2^4 + rho2_IR*G1_bot_IR
+        G2_IR = eps2*ph"σ"*u[iT]^4 + rho2_IR*G1_bot_IR
 
         f[iT] = G2_vis + G2_IR
-
-
     end
 end
 
 # G3_IR/vis : surface radiosities of frit 
 function flux_frit(f,u,bnode,data)
-    if bnode.region==Γ_top_frit
-
-        (;iT,Glamp,Tglass,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
-        σ=ph"σ"
-
-        # irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
-        # window properties (1)
-        tau1_vis=uc_window.tau_vis
-        rho1_vis=uc_window.rho_vis
-        tau1_IR=uc_window.tau_IR
-        rho1_IR=uc_window.rho_IR
-        eps1=uc_window.eps
-        # catalyst layer properties (2)
-        rho2_vis=uc_cat.rho_vis
-        rho2_IR=uc_cat.rho_IR
-        eps2=uc_cat.eps
+    if bnode.region==Γ_top_frit        
+        (;iT,uc_frit)=data
         # uncoated frit properties (3)
         rho3_vis=uc_frit.rho_vis
         rho3_IR=uc_frit.rho_IR
         eps3=uc_frit.eps
-        #view factors
-        ϕ12=vf_uc_window_cat
-        ϕ13=vf_uc_window_frit
 
-
-        # surface radiosity of quartz window inwards / towards catalyst facing, vis & IR	
-        G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
-
-        # this is not correct, stricly speaking: using the local values of temperature u[iT] for both, T2 and T3
-        # potential remedy: after calculatioin, store averaged values from prev solution in data struct, for use as constants in next
-        # simulation?
-		G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*u[iT]^4+ϕ13*eps3*σ*u[iT]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
-        #G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*T2^4+ϕ13*eps3*σ*T3^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
-
+        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
 
         G3_vis = rho3_vis*G1_bot_vis
-        # consider, wheter to uncomment this: use integrated average value or integrate with actual value
-        G3_IR = eps3*σ*u[iT]^4 + rho3_IR*G1_bot_IR
-        #G3_IR = eps3*σ*T3^4 + rho3_IR*G1_bot_IR
-
+        
+        G3_IR = eps3*ph"σ"*u[iT]^4 + rho3_IR*G1_bot_IR
+        
         f[iT] = G3_vis + G3_IR
-
     end
 end
 
 # tau0*G1_IR/vis : transmitted fraction through window of surface radiosityies of catalyst layer 
 function flux_transmission_top_catalyst_layer(f,u,bnode,data)
     if bnode.region==Γ_top_cat
-
-        (;iT,Glamp,Tglass,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
-        σ=ph"σ"
-
-        # irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
+        (;iT,uc_cat,uc_window)=data
         # window properties (1)
         tau1_vis=uc_window.tau_vis
-        rho1_vis=uc_window.rho_vis
         tau1_IR=uc_window.tau_IR
-        rho1_IR=uc_window.rho_IR
-        eps1=uc_window.eps
         # catalyst layer properties (2)
         rho2_vis=uc_cat.rho_vis
         rho2_IR=uc_cat.rho_IR
         eps2=uc_cat.eps
-        # uncoated frit properties (3)
-        rho3_vis=uc_frit.rho_vis
-        rho3_IR=uc_frit.rho_IR
-        eps3=uc_frit.eps
-        #view factors
-        ϕ12=vf_uc_window_cat
-        ϕ13=vf_uc_window_frit
 
-
-        # surface radiosity of quartz window inwards / towards catalyst facing, vis & IR	
-        G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
-
-        # this is not correct, stricly speaking: using the local values of temperature u[iT] for both, T2 and T3
-        # potential remedy: after calculatioin, store averaged values from prev solution in data struct, for use as constants in next
-        # simulation?
-		G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*u[iT]^4+ϕ13*eps3*σ*u[iT]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
-        #G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*T2^4+ϕ13*eps3*σ*T3^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
-
+        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
 
         G2_vis = rho2_vis*G1_bot_vis
 
-        # consider, wheter to uncomment this: use integrated average value or integrate with actual value
-        G2_IR = eps2*σ*u[iT]^4 + rho2_IR*G1_bot_IR
-        #G2_IR = eps2*σ*T2^4 + rho2_IR*G1_bot_IR
+        G2_IR = eps2*ph"σ"*u[iT]^4 + rho2_IR*G1_bot_IR
 
         f[iT] = tau1_vis*G2_vis + tau1_IR*G2_IR
-
-
     end
 end
 
-function flux_transmission_top_cat(f,u,bnode,data,T2,T3)
-    if bnode.region==Γ_top_cat
 
-        (;iT,Glamp,Tglass,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
-        σ=ph"σ"
-
-        # irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
-        # window properties (1)
-        tau1_vis=uc_window.tau_vis
-        rho1_vis=uc_window.rho_vis
-        tau1_IR=uc_window.tau_IR
-        rho1_IR=uc_window.rho_IR
-        eps1=uc_window.eps
-        # catalyst layer properties (2)
-        rho2_vis=uc_cat.rho_vis
-        rho2_IR=uc_cat.rho_IR
-        eps2=uc_cat.eps
-        # uncoated frit properties (3)
-        rho3_vis=uc_frit.rho_vis
-        rho3_IR=uc_frit.rho_IR
-        eps3=uc_frit.eps
-        #view factors
-        ϕ12=vf_uc_window_cat
-        ϕ13=vf_uc_window_frit
-
-
-        # surface radiosity of quartz window inwards / towards catalyst facing, vis & IR	
-        G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
-
-		#G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*u[iT]^4+ϕ13*eps3*σ*u[iT]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
-        G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*T2^4+ϕ13*eps3*σ*T3^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
-
-                    
-
-        G2_vis = rho2_vis*G1_bot_vis
-        G2_IR = eps2*σ*u[iT]^4 + rho2_IR*G1_bot_IR
-        # G2_IR = eps2*σ*T2^4 + rho2_IR*G1_bot_IR
-
-        
-        iT=data.iT
-        f[iT] = tau1_vis*G2_vis + tau1_IR*G2_IR
-    end
-end
 
 
 # tau0*G2_IR/vis : transmitted fraction through window of surface radiosityies of frit
 function flux_transmission_top_frit(f,u,bnode,data)
     if bnode.region==Γ_top_frit
+        (;iT,uc_frit,uc_window)=data
 
-        (;iT,Glamp,Tglass,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
-        σ=ph"σ"
-
-        # irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
         # window properties (1)
         tau1_vis=uc_window.tau_vis
-        rho1_vis=uc_window.rho_vis
         tau1_IR=uc_window.tau_IR
-        rho1_IR=uc_window.rho_IR
-        eps1=uc_window.eps
-        # catalyst layer properties (2)
-        rho2_vis=uc_cat.rho_vis
-        rho2_IR=uc_cat.rho_IR
-        eps2=uc_cat.eps
         # uncoated frit properties (3)
         rho3_vis=uc_frit.rho_vis
         rho3_IR=uc_frit.rho_IR
         eps3=uc_frit.eps
-        #view factors
-        ϕ12=vf_uc_window_cat
-        ϕ13=vf_uc_window_frit
 
-
-        # surface radiosity of quartz window inwards / towards catalyst facing, vis & IR	
-        G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
-
-        # this is not correct, stricly speaking: using the local values of temperature u[iT] for both, T2 and T3
-        # potential remedy: after calculatioin, store averaged values from prev solution in data struct, for use as constants in next
-        # simulation?
-		G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*u[iT]^4+ϕ13*eps3*σ*u[iT]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
-        #G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*T2^4+ϕ13*eps3*σ*T3^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
-
-
+        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+        
         G3_vis = rho3_vis*G1_bot_vis
-        # consider, wheter to uncomment this: use integrated average value or integrate with actual value
-        G3_IR = eps3*σ*u[iT]^4 + rho3_IR*G1_bot_IR
-        #G3_IR = eps3*σ*T3^4 + rho3_IR*G1_bot_IR
+
+        G3_IR = eps3*ph"σ"*u[iT]^4 + rho3_IR*G1_bot_IR
 
         f[iT] = tau1_vis*G3_vis + tau1_IR*G3_IR
-
-    end
-end
-
-# tau0*G2_IR/vis : transmitted fraction through window of surface radiosityies of frit
-function flux_transmission_top_frit(f,u,bnode,data,T2,T3)
-    if bnode.region==Γ_top_frit
-
-        (;iT,Glamp,Tglass,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
-        σ=ph"σ"
-
-        # irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
-        # window properties (1)
-        tau1_vis=uc_window.tau_vis
-        rho1_vis=uc_window.rho_vis
-        tau1_IR=uc_window.tau_IR
-        rho1_IR=uc_window.rho_IR
-        eps1=uc_window.eps
-        # catalyst layer properties (2)
-        rho2_vis=uc_cat.rho_vis
-        rho2_IR=uc_cat.rho_IR
-        eps2=uc_cat.eps
-        # uncoated frit properties (3)
-        rho3_vis=uc_frit.rho_vis
-        rho3_IR=uc_frit.rho_IR
-        eps3=uc_frit.eps
-        #view factors
-        ϕ12=vf_uc_window_cat
-        ϕ13=vf_uc_window_frit
-
-
-        # surface radiosity of quartz window inwards / towards catalyst facing, vis & IR	
-        G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
-
-        # this is not correct, stricly speaking: using the local values of temperature u[iT] for both, T2 and T3
-        # potential remedy: after calculatioin, store averaged values from prev solution in data struct, for use as constants in next
-        # simulation?
-		# G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*u[iT]^4+ϕ13*eps3*σ*u[iT]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
-        G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*T2^4+ϕ13*eps3*σ*T3^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
-
-
-        G3_vis = rho3_vis*G1_bot_vis
-        # consider, wheter to uncomment this: use integrated average value or integrate with actual value
-        G3_IR = eps3*σ*u[iT]^4 + rho3_IR*G1_bot_IR
-        #G3_IR = eps3*σ*T3^4 + rho3_IR*G1_bot_IR
-
-        f[iT] = tau1_vis*G3_vis + tau1_IR*G3_IR
-
     end
 end
 
 
-function flux_transmission_top(f,u,bnode,data,T2,T3)
-    if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
 
-        (;iT,Glamp,Tglass,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
-        σ=ph"σ"
-
-        # irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
-        # window properties (1)
-        tau1_vis=uc_window.tau_vis
-        rho1_vis=uc_window.rho_vis
-        tau1_IR=uc_window.tau_IR
-        rho1_IR=uc_window.rho_IR
-        eps1=uc_window.eps
-        # catalyst layer properties (2)
-        rho2_vis=uc_cat.rho_vis
-        rho2_IR=uc_cat.rho_IR
-        eps2=uc_cat.eps
-        # uncoated frit properties (3)
-        rho3_vis=uc_frit.rho_vis
-        rho3_IR=uc_frit.rho_IR
-        eps3=uc_frit.eps
-        #view factors
-        ϕ12=vf_uc_window_cat
-        ϕ13=vf_uc_window_frit
-
-
-        # surface radiosity of quartz window inwards / towards catalyst facing, vis & IR	
-        G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
-
-		#G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*u[iT]^4+ϕ13*eps3*σ*u[iT]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
-        G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*T2^4+ϕ13*eps3*σ*T3^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
-
-                    
-
-        G2_vis = rho2_vis*G1_bot_vis
-        G2_IR = eps2*σ*u[iT]^4 + rho2_IR*G1_bot_IR
-        # G2_IR = eps2*σ*T2^4 + rho2_IR*G1_bot_IR
-
-        G3_vis = rho3_vis*G1_bot_vis
-        G3_IR = eps3*σ*u[iT]^4 + rho3_IR*G1_bot_IR
-        # G3_IR = eps3*σ*T3^4 + rho3_IR*G1_bot_IR
-
-        # surface brigthness of quartz window outward facing surface (1) in vis & IR	
-        # G1_top_vis = rho1_vis*Glamp + tau1_vis*(ϕ12*G2_vis + ϕ13*G3_vis)
-        # G1_top_IR = tau1_IR*(ϕ12*G2_IR + ϕ13*G3_IR) + eps1*σ*Tglass^4
-
-        # transmitted radiosity through top window
-        G1_top_vis = tau1_vis * (ϕ12*G2_vis + ϕ13*G3_vis)
-        G1_top_IR = tau1_IR * (ϕ12*G2_IR + ϕ13*G3_IR)
-    
-        iT=data.iT
-        f[iT] = G1_top_vis + G1_top_IR
-    end
-end
 
 
 
@@ -553,11 +210,9 @@ function flux_radiation_frit_bottom(f,u,bnode,data)
 		eps1=lc_frit.eps;  rho1_IR=lc_frit.rho_IR; 	
 		# Al bottom plate properties (2)
 		eps2=lc_plate.eps; rho2_IR=lc_plate.rho_IR;
-		
-		#(;eps1,alpha1_IR,rho1_IR,rho2_IR,eps2,rho2_IR) = lower_chamber
-		σ=ph"σ"
+	
 
-        G1_IR = (eps1*σ*u[iT]^4 + rho1_IR*eps2*σ*Tplate^4)/(1-rho1_IR*rho2_IR)
+        G1_IR = (eps1*ph"σ"*u[iT]^4 + rho1_IR*eps2*ph"σ"*Tplate^4)/(1-rho1_IR*rho2_IR)
 
         f[iT] = G1_IR
     end
@@ -573,10 +228,8 @@ function flux_radiation_plate_bottom(f,u,bnode,data)
 		# Al bottom plate properties (2)
 		eps2=lc_plate.eps; rho2_IR=lc_plate.rho_IR;
 		
-		#(;eps1,alpha1_IR,rho1_IR,rho2_IR,eps2,rho2_IR) = lower_chamber
-		σ=ph"σ"
 
-        G2_IR = (eps2*σ*Tplate^4 + rho2_IR*eps1*σ*u[iT]^4)/(1-rho1_IR*rho2_IR)
+        G2_IR = (eps2*ph"σ"*Tplate^4 + rho2_IR*eps1*ph"σ"*u[iT]^4)/(1-rho1_IR*rho2_IR)
 
         f[iT] = G2_IR
     end
@@ -629,37 +282,21 @@ end
 
 function flux_abs_top_catalyst_layer(f,u,bnode,data)
     if bnode.region==Γ_top_cat
-        (;iT,Tglass,Glamp,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
-        σ=ph"σ"
+        (;iT,uc_cat,uc_window)=data
 
-        # irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
         # window properties (1)
-        tau1_vis=uc_window.tau_vis
-        rho1_vis=uc_window.rho_vis
-        tau1_IR=uc_window.tau_IR
-        rho1_IR=uc_window.rho_IR
         alpha1_vis=uc_window.alpha_vis
         alpha1_IR=uc_window.alpha_IR
-        eps1=uc_window.eps
         # catalyst layer properties (2)
         rho2_vis=uc_cat.rho_vis
         rho2_IR=uc_cat.rho_IR
         eps2=uc_cat.eps
-        # uncoated frit properties (3)
-        rho3_vis=uc_frit.rho_vis
-        rho3_IR=uc_frit.rho_IR
-        eps3=uc_frit.eps
-        #view factors
-        ϕ12=vf_uc_window_cat
-        ϕ13=vf_uc_window_frit
-        
-        G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
 
-        G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*u[iT]^4+ϕ13*eps3*σ*u[iT]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))	        		
+        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
 
         G2_vis = rho2_vis*G1_bot_vis		
         
-        G2_IR = eps2*σ*u[iT]^4 + rho2_IR*G1_bot_IR
+        G2_IR = eps2*ph"σ"*u[iT]^4 + rho2_IR*G1_bot_IR
 
         f[iT] = alpha1_vis*G2_vis + alpha1_IR*G2_IR
     end
@@ -668,37 +305,21 @@ end
 function flux_abs_top_frit(f,u,bnode,data)
     if bnode.region==Γ_top_frit
 
-        (;iT,Tglass,Glamp,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
-        σ=ph"σ"
+        (;iT,uc_frit,uc_window)=data
 
-        # irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
         # window properties (1)
-        tau1_vis=uc_window.tau_vis
-        rho1_vis=uc_window.rho_vis
-        tau1_IR=uc_window.tau_IR
-        rho1_IR=uc_window.rho_IR
         alpha1_vis=uc_window.alpha_vis
         alpha1_IR=uc_window.alpha_IR
-        eps1=uc_window.eps
-        # catalyst layer properties (2)
-        rho2_vis=uc_cat.rho_vis
-        rho2_IR=uc_cat.rho_IR
-        eps2=uc_cat.eps
         # uncoated frit properties (3)
         rho3_vis=uc_frit.rho_vis
         rho3_IR=uc_frit.rho_IR
         eps3=uc_frit.eps
-        #view factors
-        ϕ12=vf_uc_window_cat
-        ϕ13=vf_uc_window_frit
-        
-        G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
-        
-        G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*u[iT]^4+ϕ13*eps3*σ*u[iT]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
 
+        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+        
         G3_vis = rho3_vis*G1_bot_vis
 
-        G3_IR = eps3*σ*u[iT]^4 + rho3_IR*G1_bot_IR
+        G3_IR = eps3*ph"σ"*u[iT]^4 + rho3_IR*G1_bot_IR
 
         f[iT] = alpha1_vis*G3_vis + alpha1_IR*G3_IR
     end
@@ -711,7 +332,6 @@ function flux_abs_bottom(f,u,bnode,data)
 		
 		# irradiation exchange between porous frit (1) and Al bottom plate (2)
 		# porous frit properties (1)
-        σ=ph"σ"
         eps1=lc_frit.eps
         rho1_IR=lc_frit.rho_IR
         # Al bottom plate properties (2)
@@ -721,7 +341,7 @@ function flux_abs_bottom(f,u,bnode,data)
 		rho2_IR=lc_plate.rho_IR	
         
 
-        G1_IR = (eps1*σ*u[iT]^4 + rho1_IR*eps2*σ*Tplate^4)/(1-rho1_IR*rho2_IR)
+        G1_IR = (eps1*ph"σ"*u[iT]^4 + rho1_IR*eps2*ph"σ"*Tplate^4)/(1-rho1_IR*rho2_IR)
 
         f[iT] = alpha2_IR*G1_IR
     end
@@ -859,40 +479,35 @@ function HeatFluxes_EB_I(sol,grid,sys,data)
 
 
     (;iT)=data
-    σ=ph"σ"
 
-    Qtop=4*integrate(sys,top,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
-    Qtop=sum(Qtop)
 
-    Qbot=4*integrate(sys,bottom,sol; boundary=true)[iT,Γ_bottom]
-
-    Hin=4*integrate(sys,flux_enthalpy_top,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
+    Hin=integrate(sys,flux_enthalpy_top,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
     Hin=sum(Hin)
 
-    # Qcond_10=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
-    Qconv_10=4*integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
-    # Qcond_20=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
-    Qconv_20=4*integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
+    # Qcond_10=integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
+    Qconv_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
+    # Qcond_20=integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
+    Qconv_20=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
 
-    QG_01=4*integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_cat]
-    QG_02=4*integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_frit]
+    QG_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_cat]
+    QG_02=integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_frit]
 
-    QG_10=4*integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
-    QG_20=4*integrate(sys,flux_frit,sol; boundary=true)[iT,Γ_top_frit]
+    QG_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
+    QG_20=integrate(sys,flux_frit,sol; boundary=true)[iT,Γ_top_frit]
 
     # EB_top= Hin +QG_01 +QG_02 -QG_10 -QG_20 -Qcond_10 -Qcond_20
     EB_top= Hin +QG_01 +QG_02 -QG_10 -QG_20 -Qconv_10 -Qconv_20
       
 
-    Hout=4*integrate(sys,flux_enthalpy_bottom,sol; boundary=true)[iT,Γ_bottom]
+    Hout=integrate(sys,flux_enthalpy_bottom,sol; boundary=true)[iT,Γ_bottom]
 
-    # Qcond_34=4*integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
-    Qconv_34=4*integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,Γ_bottom]
+    # Qcond_34=integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
+    Qconv_34=integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,Γ_bottom]
 
-    QG_34=4*integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,Γ_bottom]
-    QG_43=4*integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,Γ_bottom]
+    QG_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,Γ_bottom]
+    QG_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,Γ_bottom]
     
-    Qsides=4*integrate(sys,side,sol; boundary=true)[iT,[Γ_side_right,Γ_side_back]]        
+    Qsides=integrate(sys,side,sol; boundary=true)[iT,[Γ_side_right,Γ_side_back,Γ_side_front,Γ_side_left]]      
     Qsides=sum(Qsides)
 
     EB_bot= -Hout -Qcond_34 -QG_34 +QG_43    
@@ -920,29 +535,29 @@ end
 function HeatFluxes_EB_II(sol,grid,sys,data)
 
 
-    (;iT,Tglass,Glamp,Tamb,α_nat_conv,uc_window)=data
-    σ=ph"σ"
+    (;iT,Tglass,Tamb,α_nat_conv,uc_window)=data
 
     Atop = sum(areas(sol,sys,grid,data)[[Γ_top_cat,Γ_top_frit]])
 
-    Qconv0 = 4*Atop*α_nat_conv*(Tglass-Tamb)
-    Qemit0 = 4*Atop*uc_window.eps*σ*Tglass^4
-    Qin = 4*Atop*Glamp
+    Qconv0 = Atop*α_nat_conv*(Tglass-Tamb)
+    Qemit0 = Atop*uc_window.eps*ph"σ"*Tglass^4
+    Qin=integrate(sys,flux_in_profile,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
+    Qin=sum(Qin)
     Qrefl0 = uc_window.rho_vis*Qin
 
-    Qtrans_10=4*integrate(sys,flux_transmission_top_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
-    Qtrans_20=4*integrate(sys,flux_transmission_top_frit,sol; boundary=true)[iT,Γ_top_frit]
+    Qtrans_10=integrate(sys,flux_transmission_top_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
+    Qtrans_20=integrate(sys,flux_transmission_top_frit,sol; boundary=true)[iT,Γ_top_frit]
 
-    # Qcond_10=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
-    Qconv_10=4*integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
-    # Qcond_20=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
-    Qconv_20=4*integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
+    # Qcond_10=integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
+    Qconv_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
+    # Qcond_20=integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
+    Qconv_20=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
 
-    QG_01=4*integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_cat]
-    QG_02=4*integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_frit]
+    QG_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_cat]
+    QG_02=integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_frit]
 
-    QG_10=4*integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
-    QG_20=4*integrate(sys,flux_frit,sol; boundary=true)[iT,Γ_top_frit]
+    QG_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
+    QG_20=integrate(sys,flux_frit,sol; boundary=true)[iT,Γ_top_frit]
 
 
     # EB_bot = -QG_01 +Qcond_10 +QG_10 -QG_02 +Qcond_20 +QG_20
@@ -974,18 +589,17 @@ function HeatFluxes_EB_III(sol,grid,sys,data)
 
 
     (;iT,Tamb,α_nat_conv,Tplate,lc_plate)=data
-    σ=ph"σ"
 
     Abot = areas(sol,sys,grid,data)[Γ_bottom]
 
-    Qconv4 = 4*Abot*α_nat_conv*(Tplate-Tamb)
-	Qemit4 = 4*Abot*lc_plate.eps*σ*Tplate^4		
+    Qconv4 = Abot*α_nat_conv*(Tplate-Tamb)
+	Qemit4 = Abot*lc_plate.eps*ph"σ"*Tplate^4		
 
-    # Qcond_34=4*integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
-    Qconv_34=4*integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,Γ_bottom]
+    # Qcond_34=integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
+    Qconv_34=integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,Γ_bottom]
 
-    QG_34=4*integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,Γ_bottom]
-    QG_43=4*integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,Γ_bottom]
+    QG_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,Γ_bottom]
+    QG_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,Γ_bottom]
 
     # calc energy balance III
     # EB_top = Qcond_34 -QG_43 +QG_34
@@ -1008,30 +622,31 @@ end
 # outer energy balance: also consider transmitted and reflected irradiation, that
 # will not change the inner energy of the system
 function HeatFluxes_EB_IV_outer(sol,grid,sys,data)
-    (;iT,α_nat_conv,Tglass,Tamb,uc_window,Glamp)=data
-    σ=ph"σ"
+    (;iT,α_nat_conv,Tglass,Tamb,uc_window)=data
+
 
     # balance of upper side of window
     Atop = sum(areas(sol,sys,grid,data)[[Γ_top_cat,Γ_top_frit]])
-    Qconv0 = 4*Atop*α_nat_conv*(Tglass-Tamb)
-    Qemit0 = 4*Atop*uc_window.eps*σ*Tglass^4
-    Qin = 4*Atop*Glamp
+    Qconv0 = Atop*α_nat_conv*(Tglass-Tamb)
+    Qemit0 = Atop*uc_window.eps*ph"σ"*Tglass^4
+    Qin=integrate(sys,flux_in_profile,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
+    Qin=sum(Qin)
     Qrefl0 = uc_window.rho_vis*Qin
 
-    Qtrans_10=4*integrate(sys,flux_transmission_top_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
-    Qtrans_20=4*integrate(sys,flux_transmission_top_frit,sol; boundary=true)[iT,Γ_top_frit]
+    Qtrans_10=integrate(sys,flux_transmission_top_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
+    Qtrans_20=integrate(sys,flux_transmission_top_frit,sol; boundary=true)[iT,Γ_top_frit]
     EB_top = -Qconv0 -Qemit0 +Qin -Qrefl0 -Qtrans_10 -Qtrans_20
 
     # balance of lower side of window        
-    # Qcond_10=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
-    Qconv_10=4*integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
-    # Qcond_20=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
-    Qconv_20=4*integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
+    # Qcond_10=integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
+    Qconv_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
+    # Qcond_20=integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
+    Qconv_20=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
 
-    QG_10=4*integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
-    QG_20=4*integrate(sys,flux_frit,sol; boundary=true)[iT,Γ_top_frit]
+    QG_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
+    QG_20=integrate(sys,flux_frit,sol; boundary=true)[iT,Γ_top_frit]
 
-    QG_0=4*integrate(sys,flux_window_underside,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
+    QG_0=integrate(sys,flux_window_underside,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
     QG_0=sum(QG_0)
     # EB_bot = Qcond_10 +Qcond_20 +QG_10 +QG_20 -QG_0
     EB_bot = Qconv_10 +Qconv_20 +QG_10 +QG_20 -QG_0
@@ -1058,20 +673,19 @@ end
 function HeatFluxes_EB_IV_inner(sol,grid,sys,data)
     (;iT,α_nat_conv,Tglass,Tamb,uc_window)=data
 
-    σ=ph"σ"    
         
-    Qabs_10 = 4*integrate(sys,flux_abs_top_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
-    Qabs_20 = 4*integrate(sys,flux_abs_top_frit,sol; boundary=true)[iT,Γ_top_frit]
+    Qabs_10 = integrate(sys,flux_abs_top_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
+    Qabs_20 = integrate(sys,flux_abs_top_frit,sol; boundary=true)[iT,Γ_top_frit]
 
-    # Qcond_10=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
-    Qconv_10=4*integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
-    # Qcond_20=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
-    Qconv_20=4*integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
+    # Qcond_10=integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
+    Qconv_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
+    # Qcond_20=integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
+    Qconv_20=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
 
     Atop = sum(areas(sol,sys,grid,data)[[Γ_top_cat,Γ_top_frit]])
 
-    Qconv0 = 4*Atop*α_nat_conv*(Tglass-Tamb)
-    Qemit0 = 4*Atop*uc_window.eps*σ*Tglass^4		
+    Qconv0 = Atop*α_nat_conv*(Tglass-Tamb)
+    Qemit0 = Atop*uc_window.eps*ph"σ"*Tglass^4		
 
     # EB = -Qconv0 +Qcond_10 +Qcond_20 - 2*Qemit0 +Qabs_10 +Qabs_20        
     EB = -Qconv0 +Qconv_10 +Qconv_20 - 2*Qemit0 +Qabs_10 +Qabs_20
@@ -1091,17 +705,16 @@ end
 function HeatFluxes_EB_V(sol,grid,sys,data)
 
     (;iT,Tamb,α_nat_conv,Tplate,lc_plate)=data
-    σ=ph"σ"
 
     Abot = areas(sol,sys,grid,data)[Γ_bottom]
 
-    Qconv4 = 4*Abot*α_nat_conv*(Tplate-Tamb)
-	Qemit4 = 4*Abot*lc_plate.eps*σ*Tplate^4		
+    Qconv4 = Abot*α_nat_conv*(Tplate-Tamb)
+	Qemit4 = Abot*lc_plate.eps*ph"σ"*Tplate^4		
 
-    # Qcond_34=4*integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
-    Qconv_34=4*integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,Γ_bottom]
+    # Qcond_34=integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
+    Qconv_34=integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,Γ_bottom]
 
-    Qabs_34 = 4*integrate(sys,flux_abs_bottom,sol; boundary=true)[iT,Γ_bottom]
+    Qabs_34 = integrate(sys,flux_abs_bottom,sol; boundary=true)[iT,Γ_bottom]
 
     # calc energy balance v
     # EB_top = Qcond_34 +Qabs_34 
@@ -1121,35 +734,35 @@ end
 
 function HeatFluxes_EB_VI(sol,grid,sys,data)
 
-    (;iT,α_nat_conv,Glamp,Tglass,Tplate,Tamb,uc_window,lc_plate)=data    
-    σ=ph"σ"
+    (;iT,α_nat_conv,Tglass,Tplate,Tamb,uc_window,lc_plate)=data    
 
     #### top boundary ####
     Atop = sum(areas(sol,sys,grid,data)[[Γ_top_cat,Γ_top_frit]])
 
-    Qconv0 = 4*Atop*α_nat_conv*(Tglass-Tamb)
-    Qemit0 = 4*Atop*uc_window.eps*σ*Tglass^4
-    Qin = 4*Atop*Glamp
+    Qconv0 = Atop*α_nat_conv*(Tglass-Tamb)
+    Qemit0 = Atop*uc_window.eps*ph"σ"*Tglass^4
+    Qin=integrate(sys,flux_in_profile,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
+    Qin=sum(Qin)
     Qrefl0 = uc_window.rho_vis*Qin
-    Qtrans_10=4*integrate(sys,flux_transmission_top_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
-    Qtrans_20=4*integrate(sys,flux_transmission_top_frit,sol; boundary=true)[iT,Γ_top_frit]
+    Qtrans_10=integrate(sys,flux_transmission_top_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
+    Qtrans_20=integrate(sys,flux_transmission_top_frit,sol; boundary=true)[iT,Γ_top_frit]
 
     #### side boundary (including enthalpy fluxes) ####
-    Hin=4*integrate(sys,flux_enthalpy_top,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
+    Hin=integrate(sys,flux_enthalpy_top,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
     Hin=sum(Hin)
-    Hout=4*integrate(sys,flux_enthalpy_bottom,sol; boundary=true)[iT,Γ_bottom]
+    Hout=integrate(sys,flux_enthalpy_bottom,sol; boundary=true)[iT,Γ_bottom]
 
-    Qsides=4*integrate(sys,side,sol; boundary=true)[iT,[Γ_side_right,Γ_side_back]]        
+    Qsides=integrate(sys,side,sol; boundary=true)[iT,[Γ_side_right,Γ_side_back,Γ_side_front,Γ_side_left]]
     Qsides=sum(Qsides)
 
     #### bottom boundarty ####
     Abot = areas(sol,sys,grid,data)[Γ_bottom]
 
-    Qconv4 = 4*Abot*α_nat_conv*(Tplate-Tamb)
-	Qemit4 = 4*Abot*lc_plate.eps*σ*Tplate^4		
+    Qconv4 = Abot*α_nat_conv*(Tplate-Tamb)
+	Qemit4 = Abot*lc_plate.eps*ph"σ"*Tplate^4		
 
     DH = Hout -Hin    
-    DH_reaction = 4*integrate(sys,flux_enthalpy_reaction,sol)[iT,2]
+    DH_reaction = integrate(sys,flux_enthalpy_reaction,sol)[iT,2]
 
     # calc global energy balance VI
     # EB_top = -Qconv0 -Qemit0 +Qin -Qrefl0 -Qtrans_10 -Qtrans_20
