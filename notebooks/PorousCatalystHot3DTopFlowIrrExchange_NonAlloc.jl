@@ -66,13 +66,13 @@ begin
 	const Γ_side_right = 2 # wall bc
 	const Γ_side_back = 3 # wall bc
 	const Γ_side_left = 4 # symmetry bc
-	const Γ_bottom = 5 # inflow bc
-	const Γ_top_frit = 6 # outflow bc, uncoated porous frit 
-	const Γ_top_cat = 7 # outflow bc, catalyst coated porous frit 
+	const Γ_bottom = 5 # outflow bc
+	const Γ_top_frit = 6 # inflow bc, uncoated porous frit 
+	const Γ_top_cat = 7 # inflow bc, catalyst coated porous frit 
 end;
 
 # ╔═╡ ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
-function prism_sq(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.catwi)
+function prism_sq(data; nref=2, w=data.wi, h=data.h, cath=data.cath, catwi=data.catwi)
 	
 	hw=(w/2.0)/5.0*2.0^(-nref)
 	W=collect(0:hw:(w/2.0))
@@ -98,8 +98,30 @@ function prism_sq(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.
 	bfacemask!(grid,[0.0,0.0,h+cath],[catwi/2,catwi/2,h+cath],Γ_top_cat)	
 end
 
+# ╔═╡ 37adb8da-3ad5-4b41-8f08-85da19e15a53
+function prism_sq_full(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.catwi)
+	
+	hw=(w/2.0)/5.0*2.0^(-nref)
+	W=collect(-(w/2.0):hw:(w/2.0))
+	
+	hhfrit=h/5.0
+	Hfrit=collect(0:hhfrit:h)
+	
+	hhCL=cath/5.0
+	HCL=collect(h:hhCL:h+cath)
+	H=glue(Hfrit,HCL)
+	
+	grid=simplexgrid(W,W,H)
+	
+	# catalyst layer region
+	cellmask!(grid,[-catwi/2,-catwi/2,h],[catwi/2,catwi/2,h+cath],2)
+	# catalyst layer boundary
+	bfacemask!(grid,[-catwi/2,-catwi/2,h+cath],[catwi/2,catwi/2,h+cath],Γ_top_cat)	
+end
+
 # ╔═╡ e21b9d37-941c-4f2c-9bdf-956964428f90
-const grid_fun = prism_sq
+#const grid_fun = prism_sq
+const grid_fun = prism_sq_full
 
 # ╔═╡ 2554b2fc-bf5c-4b8f-b5e9-8bc261fe597b
 md"""
@@ -239,7 +261,7 @@ Boundary conditions for the transport of gas phase species cover in and outflow 
 
 # ╔═╡ 58d0610b-1739-4260-8d16-5a31ba362d69
 md"""
-## Irradiation Exchange:
+## Irradiation Exchange
 Account for the exchange of irradiation between the surfaces in the top and bottom chambers of the reactor. View factors are used to describe the geometrical arrangement of surfaces that exchange irradiation. The view factors are values between 0 and 1, describing the fractions of surface areas that "see each other" (exchange irradiation with each other). In upper chamber, the surfaces are designated as (see figure below):
 1. quartz window
 2. catalyst layer
@@ -547,7 +569,10 @@ function side(f,u,bnode,data)
 	# side wall boundary condition
 	(;iT,α_w,Tamb)=data
 	# outer side wall boundaries
-	if bnode.region==Γ_side_back || bnode.region==Γ_side_right
+	#if bnode.region==Γ_side_back || bnode.region==Γ_side_right
+	# all sides for complete domain
+	if bnode.region==Γ_side_front || bnode.region==Γ_side_right || bnode.region==Γ_side_back || bnode.region==Γ_side_left
+
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
 		f[iT] = α_w*(u[iT]-Tamb)
 	end
@@ -727,7 +752,8 @@ Cutplane at ``z=`` $(d=ModelData{S3P.ng}(); @bind zcut PlutoUI.Slider(range(0.0,
 #=╠═╡
 let
 	vis=GridVisualizer(resolution=(600,400),zoom=1.9)
-	gridplot!(vis, grid_fun(ModelData{S3P.ng}(),nref=0), zplane=zcut*ufac"mm")
+	#gridplot!(vis, grid_fun(ModelData{S3P.ng}()), zplane=zcut*ufac"mm")
+	gridplot!(vis, prism_sq_full(ModelData{S3P.ng}(),nref=1), zplane=zcut*ufac"mm")
 	reveal(vis)
 end
   ╠═╡ =#
@@ -1171,7 +1197,7 @@ end
 function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:cellwise )
 
 	
-	grid=grid_fun(data;nref=nref)
+	grid=grid_fun(data)
 	(;iT,p,X0,Tamb)=data
 	ng=ngas(data)
 	
@@ -1513,7 +1539,7 @@ begin
 			reltol_linear=1.0e-5,
 			kwargs...)
 		end
-		sol_,grid,sys,data_embed=main(;data=ModelData(),nref=0,control,
+		sol_,grid,sys,data_embed=main(;data=ModelData(),control,
 		assembly=:edgewise);
 		if sol_ isa VoronoiFVM.TransientSolution
 			sol = copy(sol_(sol_.t[end]))
@@ -1613,7 +1639,7 @@ end
 
 # ╔═╡ 0c3eb801-f271-4cf4-a109-25a283a51779
 #=╠═╡
-data_embed.mdotin/ufac"kg/hr"/4
+data_embed.mdotin/ufac"kg/hr"
   ╠═╡ =#
 
 # ╔═╡ 7ab38bc2-9ca4-4206-a4c3-5fed673557f1
@@ -1716,11 +1742,16 @@ end
 # ╔═╡ fec9ca6d-d815-4b50-bec7-f8fb3d8195ba
 function TopPlane(data,sol)
 	ng=ngas(data)
-	grid=grid_fun(data;nref=0)
-	wi=data.wi/2
+	grid=grid_fun(data)
+	(;h,cath,wi)=data
+	wi=wi/2
 	
 	bid = maximum(grid[BFaceRegions])+1
-	bfacemask!(grid, [0,0,data.h],[wi,wi,data.h],bid)
+	if grid_fun == prism_sq_full
+		bfacemask!(grid, [-wi,-wi,h+cath],[wi,wi,h+cath],bid)
+	else
+		bfacemask!(grid, [0,0,h+cath],[wi,wi,h+cath],bid)
+	end
 
 	# keep x-y coordinates of parent grid
 	function _3to2(a,b)
@@ -1742,11 +1773,16 @@ end
 # ╔═╡ 746e1a39-3c9b-478f-b371-3cb8333e93b1
 function CutPlane(data,sol)
 	ng=ngas(data)
-	grid=grid_fun(data;nref=0)
+	grid=grid_fun(data)
+	(;h,cath,wi)=data
 	wi=data.wi/2
 	
 	bid = maximum(grid[BFaceRegions])+1
-	bfacemask!(grid, [0,0.024,0],[wi,0.024,data.h],bid)
+	if grid_fun == prism_sq_full
+		bfacemask!(grid, [-wi,0.0,0.0],[wi,0.0,h+cath],bid)
+	else
+		bfacemask!(grid, [0,0.024,0],[wi,0.024,h+cath],bid)
+	end
 
 	# keep x-z coordinates of parent grid
 	function _3to2(a,b)
@@ -1782,7 +1818,7 @@ let
 	sol_xz, grid_xz = CutPlane(data_embed,sol)
 	vis=GridVisualizer(layout=(1,2), resolution=(700, 300),)
 	scalarplot!(vis[1,1], grid_xy, sol_xy[data_embed.iT] .-273.15, colormap= :inferno, show=true)
-	scalarplot!(vis[1,2], grid_xz, sol_xz[data_embed.iT] .-273.15, aspect=4, colormap= :inferno, show=true)
+	scalarplot!(vis[1,2], grid_xz, sol_xz[data_embed.iT] .-273.15, colormap= :inferno, show=true)
 end
   ╠═╡ =#
 
@@ -1891,8 +1927,11 @@ function STCefficiency(sol,sys,data,grid)
 	elseif kinpar == S3P
 		DHi = kinpar.ΔHi[:R1]
 	end
-	#STC_Atot = ndot_bot[data.gni[:CO]] * -data.kinpar.ΔHi[:R2] / (data.Glamp*data.Ac/4)
-	STC_Atot = ndot_bot[gni[:CO]] * -DHi / (Glamp*Ac/4)
+	if grid_fun == prism_sq_full
+		STC_Atot = ndot_bot[gni[:CO]] * -DHi / (Glamp*Ac)
+	else
+		STC_Atot = ndot_bot[gni[:CO]] * -DHi / (Glamp*Ac/4)
+	end
 	catA, _ = CatDims(grid)
 	#STC_Acat = ndot_bot[data.gni[:CO]] * -data.kinpar.ΔHi[:R2] / (data.Glamp*catA)
 	STC_Acat = ndot_bot[gni[:CO]] * -DHi / (Glamp*catA)
@@ -2002,6 +2041,7 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─2ed3223e-a604-410e-93d4-016580f49093
 # ╟─390c7839-618d-4ade-b9be-ee9ed09a77aa
 # ╠═ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
+# ╠═37adb8da-3ad5-4b41-8f08-85da19e15a53
 # ╠═e21b9d37-941c-4f2c-9bdf-956964428f90
 # ╠═0a911687-aff4-4c77-8def-084293329f35
 # ╠═ff58b0b8-2519-430e-8343-af9a5adcb135
@@ -2086,11 +2126,11 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─b06a7955-6c91-444f-9bf3-72cfb4a011ec
 # ╠═6ae6d894-4923-4408-9b77-1067ba9e2aff
 # ╠═7ab38bc2-9ca4-4206-a4c3-5fed673557f1
-# ╟─84093807-8ea9-4290-8bf7-bd94c5c28691
+# ╠═84093807-8ea9-4290-8bf7-bd94c5c28691
 # ╠═ed0c6737-1237-40d0-81df-32d6a842cbb0
 # ╠═7f2276d5-bb78-487c-868a-0486595d0113
 # ╟─a6e61592-7958-4094-8614-e77446eb2223
-# ╠═2739bcff-3fb0-4169-8a1a-2b0a14998cec
+# ╟─2739bcff-3fb0-4169-8a1a-2b0a14998cec
 # ╠═30393c90-298c-412d-86ce-e36106613d35
 # ╟─9952c815-5459-44ff-b1f8-07ab24ce0c53
 # ╟─b22387c4-cda5-424d-99b7-d7deda24c678
