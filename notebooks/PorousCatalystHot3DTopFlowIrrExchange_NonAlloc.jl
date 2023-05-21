@@ -27,7 +27,7 @@ begin
 
 	using LessUnitful
 	
-	using PlutoVista, Plots
+	using PlutoVista, Plots, GLMakie, CairoMakie
 	using PlutoUI
 	using CSV,DataFrames
 	using Interpolations
@@ -103,7 +103,7 @@ end
 # ╔═╡ 37adb8da-3ad5-4b41-8f08-85da19e15a53
 function prism_sq_full(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.catwi)
 	
-	hw=(w/2.0)/5.0*2.0^(-nref)
+	hw=(w/2.0)/6.0*2.0^(-nref) # width of 12 cm, divide into 6 segments
 	W=collect(-(w/2.0):hw:(w/2.0))
 	
 	hhfrit=h/5.0
@@ -685,8 +685,9 @@ begin
 	#Fluids::Vector{AbstractFluidProps} = [N2]
 	X0::Vector{Float64} = let
 		x=zeros(Float64, NG)
-		x[gni[:H2]] = 1.0
-		x[gni[:CO2]] = 1.0
+		#x[gni[:H2]] = 1.0
+		#x[gni[:CO2]] = 1.0
+		x[gni[:N2]] = 1.0
 		x/sum(x)
 	end # inlet composition
 
@@ -695,8 +696,8 @@ begin
 	# volume specific cat mass loading, UPV lab scale PC reactor
 	lcats::Float64 =1000.0*ufac"kg/m^3"
 	#mcats::Float64=80.0*ufac"kg/m^3" # 200 mg cat total loading, 250μm CL 
-	isreactive::Bool = 1
-	#isreactive::Bool = 0
+	#isreactive::Bool = 1
+	isreactive::Bool = 0
 		
 	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
 	α_nat_conv::Float64=15.0*ufac"W/(m^2*K)" # natural convection heat transfer coefficient	
@@ -728,6 +729,7 @@ begin
 	Glamp::Float64=1.0*ufac"kW/m^2" # solar simulator irradiation flux
 	FluxIntp::typeof(itp12)=itp12 # interpolator for irradiation flux
 	FluxEmbed::Float64=0.0 # "persistent" embedding parameter avail. outside of solve call w/ embedding
+    Flux_target::Float64=1.0
 
 	# upper chamber: quartz window eff. optical properties
 	uc_window::SurfaceOpticalProps = uc_window
@@ -779,9 +781,9 @@ begin
 	pn::Float64 = 1.0*ufac"bar"
 	Tn::Float64 = 273.15*ufac"K"
 
-	#Qflow::Float64=340.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
+	Qflow::Float64=340.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
 	#Qflow::Float64=1480.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
-	Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
+	#Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
 	
 
 	MWin::Float64 = molarweight_mix(Fluids, X0)
@@ -815,10 +817,8 @@ Cutplane at ``z=`` $(d=ModelData{S3P.ng}(); @bind zcut PlutoUI.Slider(range(0.0,
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	vis=GridVisualizer(resolution=(600,400),zoom=1.9)
-	#gridplot!(vis, grid_fun(ModelData{S3P.ng}()), zplane=zcut*ufac"mm")
-	gridplot!(vis, prism_sq_full(ModelData{S3P.ng}(),nref=1), zplane=zcut*ufac"mm")
-	reveal(vis)
+	gridplot(grid_fun(ModelData{S3P.ng}(),nref=0), zplane=zcut*ufac"mm")
+	#gridplot(grid_fun(ModelData{S3P.ng}(),nref=1), zplane=zcut*ufac"mm",Plotter=GLMakie)	
 end
   ╠═╡ =#
 
@@ -857,6 +857,17 @@ function reaction(f,u,node,data)
 	# ∑xi = 1
 	@views f[ip]=u[ip]-sum(u[1:ng])
 	
+end
+
+# ╔═╡ e459bbff-e065-49e1-b91b-119add7d4a71
+let	
+	(;wi)=ModelData()
+	nx,ny=size(M12)
+	x_ = range(-wi/2,wi/2,length=nx)
+	y_ = range(-wi/2,wi/2,length=ny)
+	
+	Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm", title="Measuered Flux Profile", colorbar_title="Irradiation Flux / kW m-2", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"))
+	Plots.contour!(x_./ufac"cm",y_./ufac"cm",M12 / ufac"kW/m^2", lw=0, aspect_ratio = 1, fill = true)	
 end
 
 # ╔═╡ 7da59e27-62b9-4b89-b315-d88a4fd34f56
@@ -1565,16 +1576,17 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 				 
 				
 	 	# calculate volume specific catalyst loading lcat in kg/ m^3
-		(;catwi,cath,mcat,Glamp_target)=data
+		(;catwi,cath,mcat,Flux_target)=data
 		Vcat = catwi^2*cath # m^3
 		lcat = mcat/Vcat # kg/m^3"
 		lcats=[10.0, lcat]*ufac"kg/m^3"
 	 	data.lcats = minimum(lcats) + par*(maximum(lcats)-minimum(lcats))
 
 	 	# irradiation flux density
-	 	Glamps=[1.0*ufac"kW/m^2", Glamp_target]
-	 	data.Glamp = minimum(Glamps) + par*(maximum(Glamps)-minimum(Glamps))
-		data.FluxEmbed = par
+	 	# Glamps=[1.0*ufac"kW/m^2", Glamp_target]
+	 	# data.Glamp = minimum(Glamps) + par*(maximum(Glamps)-minimum(Glamps))
+        FluxEmbeds=[0.05, Flux_target]
+		data.FluxEmbed = minimum(FluxEmbeds) + par*(maximum(FluxEmbeds)-minimum(FluxEmbeds))
 	 end
 
 
@@ -1657,25 +1669,12 @@ Heat is transported within the domain via conduction and convective transport. B
 """
   ╠═╡ =#
 
-# ╔═╡ e459bbff-e065-49e1-b91b-119add7d4a71
-#=╠═╡
-let	
-	(;wi)=data_embed
-	nx,ny=size(M12)
-	x_ = range(-wi/2,wi/2,length=nx)
-	y_ = range(-wi/2,wi/2,length=ny)
-	
-	Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm", title="Irradiation Flux Profile", colorbar_title="Irradiation Flux / kW m-2", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"))
-	Plots.contour!(x_./ufac"cm",y_./ufac"cm",M12 / ufac"kW/m^2", lw=0, aspect_ratio = 1, fill = true)	
-end
-  ╠═╡ =#
-
 # ╔═╡ cfa366bc-f8b9-4219-b210-51b9fc5ff3f6
 #=╠═╡
 md"""
 Total irradiated power on aperture (from measurement): __$(Integer(round(sum(M12)*(0.06579*ufac"cm")^2,digits=0))) W__
 
-Total irradiated power on aperture (for current computational grid + interpolation): __$(Pwr=PowerIn(sol,sys,grid,data_embed);Integer(round(sum(Pwr[[Γ_top_cat,Γ_top_frit]]),digits=0))) W__
+Total irradiated power on aperture (for interpolation on computational grid): __$(Pwr=PowerIn(sol,sys,grid,data_embed);Integer(round(sum(Pwr[[Γ_top_cat,Γ_top_frit]]),digits=0))) W__
 """
   ╠═╡ =#
 
@@ -1854,6 +1853,20 @@ function TopPlane(data,sol)
 
 	sol_p, grid_2D
 end
+
+# ╔═╡ 48b99de4-682d-439b-935e-408510c44e37
+#=╠═╡
+let
+	_, grid_xy = TopPlane(data_embed,sol)
+	(;wi)=data_embed
+	x=@views unique(grid_xy[Coordinates][1,:])
+	y=@views unique(grid_xy[Coordinates][2,:])
+	Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm",title="Interpolated Flux Profile", colorbar_title="Irradiation Flux / kW m-2", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"))
+
+	Plots.contour!(x/ufac"cm",y/ufac"cm",itp12(x,y) / ufac"kW/m^2", lw=0, aspect_ratio = 1, fill = true)	
+	
+end
+  ╠═╡ =#
 
 # ╔═╡ 746e1a39-3c9b-478f-b371-3cb8333e93b1
 function CutPlane(data,sol)
@@ -2165,6 +2178,7 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╠═29f34e55-91ab-4b6d-adb2-a58412af95f6
 # ╠═f9ba467a-cefd-4d7d-829d-0889fc6d0f5e
 # ╠═e459bbff-e065-49e1-b91b-119add7d4a71
+# ╠═48b99de4-682d-439b-935e-408510c44e37
 # ╟─cfa366bc-f8b9-4219-b210-51b9fc5ff3f6
 # ╟─d9dee38e-6036-46b8-bc06-e545baa06789
 # ╟─e58ec04f-023a-4e00-98b8-f9ae85ca506f
@@ -2222,7 +2236,7 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─b06a7955-6c91-444f-9bf3-72cfb4a011ec
 # ╠═6ae6d894-4923-4408-9b77-1067ba9e2aff
 # ╠═7ab38bc2-9ca4-4206-a4c3-5fed673557f1
-# ╠═84093807-8ea9-4290-8bf7-bd94c5c28691
+# ╟─84093807-8ea9-4290-8bf7-bd94c5c28691
 # ╠═ed0c6737-1237-40d0-81df-32d6a842cbb0
 # ╠═7f2276d5-bb78-487c-868a-0486595d0113
 # ╟─a6e61592-7958-4094-8614-e77446eb2223
