@@ -1,29 +1,127 @@
 module OpVar
 
-using LessUnitful, GLMakie
+using LessUnitful, GLMakie, CairoMakie
 
 include("../notebooks/PorousCatalystHot3DTopFlowIrrExchange_NonAlloc.jl")
 
 
-function runSim(;data=ModelData())
+# function runSim(;data=ModelData())
 
-    sol_,grid,sys,data_=main(;data)
-    if sol_ isa VoronoiFVM.TransientSolution
+#     sol_,grid,sys,data_=main(;data)
+#     if sol_ isa VoronoiFVM.TransientSolution
+# 		sol = copy(sol_(sol_.t[end]))
+# 	else
+# 		sol = copy(sol_)
+# 	end
+
+#     sol,grid,sys,data_
+# end
+
+function runSim(;data=ModelData())
+    function control(sys;kwargs...)
+        SolverControl(
+#			    direct_umfpack(),
+            gmres_umfpack(),
+    #			gmres_eqnblock_umfpack(),
+    #			gmres_eqnblock_iluzero(),
+            sys;
+            verbose="na",
+            log=true,
+            reltol=1.0e-8,
+            reltol_linear=1.0e-5,
+            kwargs...
+        )
+    end
+
+    sol_,grid,sys,data_embed=main(;data=data,nref=0,control,
+    assembly=:edgewise);
+	if sol_ isa VoronoiFVM.TransientSolution
 		sol = copy(sol_(sol_.t[end]))
 	else
 		sol = copy(sol_)
 	end
 
-    sol,grid,sys,data_
+    sol,grid,sys,data_embed
 end
 
-
-function MapTmax(;
+function runVar()
+    #1
+    (sol_,grid_,sys_,data_) = MapTmax(;
+    nsteps=6,
+    Qflow_min=340.0*ufac"mL/minute",
+    Qflow_max=1480.0*ufac"mL/minute",
+    Flux_target_min=0.45,
+    Flux_target_max=1.0,
+    abs_cat_IR=0.7,
+    abs_cat_vis=0.7,
+    )
+    plotHM(sol_,grid_,sys_,data_)
+    #2
+    (sol_,grid_,sys_,data_) = MapTmax(;
     nsteps=6,
     Qflow_min=3400.0*ufac"mL/minute",
     Qflow_max=14800.0*ufac"mL/minute",
-    Ieff_min=45.0*ufac"kW/m^2",
-    Ieff_max=100.0*ufac"kW/m^2",
+    Flux_target_min=0.45,
+    Flux_target_max=1.0,
+    abs_cat_IR=0.7,
+    abs_cat_vis=0.7,
+    )
+    plotHM(sol_,grid_,sys_,data_)
+    #3
+    (sol_,grid_,sys_,data_) = MapTmax(;
+    nsteps=6,
+    Qflow_min=340.0*ufac"mL/minute",
+    Qflow_max=1480.0*ufac"mL/minute",
+    Flux_target_min=0.45,
+    Flux_target_max=1.0,
+    abs_cat_IR=0.5,
+    abs_cat_vis=0.5,
+    )
+    plotHM(sol_,grid_,sys_,data_)
+    #4
+    (sol_,grid_,sys_,data_) = MapTmax(;
+    nsteps=6,
+    Qflow_min=3400.0*ufac"mL/minute",
+    Qflow_max=14800.0*ufac"mL/minute",
+    Flux_target_min=0.45,
+    Flux_target_max=1.0,
+    abs_cat_IR=0.5,
+    abs_cat_vis=0.5,
+    )
+    plotHM(sol_,grid_,sys_,data_)
+    #5
+    (sol_,grid_,sys_,data_) = MapTmax(;
+    nsteps=6,
+    Qflow_min=340.0*ufac"mL/minute",
+    Qflow_max=1480.0*ufac"mL/minute",
+    Flux_target_min=0.45,
+    Flux_target_max=1.0,
+    abs_cat_IR=0.3,
+    abs_cat_vis=0.3,
+    )
+    plotHM(sol_,grid_,sys_,data_)
+    #6
+    (sol_,grid_,sys_,data_) = MapTmax(;
+    nsteps=6,
+    Qflow_min=3400.0*ufac"mL/minute",
+    Qflow_max=14800.0*ufac"mL/minute",
+    Flux_target_min=0.45,
+    Flux_target_max=1.0,
+    abs_cat_IR=0.3,
+    abs_cat_vis=0.3,
+    )
+    plotHM(sol_,grid_,sys_,data_)
+
+end
+
+function MapTmax(;
+    nsteps=4,
+    Qflow_min=340.0*ufac"mL/minute",
+    Qflow_max=1480.0*ufac"mL/minute",
+    Flux_target_min=0.45,
+    Flux_target_max=1.0,
+    # Ieff_min=45.0*ufac"kW/m^2",
+    # Ieff_max=100.0*ufac"kW/m^2",
     abs_cat_IR=0.7,
     abs_cat_vis=0.7,
     )
@@ -32,7 +130,8 @@ function MapTmax(;
     (;kinpar)=data
     (;gni)=kinpar
     Qflows=range(Qflow_min,Qflow_max,length=nsteps)
-    Ieffs=range(Ieff_min,Ieff_max,length=nsteps)
+    #Ieffs=range(Ieff_min,Ieff_max,length=nsteps)
+    Ieffs=range(Flux_target_min,Flux_target_max,length=nsteps)
 
     X0 = begin
 		x=zeros(Float64, NG)
@@ -54,7 +153,8 @@ function MapTmax(;
                 data=ModelData(
                     isreactive=0,
                     Qflow=Qflow,
-                    Glamp_target=Ieff,
+                    # Glamp_target=Ieff,
+                    Flux_target=Ieff,
                     X0=X0,
                     uc_cat=SurfaceOpticalProps(
                         alpha_IR=abs_cat_IR,
@@ -81,7 +181,11 @@ end
 function TmaxSide(sol,sys,grid,data)
 
     (;iT)=data
-	sub=subgrid(grid,[Γ_side_back,Γ_side_right],boundary=true)
+	if grid_fun == prism_sq_full 
+		sub=subgrid(grid,[Γ_side_front,Γ_side_back,Γ_side_right,Γ_side_left],boundary=true)
+	else
+		sub=subgrid(grid,[Γ_side_back,Γ_side_right],boundary=true)
+	end
 
     Tsides = view(sol[iT, :], sub) .- 273.15
     maximum(Tsides)
@@ -101,12 +205,17 @@ function plotHM(sol_,grid_,sys_,data_)
     Tmaxs = zeros(len)
     for i=1:len
         Qflows[i]= data_[i].Qflow
-        Ieffs[i]= data_[i].Glamp
+        # Ieffs[i]= data_[i].Glamp
+        (;wi,Flux_target)=data_[i]
+        pwr=sum(PowerIn(sol_[i],sys,grid,data_[i])[[Γ_top_cat,Γ_top_frit]])*Flux_target
+        Ieffs[i]= pwr/wi^2/ufac"kW/m^2"
+        
         #Tmaxs[i] = Tcatavg(sol_[i],sys,grid,data_[i])[1]
         Tmaxs[i] = TmaxSide(sol_[i],sys,grid,data_[i])
     end
     Qflows=unique(Qflows)./ufac"mL/minute"
-    Ieffs=unique(Ieffs)./ufac"kW/m^2"
+    #Ieffs=unique(Ieffs)./ufac"kW/m^2"
+    Ieffs=unique(Ieffs)
 
     Tmaxs=reshape(Tmaxs,size(Qflows,1),:)
 
@@ -219,8 +328,11 @@ function plotHM(sol_,grid_,sys_,data_)
         offset = (0,-30)
     )
 
-    fn="img/out/OpVarHM_AbsCatVis$(abs_cat_vis)_AbsCatIR$(abs_cat_IR).png"
-    GLMakie.save(fn,fig)
+    # fn="img/out/230517/OpVarHM_AbsCatVis$(abs_cat_vis)_AbsCatIR$(abs_cat_IR)_Qflow$(Integer(round(maximum(Qflows)))).png"
+    # GLMakie.save(fn,fig)
+    fn="img/out/230517/OpVarHM_AbsCatVis$(abs_cat_vis)_AbsCatIR$(abs_cat_IR)_Qflow$(Integer(round(maximum(Qflows)))).svg"
+    CairoMakie.save(fn,fig)
+    
     fig
 
 end

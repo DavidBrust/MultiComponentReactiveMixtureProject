@@ -27,8 +27,10 @@ begin
 
 	using LessUnitful
 	
-	using PlutoVista, Plots
+	using PlutoVista, Plots, GLMakie, CairoMakie
 	using PlutoUI
+	using CSV,DataFrames
+	using Interpolations
 
 	using FixedBed
 	
@@ -101,7 +103,7 @@ end
 # ╔═╡ 37adb8da-3ad5-4b41-8f08-85da19e15a53
 function prism_sq_full(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.catwi)
 	
-	hw=(w/2.0)/5.0*2.0^(-nref)
+	hw=(w/2.0)/6.0*2.0^(-nref) # width of 12 cm, divide into 6 segments
 	W=collect(-(w/2.0):hw:(w/2.0))
 	
 	hhfrit=h/5.0
@@ -261,7 +263,69 @@ Boundary conditions for the transport of gas phase species cover in and outflow 
 
 # ╔═╡ 58d0610b-1739-4260-8d16-5a31ba362d69
 md"""
-## Irradiation Exchange
+## Irradiation
+Irradiation flux coming from the solar simulator enters the aperture of the reactor with the specified flux profile as determined via photo-metric measurement. The measured profile is imported from a csv-datafile, handled by DataFrames.jl and interpolated by methodes provided by Interpolations.jl to be used as boundary condition in the simulation.
+"""
+
+# ╔═╡ d0993435-ed0b-4a43-b848-26f5266017a1
+begin
+	
+	FluxMap = let
+			if splitdir(pwd())[2]=="FixedBed"
+				filepath="data/IrradiationFluxProfiles/IrradFlux.csv"
+			else
+				filepath="../data/IrradiationFluxProfiles/IrradFlux.csv"
+			end
+		CSV.read(filepath, DataFrame, delim=";")
+	end
+	M=Matrix(FluxMap)
+end;
+
+# ╔═╡ 634d1042-b110-45ef-bfbe-51b827fc922f
+md"""
+In the following, only the section of the total flux profile entering the __12 cm x 12 cm aperture__ of the reactor is needed for the simulation.
+"""
+
+# ╔═╡ 29f34e55-91ab-4b6d-adb2-a58412af95f6
+function sel12by12(M;wi=12.0*ufac"cm")
+	# starting coordinates for optimum 10 cm x 10 cm selection
+	sr=80
+	sc=82
+
+	# (inverse) resolution of flux measurements, distance between data points
+	Dx = 0.06579*ufac"cm"
+	Dy = 0.06579*ufac"cm"
+	
+	# calculate coordinate offsets, when deviating (expanding/shrinking from the center) from 10cm x 10cm selection 
+	
+	Dsr=Integer(round((wi-10.0*ufac"cm")/(2*Dx)))
+	Dsc=Integer(round((wi-10.0*ufac"cm")/(2*Dy)))
+
+	sr-=Dsr
+	sc-=Dsc
+
+	nx=Integer(round(wi/Dx))
+	ny=Integer(round(wi/Dy))
+	
+	M=Matrix(FluxMap)
+	@views M_ = M[sr:(sr+ny),sc:(sc+nx)]*ufac"kW/m^2"
+
+	# origin of coordinate system in the center of the plane
+	x = range(-wi/2,wi/2,length=nx+1)
+	y = range(-wi/2,wi/2,length=ny+1)
+
+	itp = Interpolations.interpolate((x,y), M_, Gridded(Linear()))
+
+	M_,itp	
+end
+
+# ╔═╡ f9ba467a-cefd-4d7d-829d-0889fc6d0f5e
+begin
+	M12, itp12 = sel12by12(M)
+end;
+
+# ╔═╡ d9dee38e-6036-46b8-bc06-e545baa06789
+md"""
 Account for the exchange of irradiation between the surfaces in the top and bottom chambers of the reactor. View factors are used to describe the geometrical arrangement of surfaces that exchange irradiation. The view factors are values between 0 and 1, describing the fractions of surface areas that "see each other" (exchange irradiation with each other). In upper chamber, the surfaces are designated as (see figure below):
 1. quartz window
 2. catalyst layer
@@ -273,10 +337,8 @@ For the given geometry, the following view factors are obtained:
 \phi_{12} = \frac{A_2}{A_1}, \qquad \phi_{13} = \frac{A_3}{A_1}, \qquad \phi_{21} = \phi_{31} = 1
 ```
 where $A_i$ are the geometric areas of the corresponding surfaces.
-"""
 
-# ╔═╡ d9dee38e-6036-46b8-bc06-e545baa06789
-md"""
+
 In the following, the net irradiation fluxes through the surfaces of interest marked by the __red__ dashed line (__catalyst layer__, __2__) and __green__ dashed line (__uncoated frit__, __3__) are stated. Per sign convention applied here, __fluxes entering__ the control surfaces are counted as __positive__ while __fluxes exiting__ the control surfaces are counted as __negative__. 
 These irradiation fluxes through the surfaces will be implemented in the code as boundary conditions for the thermal energy transport equation.
 
@@ -623,8 +685,9 @@ begin
 	#Fluids::Vector{AbstractFluidProps} = [N2]
 	X0::Vector{Float64} = let
 		x=zeros(Float64, NG)
-		x[gni[:H2]] = 1.0
-		x[gni[:CO2]] = 1.0
+		#x[gni[:H2]] = 1.0
+		#x[gni[:CO2]] = 1.0
+		x[gni[:N2]] = 1.0
 		x/sum(x)
 	end # inlet composition
 
@@ -633,8 +696,8 @@ begin
 	# volume specific cat mass loading, UPV lab scale PC reactor
 	lcats::Float64 =1000.0*ufac"kg/m^3"
 	#mcats::Float64=80.0*ufac"kg/m^3" # 200 mg cat total loading, 250μm CL 
-	isreactive::Bool = 1
-	#isreactive::Bool = 0
+	#isreactive::Bool = 1
+	isreactive::Bool = 0
 		
 	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
 	α_nat_conv::Float64=15.0*ufac"W/(m^2*K)" # natural convection heat transfer coefficient	
@@ -664,6 +727,9 @@ begin
 	## irradiation data
 	Glamp_target::Float64=100.0*ufac"kW/m^2" # solar simulator irradiation flux
 	Glamp::Float64=1.0*ufac"kW/m^2" # solar simulator irradiation flux
+	FluxIntp::typeof(itp12)=itp12 # interpolator for irradiation flux
+	FluxEmbed::Float64=0.0 # "persistent" embedding parameter avail. outside of solve call w/ embedding
+    Flux_target::Float64=1.0
 
 	# upper chamber: quartz window eff. optical properties
 	uc_window::SurfaceOpticalProps = uc_window
@@ -715,9 +781,9 @@ begin
 	pn::Float64 = 1.0*ufac"bar"
 	Tn::Float64 = 273.15*ufac"K"
 
-	#Qflow::Float64=340.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
+	Qflow::Float64=340.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
 	#Qflow::Float64=1480.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
-	Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
+	#Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
 	
 
 	MWin::Float64 = molarweight_mix(Fluids, X0)
@@ -751,10 +817,8 @@ Cutplane at ``z=`` $(d=ModelData{S3P.ng}(); @bind zcut PlutoUI.Slider(range(0.0,
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	vis=GridVisualizer(resolution=(600,400),zoom=1.9)
-	#gridplot!(vis, grid_fun(ModelData{S3P.ng}()), zplane=zcut*ufac"mm")
-	gridplot!(vis, prism_sq_full(ModelData{S3P.ng}(),nref=1), zplane=zcut*ufac"mm")
-	reveal(vis)
+	gridplot(grid_fun(ModelData{S3P.ng}(),nref=0), zplane=zcut*ufac"mm")
+	#gridplot(grid_fun(ModelData{S3P.ng}(),nref=1), zplane=zcut*ufac"mm",Plotter=GLMakie)	
 end
   ╠═╡ =#
 
@@ -795,11 +859,22 @@ function reaction(f,u,node,data)
 	
 end
 
+# ╔═╡ e459bbff-e065-49e1-b91b-119add7d4a71
+let	
+	(;wi)=ModelData()
+	nx,ny=size(M12)
+	x_ = range(-wi/2,wi/2,length=nx)
+	y_ = range(-wi/2,wi/2,length=ny)
+	
+	Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm", title="Measuered Flux Profile", colorbar_title="Irradiation Flux / kW m-2", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"))
+	Plots.contour!(x_./ufac"cm",y_./ufac"cm",M12 / ufac"kW/m^2", lw=0, aspect_ratio = 1, fill = true)	
+end
+
 # ╔═╡ 7da59e27-62b9-4b89-b315-d88a4fd34f56
 function top(f,u,bnode,data)
 	# top boundaries (cat layer & frit)
 	if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat 
-		(;iT,Glamp,Tglass,X0,Fluids,Tamb,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h,Nu)=data
+		(;iT,FluxIntp,FluxEmbed,Tglass,X0,Fluids,Tamb,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h,Nu)=data
 		ng=ngas(data)
 		# convective therm. energy flux
 		flux_entahlpy=zero(eltype(u))
@@ -842,6 +917,10 @@ function top(f,u,bnode,data)
 		#view factors
 		ϕ12=vf_uc_window_cat
 		ϕ13=vf_uc_window_frit
+
+		# obtain local irradiation flux value from interpolation + embedding
+		@views x,y,z = bnode.coord[:,bnode.index]		
+		Glamp =FluxEmbed*FluxIntp(x,y)
 		
 		# surface brigthness of quartz window (1) in vis & IR	
 		G1_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
@@ -1174,12 +1253,31 @@ md"""
 function TmaxSide(sol,sys,grid,data)
 
     (;iT)=data
-	sub=subgrid(grid,[Γ_side_back,Γ_side_right],boundary=true)
+	if grid_fun == prism_sq_full 
+		sub=subgrid(grid,[Γ_side_front,Γ_side_back,Γ_side_right,Γ_side_left],boundary=true)
+	else
+		sub=subgrid(grid,[Γ_side_back,Γ_side_right],boundary=true)
+	end
 
     Tsides = view(sol[iT, :], sub) .- 273.15
     maximum(Tsides)
 		
 	
+end
+
+# ╔═╡ 4d9c50ef-3756-492c-90a1-eeb5e51b5515
+function PowerIn(sol,sys,grid,data)
+	(;iT)=data
+	function FluxIn(f,u,bnode,data)
+	    if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
+	        (;FluxIntp)=data
+			
+			@views x,y,z = bnode.coord[:,bnode.index]		
+	        f[iT] = FluxIntp(x,y)
+	    end
+	end
+	Pin=integrate(sys,FluxIn,sol; boundary=true)[[iT],:]
+	#Pin=sum(Pin)
 end
 
 # ╔═╡ a55c5ee7-2274-4447-b0b2-58052f064bc9
@@ -1231,7 +1329,7 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 	data.vf_uc_window_frit = Afrit/sum(Acat+Afrit)
 
 	function WindowTemperature_(sol,sys,data)
-		(;iT,Glamp,X0,α_nat_conv,Tamb,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h,Nu)=data
+		(;iT,FluxEmbed,FluxIntp,X0,α_nat_conv,Tamb,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h,Nu)=data
 		σ=ph"σ"
 		
 		# irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
@@ -1263,6 +1361,9 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 	
 			function flux_abs_top_catalyst_layer(f,u,bnode,data)
 				if bnode.region==Γ_top_cat
+
+					@views x,y,z = bnode.coord[:,bnode.index]		
+					Glamp =FluxEmbed*FluxIntp(x,y)
 					
 					G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
 			
@@ -1278,6 +1379,9 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 	
 			function flux_abs_top_frit(f,u,bnode,data)
 				if bnode.region==Γ_top_frit
+
+					@views x,y,z = bnode.coord[:,bnode.index]		
+					Glamp =FluxEmbed*FluxIntp(x,y)
 					
 					G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
 					
@@ -1472,15 +1576,17 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 				 
 				
 	 	# calculate volume specific catalyst loading lcat in kg/ m^3
-		(;catwi,cath,mcat,Glamp_target)=data
+		(;catwi,cath,mcat,Flux_target)=data
 		Vcat = catwi^2*cath # m^3
 		lcat = mcat/Vcat # kg/m^3"
 		lcats=[10.0, lcat]*ufac"kg/m^3"
 	 	data.lcats = minimum(lcats) + par*(maximum(lcats)-minimum(lcats))
 
 	 	# irradiation flux density
-	 	Glamps=[1.0*ufac"kW/m^2", Glamp_target]
-	 	data.Glamp = minimum(Glamps) + par*(maximum(Glamps)-minimum(Glamps))
+	 	# Glamps=[1.0*ufac"kW/m^2", Glamp_target]
+	 	# data.Glamp = minimum(Glamps) + par*(maximum(Glamps)-minimum(Glamps))
+        FluxEmbeds=[0.05, Flux_target]
+		data.FluxEmbed = minimum(FluxEmbeds) + par*(maximum(FluxEmbeds)-minimum(FluxEmbeds))
 	 end
 
 
@@ -1563,35 +1669,13 @@ Heat is transported within the domain via conduction and convective transport. B
 """
   ╠═╡ =#
 
-# ╔═╡ 0e40bdef-033f-4e4c-af9a-1e2ccd007609
+# ╔═╡ cfa366bc-f8b9-4219-b210-51b9fc5ff3f6
 #=╠═╡
-let
-	data=data_embed
-	(;uc_h,Nu,Tglass,Fluids,Tamb,gni)=data
-	
-	X0 = begin
-		x=zeros(Float64, ngas(data))
-		x[gni[:N2]] = 1.0
-		#x[gni[:H2]] = 1.0
-		#x[gni[:CO2]] = 1.0
-		x/sum(x)
-	end # N2
-	DT=350.0*ufac"K"
-	Tbot=Tglass+DT*ufac"K"
-	Tm=0.5*(Tbot+Tglass)
+md"""
+Total irradiated power on aperture (from measurement): __$(Integer(round(sum(M12)*(0.06579*ufac"cm")^2,digits=0))) W__
 
-	dh=2*uc_h
-	#Nu=7.541
-	Nu=4.861
-	eta,lambda = dynvisc_thermcond_mix(data, Tm, X0)
-	alpha=Nu*lambda/dh*ufac"W/(m^2*K)"
-	
-	#qbot=alpha*(Tbot-Tm)
-	#qtop=alpha*(Tm-Tglass)
-
-	#qcond=lambda*(Tbot-Tglass)/uc_h
-	
-end
+Total irradiated power on aperture (for interpolation on computational grid): __$(Pwr=PowerIn(sol,sys,grid,data_embed);Integer(round(sum(Pwr[[Γ_top_cat,Γ_top_frit]]),digits=0))) W__
+"""
   ╠═╡ =#
 
 # ╔═╡ 3bd80c19-0b49-43f6-9daa-0c87c2ea8093
@@ -1624,8 +1708,8 @@ let
 		Plots.plot!(p1, grid_./ufac"mm", vec(sol_[i])./ufac"bar", label="$(gn[i])", lw=2, ls=:auto)
 	end
 	Plots.plot!(p1, grid_./ufac"mm", vec(sol_[ip])./ufac"bar", color=cols[ip], label="total p", lw=2)
-	lens!(10*[0.45, .5], [0.14, 0.17], inset = (1, bbox(0.1, 0.15, 0.25, 0.25)))
-	lens!(10*[0.45, .5], [0.34, 0.37], inset = (1, bbox(0.5, 0.15, 0.25, 0.25)))
+	lens!(10*[0.45, .525], [0.14, 0.17], inset = (1, bbox(0.1, 0.15, 0.25, 0.25)))
+	lens!(10*[0.45, .525], [0.34, 0.37], inset = (1, bbox(0.5, 0.15, 0.25, 0.25)))
 
 	p2 = Plots.plot(xguide="Height / cm", yguide="Pressure / bar",legend=:bottomright)
 	Plots.plot!(p2, grid_./ufac"cm", vec(sol_[ip])./ufac"bar", color=cols[ip], label="total p", lw=2)
@@ -1769,6 +1853,20 @@ function TopPlane(data,sol)
 
 	sol_p, grid_2D
 end
+
+# ╔═╡ 48b99de4-682d-439b-935e-408510c44e37
+#=╠═╡
+let
+	_, grid_xy = TopPlane(data_embed,sol)
+	(;wi)=data_embed
+	x=@views unique(grid_xy[Coordinates][1,:])
+	y=@views unique(grid_xy[Coordinates][2,:])
+	Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm",title="Interpolated Flux Profile", colorbar_title="Irradiation Flux / kW m-2", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"))
+
+	Plots.contour!(x/ufac"cm",y/ufac"cm",itp12(x,y) / ufac"kW/m^2", lw=0, aspect_ratio = 1, fill = true)	
+	
+end
+  ╠═╡ =#
 
 # ╔═╡ 746e1a39-3c9b-478f-b371-3cb8333e93b1
 function CutPlane(data,sol)
@@ -1916,6 +2014,7 @@ md"""
 """
 
 # ╔═╡ 47161886-9a5c-41ac-abf5-bbea82096d5a
+#=╠═╡
 function STCefficiency(sol,sys,data,grid)
 	ndot_bot,ndot_top = MoleFlows(sol,sys,data)
 	# R1 = RWGS in S3P kinetic model
@@ -1928,15 +2027,20 @@ function STCefficiency(sol,sys,data,grid)
 		DHi = kinpar.ΔHi[:R1]
 	end
 	if grid_fun == prism_sq_full
-		STC_Atot = ndot_bot[gni[:CO]] * -DHi / (Glamp*Ac)
+		Pwr=PowerIn(sol,sys,grid,data_embed)
+		STC_Atot = ndot_bot[gni[:CO]] * -DHi / sum(Pwr[[Γ_top_cat,Γ_top_frit]])
+		STC_Acat = ndot_bot[gni[:CO]] * -DHi / sum(Pwr[Γ_top_cat])
 	else
 		STC_Atot = ndot_bot[gni[:CO]] * -DHi / (Glamp*Ac/4)
+		catA, _ = CatDims(grid)
+		STC_Acat = ndot_bot[gni[:CO]] * -DHi / (Glamp*catA)
 	end
-	catA, _ = CatDims(grid)
+	
 	#STC_Acat = ndot_bot[data.gni[:CO]] * -data.kinpar.ΔHi[:R2] / (data.Glamp*catA)
-	STC_Acat = ndot_bot[gni[:CO]] * -DHi / (Glamp*catA)
+	
 	STC_Atot, STC_Acat
 end
+  ╠═╡ =#
 
 # ╔═╡ 428afb22-55ab-4f64-805f-7e15ad4cf23f
 #=╠═╡
@@ -2069,6 +2173,13 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─8139166e-42f9-41c3-a360-50d3d4e5ee86
 # ╟─44d91c2e-8082-4a90-89cc-81aba783d5ac
 # ╟─58d0610b-1739-4260-8d16-5a31ba362d69
+# ╠═d0993435-ed0b-4a43-b848-26f5266017a1
+# ╟─634d1042-b110-45ef-bfbe-51b827fc922f
+# ╠═29f34e55-91ab-4b6d-adb2-a58412af95f6
+# ╠═f9ba467a-cefd-4d7d-829d-0889fc6d0f5e
+# ╠═e459bbff-e065-49e1-b91b-119add7d4a71
+# ╠═48b99de4-682d-439b-935e-408510c44e37
+# ╟─cfa366bc-f8b9-4219-b210-51b9fc5ff3f6
 # ╟─d9dee38e-6036-46b8-bc06-e545baa06789
 # ╟─e58ec04f-023a-4e00-98b8-f9ae85ca506f
 # ╟─80d2b5db-792a-42f9-b9c2-91d0e18cfcfb
@@ -2093,7 +2204,6 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─04058f1d-9622-4b59-bf07-93483bc269f2
 # ╟─2228bbd4-bc84-4617-a837-2bf9bba76793
 # ╟─09d976a7-f6c6-465b-86f4-9bc654ae158c
-# ╠═0e40bdef-033f-4e4c-af9a-1e2ccd007609
 # ╟─4ebbe06f-0993-4c5c-9af3-76b2b645e592
 # ╟─0bc79692-8db4-44a2-9433-5b6ce97b656f
 # ╠═7da59e27-62b9-4b89-b315-d88a4fd34f56
@@ -2126,7 +2236,7 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─b06a7955-6c91-444f-9bf3-72cfb4a011ec
 # ╠═6ae6d894-4923-4408-9b77-1067ba9e2aff
 # ╠═7ab38bc2-9ca4-4206-a4c3-5fed673557f1
-# ╠═84093807-8ea9-4290-8bf7-bd94c5c28691
+# ╟─84093807-8ea9-4290-8bf7-bd94c5c28691
 # ╠═ed0c6737-1237-40d0-81df-32d6a842cbb0
 # ╠═7f2276d5-bb78-487c-868a-0486595d0113
 # ╟─a6e61592-7958-4094-8614-e77446eb2223
@@ -2136,6 +2246,7 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─b22387c4-cda5-424d-99b7-d7deda24c678
 # ╠═15604034-91fd-4fd4-b09e-e3c5cfe7a265
 # ╠═808aed68-7077-4079-be75-1bea962c716d
+# ╠═4d9c50ef-3756-492c-90a1-eeb5e51b5515
 # ╠═5de9edf7-6059-47d5-b917-e7491068ebdc
 # ╠═a55c5ee7-2274-4447-b0b2-58052f064bc9
 # ╠═68e2628a-056a-4ec3-827f-2654f49917d9
