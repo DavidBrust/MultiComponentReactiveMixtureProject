@@ -38,7 +38,7 @@ begin
 end;
 
 # ╔═╡ 863c9da7-ef45-49ad-80d0-3594eca4a189
-PlutoUI.TableOfContents(title="Photo-Catalytic Reactor")
+PlutoUI.TableOfContents(title="Photo-Catalytic Reactor",depth=6)
 
 # ╔═╡ 94ed0f8b-13c1-4460-a391-5057cff401e0
 md"""
@@ -233,6 +233,16 @@ md"""
 # Boundary Conditions
 """
 
+# ╔═╡ 8139166e-42f9-41c3-a360-50d3d4e5ee86
+md"""
+## Gas species
+"""
+
+# ╔═╡ 44d91c2e-8082-4a90-89cc-81aba783d5ac
+md"""
+Boundary conditions for the transport of gas phase species cover in and outflow boundary conditions at the bottom and top surfaces of the modelling domain with no-flux conditins applied elsewhere. In the catalyst layer, volumetric catalytic reactions take place.
+"""
+
 # ╔═╡ 39e74955-aab6-4bba-a1b8-b2307b45e673
 md"""
 ## Thermal
@@ -250,16 +260,6 @@ md"""
 $(LocalResource("../img/ThermalBC_new.png")) 
 """
   ╠═╡ =#
-
-# ╔═╡ 8139166e-42f9-41c3-a360-50d3d4e5ee86
-md"""
-## Gas species
-"""
-
-# ╔═╡ 44d91c2e-8082-4a90-89cc-81aba783d5ac
-md"""
-Boundary conditions for the transport of gas phase species cover in and outflow boundary conditions at the bottom and top surfaces of the modelling domain with no-flux conditins applied elsewhere. In the catalyst layer, volumetric catalytic reactions take place.
-"""
 
 # ╔═╡ 58d0610b-1739-4260-8d16-5a31ba362d69
 md"""
@@ -289,6 +289,7 @@ In the following, only the section of the total flux profile entering the __12 c
 # ╔═╡ 29f34e55-91ab-4b6d-adb2-a58412af95f6
 function sel12by12(M;wi=12.0*ufac"cm")
 	# starting coordinates for optimum 10 cm x 10 cm selection
+
 	sr=80
 	sc=82
 
@@ -308,7 +309,10 @@ function sel12by12(M;wi=12.0*ufac"cm")
 	ny=Integer(round(wi/Dy))
 	
 	M=Matrix(FluxMap)
+	# coordinate system of measurement data matrix has its origin at bottom left corner, the excel data matrix (and its coordiinates) start in top left corner
+	reverse!(M; dims=1) 
 	@views M_ = M[sr:(sr+ny),sc:(sc+nx)]*ufac"kW/m^2"
+	
 
 	# origin of coordinate system in the center of the plane
 	x = range(-wi/2,wi/2,length=nx+1)
@@ -323,6 +327,16 @@ end
 begin
 	M12, itp12 = sel12by12(M)
 end;
+
+# ╔═╡ f4ebb596-824a-4124-afb7-c368c1cabb00
+md"""
+Mean Irradiation Flux: $(round(sum(M12)*(0.06579*ufac"cm")^2 / (12*12*ufac"cm^2") /ufac"kW/m^2"))
+"""
+
+# ╔═╡ 3aef8203-ce28-4197-a43e-784840f7bc1e
+md"""
+### Top chamber
+"""
 
 # ╔═╡ d9dee38e-6036-46b8-bc06-e545baa06789
 md"""
@@ -348,7 +362,7 @@ These irradiation fluxes through the surfaces will be implemented in the code as
 # ╠═╡ skip_as_script = true
 #=╠═╡
 md"""
-### Top chamber
+
 $(LocalResource("../img/irrad_top_chamber_view_factors.png"))
 ```math
 \begin{align}
@@ -366,10 +380,10 @@ G_1^{\text{vis}} = \frac{\tau_1^{\text{vis}} G_{\text{lamp}}}{1-\rho_1^{\text{vi
 ```
 """
 
-# ╔═╡ b1ae3b4d-59ca-420f-a1a0-dc698b52e5b0
+# ╔═╡ 6de46bcb-9aff-4a21-b8d6-f14e64aac95c
 md"""
 ```math
-G_1^{\text{IR}} = \frac{\epsilon_1\sigma T_1^4 + \rho_1^{\text{IR}} \left( \phi_{12}\epsilon_2 \sigma T_2^4+\phi_{13}\epsilon_3 \sigma T_3^4\right)}{1-\rho_1^{\text{IR}} \left( \phi_{12} \rho_2^{\text{IR}} + \phi_{13} \rho_3^{\text{IR}} \right)}
+G_1^{\text{IR}} = \epsilon_1\sigma T_1^4
 ```
 """
 
@@ -447,7 +461,7 @@ md"""
 At steady state, the net transfer of energy to/from the balance region around the quartz window must vanish. This leads to:
 
 ```math
-0=-\dot q_{\text{conv,top}} - 2 \dot q_{\text{emit}} + \dot q_{\text{cond,bot,2}} + \dot q_{\text{cond,bot,3}} + \dot q_{\text{abs,bot,2}} + \dot q_{\text{abs,bot,3}}
+0=-\dot q_{\text{conv,top}} - 2 \dot q_{\text{emit}} + \dot q_{\text{conv,bot,2}} + \dot q_{\text{conv,bot,3}} + \dot q_{\text{abs,bot,2}} + \dot q_{\text{abs,bot,3}}
 ```
 
 with
@@ -455,8 +469,8 @@ with
 	\begin{align}
 	\dot q_{\text{conv,top}} &= \alpha_{\text{conv}} (T_1-T_{\text{amb}}) \\
 	\dot q_{\text{emit}} &= \epsilon_1\sigma T_1^4 \quad(\text{once for top \& bottom surfaces}) \\
-	\dot q_{\text{cond,bot,2}} &= -\lambda(\frac{T_1+T_2}{2})\frac{T_1-T_2}{\Delta z} \\
-	\dot q_{\text{cond,bot,3}} &= -\lambda(\frac{T_1+T_3}{2})\frac{T_1-T_3}{\Delta z} \\
+	\dot q_{\text{conv,bot,2}} &= \alpha_{\text{inner. conv}}(T_{\text m}-T_1), \quad T_{\text m}=\frac{T_1+T_2}{2} \\
+	\dot q_{\text{conv,bot,3}} &= \alpha_{\text{inner. conv}}(T_{\text m}-T_1), \quad T_{\text m}=\frac{T_1+T_3}{2} \\
 	\dot q_{\text{abs,bot,2}} &= \alpha_1^{\text{IR}} \phi_{12} G_2^{\text{IR}} + \alpha_1^{\text{vis}} \phi_{12} G_2^{\text{vis}} \\
 	\dot q_{\text{abs,bot,3}} &= \alpha_1^{\text{IR}} \phi_{13} G_3^{\text{IR}} + \alpha_1^{\text{vis}} \phi_{13} G_3^{\text{vis}}
 	\end{align}
@@ -510,16 +524,16 @@ md"""
 At steady state, the net transfer of energy to/from the balance region around the bottom plate must vanish. This leads to:
 
 ```math
-0=-\dot q_{\text{conv}} - 2 \dot q_{\text{emit}} - \dot q_{\text{cond}} + \dot q_{\text{abs,1}} 
+0=-\dot q^{\text{nat}}_{\text{conv}} - 2 \dot q_{\text{emit}} - \dot q^{\text{int}}_{\text{conv}} + \dot q_{\text{abs,1}} 
 ```
 
 with
 ```math
 	\begin{align}
-	\dot q_{\text{conv}} &= \alpha_{\text{conv}} (T_2-T_{\text{amb}}) \\
+	\dot q^{\text{nat}}_{\text{conv}} &= k^{\text{nat}}_{\text{conv}} (T_2-T_{\text{amb}}) \\
 
 	\dot q_{\text{emit}} &= \epsilon_2\sigma T_2^4 \quad(\text{once for top \& bottom surfaces}) \\
-	\dot q_{\text{cond}} &= -\lambda(\frac{T_1+T_2}{2})\frac{T_1-T_2}{\Delta z} \\
+	\dot q^{\text{int}}_{\text{conv}} &= k^{\text{int}}_{\text{conv}}(T_2-T_{\text m}), \quad T_{\text m}=\frac{T_1+T_2}{2} \\
 	
 	\dot q_{\text{abs,1}} &= \alpha_2^{\text{IR}} G_1^{\text{IR}} \\
 	
@@ -550,16 +564,6 @@ const lc_plate = SurfaceOpticalProps(
 	tau_vis=0.0 # opaque surface	
 )
 
-# ╔═╡ 04058f1d-9622-4b59-bf07-93483bc269f2
-md"""
-## Conductive Transport
-Becuase the precise flow field is not known in the chambers, the transport of heat through the gas volumes in the chambers is estimated with conductive transport through a stagnant layer of gas. This is the lower bound on convective transport. It can be estimated assuming a constant temperature gradient over the chamber height and an thermal conductivity evaluated at an average temperature:
-
-```math
-\dot q = -\lambda \nabla T \approx - \lambda(\overline T) \frac{\Delta T}{\Delta z}
-```
-"""
-
 # ╔═╡ 2228bbd4-bc84-4617-a837-2bf9bba76793
 # ╠═╡ skip_as_script = true
 #=╠═╡
@@ -568,7 +572,7 @@ md"""
 Apply convective heat transport through the top and bottom chambers: the heat transport occurs perpendicular to the main direction of flow according to methodology for __Parallel Plate Ducts__ from VDI heat atlas __ch. G2, sec. 8, p. 707__. For this case the dimensionless numbers are defined as:
 
 ```math
-\text{Nu}=\frac{\alpha d_{\text h}}{\lambda} \qquad \text{Re}=\frac{w d_{\text h}}{\nu}
+\text{Nu}=\frac{k^{\text{int}}_{\text{conv}} d_{\text h}}{\lambda} \qquad \text{Re}=\frac{w d_{\text h}}{\nu}
 ```
 The characteristic dimension for flow through the gap, corresponding to the
 hydraulic diameter, is twice the gap width:
@@ -593,13 +597,37 @@ This situation is addressed by eq. (42) from VDI heat atlas ch. G2, sec. 8, p. 7
 md"""
 The convective heat flux from the bottom wall into the fluid is expressed via:
 ```math
-\dot q_{\text{bot}} = \alpha(T_{\text{bot}} - T_{\text{m}})
+\dot q_{\text{bot}} = k^{\text{int}}_{\text{conv}}(T_{\text{bot}} - T_{\text{m}})
 ```
 Similarly, the heat flux from the fluid towards the top wall, which is at a lower temperature is obtained:
 ```math
-\dot q_{\text{top}} = \alpha(T_{\text{m}}-T_{\text{top}})
+\dot q_{\text{top}} = k^{\text{int}}_{\text{conv}}(T_{\text{m}}-T_{\text{top}})
 ```
 where $T_{\text{m}}=(T_{\text{top}}+T_{\text{bot}})/2$.
+"""
+
+# ╔═╡ 5c9aad13-914a-4f5e-af32-a9c6403c52d0
+md"""
+#### Side Walls
+The heat flux through the side walls of the modelling domain $\dot q_{\text{side}}$ is limited by the convective heat flux on the outside of the reactor shell. In absence of active cooling e.g. via a fan, natural convection prevails with heat transfer coefficient $k^{\text{nat}}_{\text{conv}}$. At the contacting interface between the porous frit and the reactor shell made of Aluminium at the domain boundary a negligable contact resistance is assumed.
+"""
+
+# ╔═╡ ff764eea-e282-4fed-90b4-5f418ae426f0
+md"""
+$(LocalResource("../img/SideBCConv.png", :width=>400)) 
+"""
+
+# ╔═╡ dfed01d4-8d88-4ce7-afe5-1fd27e2cc746
+md"""
+```math
+\begin{align}
+\dot q_{\text{side}}=\frac{\dot Q}{A_{\text{frit}}}&=\frac{1}{W_{\text{cond}}+W_{\text{conv}}}(T-T_{\text{amb}})\\
+&=\frac{1}{A_{\text{frit}}}\frac{1}{\frac{\delta}{A_{\text{shell}} \lambda_{\text{shell}}}+\frac{1}{A_{\text{shell}} k^{\text{nat}}_{\text{conv}}}}(T-T_{\text{amb}}), \quad \text{with} \frac{\delta}{\lambda_{\text{shell}}} \ll \frac{1}{k^{\text{nat}}_{\text{conv}}}\\
+&\approx \frac{1}{A_{\text{frit}}}\frac{1}{\frac{1}{A_{\text{shell}}k^{\text{nat}}_{\text{conv}}}}(T-T_{\text{amb}})\\
+&=\frac{A_{\text{shell}}}{A_{\text{frit}}}k^{\text{nat}}_{\text{conv}}(T-T_{\text{amb}})\\
+&=\frac{h_{\text{shell}}}{h_{\text{frit}}}k^{\text{nat}}_{\text{conv}}(T-T_{\text{amb}})
+\end{align}
+```
 """
 
 # ╔═╡ 4ebbe06f-0993-4c5c-9af3-76b2b645e592
@@ -629,14 +657,16 @@ This will lead to an error, that should be estimated.
 # ╔═╡ edd9fdd1-a9c4-4f45-8f63-9681717d417f
 function side(f,u,bnode,data)
 	# side wall boundary condition
-	(;iT,α_w,Tamb)=data
+	(;iT,h,cath,shellh,k_nat_conv,Tamb)=data
 	# outer side wall boundaries
 	#if bnode.region==Γ_side_back || bnode.region==Γ_side_right
 	# all sides for complete domain
 	if bnode.region==Γ_side_front || bnode.region==Γ_side_right || bnode.region==Γ_side_back || bnode.region==Γ_side_left
 
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
-		f[iT] = α_w*(u[iT]-Tamb)
+		#f[iT] = α_w*(u[iT]-Tamb)
+		# consider factor 10 in height ratio of modelling domain/outer reactor wall
+		f[iT] = shellh/(h+cath)*k_nat_conv*(u[iT]-Tamb)
 	end
 	#iT=data.iT
 	#boundary_robin!(f,u,bnode;species=iT,region=[Γ_side_back,Γ_side_right], factor=data.α_w, value=data.Tamb*data.α_w)	
@@ -691,16 +721,16 @@ begin
 		x/sum(x)
 	end # inlet composition
 
-	mcat::Float64=3.3*ufac"g" # total catalyst loading
-	#mcat::Float64=200.0*ufac"mg" 
+	#mcat::Float64=3.3*ufac"g" # total catalyst loading
+	mcat::Float64=200.0*ufac"mg" 
 	# volume specific cat mass loading, UPV lab scale PC reactor
 	lcats::Float64 =1000.0*ufac"kg/m^3"
 	#mcats::Float64=80.0*ufac"kg/m^3" # 200 mg cat total loading, 250μm CL 
 	#isreactive::Bool = 1
 	isreactive::Bool = 0
 		
-	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
-	α_nat_conv::Float64=15.0*ufac"W/(m^2*K)" # natural convection heat transfer coefficient	
+	#α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
+	k_nat_conv::Float64=15.0*ufac"W/(m^2*K)" # natural convection heat transfer coefficient	
 	
 	## porous filter data
 	dp::Float64=200.0*ufac"μm" # average pore size, por class 0
@@ -721,7 +751,7 @@ begin
 	wi::Float64=12.0*ufac"cm" # prism width/side lenght
 	le::Float64=wi # prism width/side lenght
 	catwi::Float64=10.0*ufac"cm" # prism width/side lenght	
-	
+	shellh::Float64=3.6*ufac"cm" # height of reactor shell contacting domain
 	Ac::Float64=wi*le*ufac"m^2" # cross-sectional area, square
 
 	## irradiation data
@@ -817,7 +847,7 @@ Cutplane at ``z=`` $(d=ModelData{S3P.ng}(); @bind zcut PlutoUI.Slider(range(0.0,
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	gridplot(grid_fun(ModelData{S3P.ng}(),nref=0), zplane=zcut*ufac"mm")
+	gridplot(grid_fun(ModelData{S3P.ng}()),zoom=1.9,resolution=(800,600), zplane=zcut*ufac"mm",)
 	#gridplot(grid_fun(ModelData{S3P.ng}(),nref=1), zplane=zcut*ufac"mm",Plotter=GLMakie)	
 end
   ╠═╡ =#
@@ -866,8 +896,10 @@ let
 	x_ = range(-wi/2,wi/2,length=nx)
 	y_ = range(-wi/2,wi/2,length=ny)
 	
-	Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm", title="Measuered Flux Profile", colorbar_title="Irradiation Flux / kW m-2", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"))
-	Plots.contour!(x_./ufac"cm",y_./ufac"cm",M12 / ufac"kW/m^2", lw=0, aspect_ratio = 1, fill = true)	
+	#Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm", title="Measured Flux Profile", colorbar_title="Irradiation Flux / kW m-2", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"))
+	p=Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"), size=(300,300))
+	Plots.contour!(x_./ufac"cm",y_./ufac"cm",M12 / ufac"kW/m^2", lw=0, aspect_ratio = 1, fill = true)
+	#Plots.savefig("../img/out/Flux_meas.svg")
 end
 
 # ╔═╡ 7da59e27-62b9-4b89-b315-d88a4fd34f56
@@ -919,7 +951,8 @@ function top(f,u,bnode,data)
 		ϕ13=vf_uc_window_frit
 
 		# obtain local irradiation flux value from interpolation + embedding
-		@views x,y,z = bnode.coord[:,bnode.index]		
+		#@views x,y,z = bnode.coord[:,bnode.index]		
+		@views y,x,_ = bnode.coord[:,bnode.index] # different ordering of axes in VoronoiFVM than in interpolated data
 		Glamp =FluxEmbed*FluxIntp(x,y)
 		
 		# surface brigthness of quartz window (1) in vis & IR	
@@ -942,8 +975,8 @@ function top(f,u,bnode,data)
 
         #flux_cond = -λf*(Tglass-u[iT])/uc_h
 		dh=2*uc_h
-		alpha=Nu*λf/dh*ufac"W/(m^2*K)"
-		flux_conv = alpha*(u[iT]-Tm)
+		kconv=Nu*λf/dh*ufac"W/(m^2*K)"
+		flux_conv = kconv*(u[iT]-Tm)
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
 
 		# include convective therm. energy flux
@@ -1022,8 +1055,8 @@ function bottom(f,u,bnode,data)
 
         # flux_cond = -λf*(u[iT]-Tplate)/lc_h # positive flux in positive z coord.
 		dh=2*lc_h
-		alpha=Nu*λf/dh*ufac"W/(m^2*K)"
-		flux_conv = alpha*(u[iT]-Tm) # positive flux in negative z coord.
+		kconv=Nu*λf/dh*ufac"W/(m^2*K)"
+		flux_conv = kconv*(u[iT]-Tm) # positive flux in negative z coord.
 		
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
 		# f[iT] = -flux_irrad + flux_entahlpy - flux_cond
@@ -1280,6 +1313,11 @@ function PowerIn(sol,sys,grid,data)
 	#Pin=sum(Pin)
 end
 
+# ╔═╡ e4fcce3f-f41b-4e9e-aa84-3fd6a0013f0c
+md"""
+## Flux Profile on Catalyst Surface
+"""
+
 # ╔═╡ a55c5ee7-2274-4447-b0b2-58052f064bc9
 function areas(sol,sys,grid,data)
 	iT = data.iT
@@ -1329,7 +1367,7 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 	data.vf_uc_window_frit = Afrit/sum(Acat+Afrit)
 
 	function WindowTemperature_(sol,sys,data)
-		(;iT,FluxEmbed,FluxIntp,X0,α_nat_conv,Tamb,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h,Nu)=data
+		(;iT,FluxEmbed,FluxIntp,k_nat_conv,X0,Tamb,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h,Nu)=data
 		σ=ph"σ"
 		
 		# irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
@@ -1440,7 +1478,7 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 	
 			Atop = sum(areas(sol,sys,grid,data)[[Γ_top_cat,Γ_top_frit]])
 	
-			Qconv0 = 4*Atop*α_nat_conv*(Tglass-Tamb)
+			Qconv0 = 4*Atop*k_nat_conv*(Tglass-Tamb)
 			Qemit0 = 4*Atop*uc_window.eps*σ*Tglass^4		
 	
 			#F[1] = -Qconv0 +Qcond_10 +Qcond_20 - 2*Qemit0 +Qabs_10 +Qabs_20
@@ -1454,7 +1492,7 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 	end
 
 	function PlateTemperature_(sol,sys,data)
-		(;iT,gni,α_nat_conv,Tamb,lc_frit,lc_plate,lc_h,Nu)=data
+		(;iT,gni,k_nat_conv,Tamb,lc_frit,lc_plate,lc_h,Nu)=data
 	
 		σ=ph"σ"
 		
@@ -1531,7 +1569,7 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 			
 			Abot = areas(sol,sys,grid,data)[Γ_bottom]
 	
-			Qconv4 = 4*Abot*α_nat_conv*(Tplate-Tamb)
+			Qconv4 = 4*Abot*k_nat_conv*(Tplate-Tamb)
 			Qemit4 = 4*Abot*lc_plate.eps*σ*Tplate^4		
 	
 			#F[1] = -Qconv4 +Qcond_34 -2*Qemit4 +Qabs_34
@@ -1683,11 +1721,11 @@ Total irradiated power on aperture (for interpolation on computational grid): __
 let
 	iT=data_embed.iT
 	#vis=GridVisualizer(resolution=(600,400), title="Temperature °C", Plotter=PyPlot)
-    vis=GridVisualizer(resolution=(600,400), title="Temperature °C")
+    #vis=GridVisualizer(resolution=(600,400), title="Temperature °C")
 	
-	scalarplot!(vis, grid, sol[iT,:].- 273.15, levels= 10, levelalpha=1.0, show=true)
+	GridVisualize.scalarplot(grid, sol[iT,:].-273.15,levelalpha=0.8,levels=7,colormap=:inferno)
 
-	reveal(vis)
+	#reveal(vis)
 	#save("../img/out/Temeprature.png", reveal(vis), Plotter=PyPlot)
 end
   ╠═╡ =#
@@ -1708,15 +1746,15 @@ let
 		Plots.plot!(p1, grid_./ufac"mm", vec(sol_[i])./ufac"bar", label="$(gn[i])", lw=2, ls=:auto)
 	end
 	Plots.plot!(p1, grid_./ufac"mm", vec(sol_[ip])./ufac"bar", color=cols[ip], label="total p", lw=2)
-	lens!(10*[0.45, .525], [0.14, 0.17], inset = (1, bbox(0.1, 0.15, 0.25, 0.25)))
-	lens!(10*[0.45, .525], [0.34, 0.37], inset = (1, bbox(0.5, 0.15, 0.25, 0.25)))
+	lens!(10*[0.45, .525], [0.1, 0.12], inset = (1, bbox(0.1, 0.15, 0.25, 0.25)))
+	lens!(10*[0.45, .525], [0.44, 0.46], inset = (1, bbox(0.5, 0.15, 0.25, 0.25)))
 
 	p2 = Plots.plot(xguide="Height / cm", yguide="Pressure / bar",legend=:bottomright)
 	Plots.plot!(p2, grid_./ufac"cm", vec(sol_[ip])./ufac"bar", color=cols[ip], label="total p", lw=2)
 
 	p=Plots.plot(p1, size=(500,300))
 	#Plots.plot(p1,p2, layout=(1,2), size=(700,450))
-	#Plots.savefig(p, "../img/out/pi_flip_lowcat.svg")
+	#Plots.savefig(p, "../img/out/pi_flip_lowcat_lowflow.svg")
 	
 end
   ╠═╡ =#
@@ -1803,26 +1841,6 @@ function T_avg(sol,sys,grid,data)
 	T_int./areas_	
 end
 
-# ╔═╡ 5de9edf7-6059-47d5-b917-e7491068ebdc
-function X_avg_bottom(sol,sys,grid,data)
-
-	(;ng)=data
-	function X_avg_(f,u,bnode,data)
-		if bnode.region==Γ_bottom
-			X=zeros(eltype(u), ng)
-			mole_frac!(bnode,data,X,u)					
-			for i=1:ng
-				f[i] = X[i]
-			end
-		end
-	end
-
-	areas_=areas(sol,sys,grid,data)
-	
-	X_int=integrate(sys,X_avg_,sol; boundary=true)[[1:ng...],Γ_bottom]
-	X_int./areas_[Γ_bottom]
-end
-
 # ╔═╡ fec9ca6d-d815-4b50-bec7-f8fb3d8195ba
 function TopPlane(data,sol)
 	ng=ngas(data)
@@ -1864,7 +1882,141 @@ let
 	Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm",title="Interpolated Flux Profile", colorbar_title="Irradiation Flux / kW m-2", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"))
 
 	Plots.contour!(x/ufac"cm",y/ufac"cm",itp12(x,y) / ufac"kW/m^2", lw=0, aspect_ratio = 1, fill = true)	
+	#Plots.savefig("../img/out/Flux_interpol.svg")
+end
+  ╠═╡ =#
+
+# ╔═╡ 06ad2f54-6ae9-4c32-8391-e6cc8c5cfe68
+#=╠═╡
+let
+	(;iT,wi)=data_embed
+	sol_xy, grid_xy = TopPlane(data_embed,sol)
+	coords=grid_xy[Coordinates]
+
+	xs=unique(grid_xy[Coordinates][1,:])
+	ys=unique(grid_xy[Coordinates][2,:])
+
+	x_=repeat(xs,outer=length(ys))
+	y_=repeat(ys,inner=length(xs))
+	xy_=hcat(x_,y_)
+	xy_'[:,1] == coords[:,1]
 	
+	pos=[]
+	for (i,xy) in enumerate(eachcol(xy_'))
+		push!(pos,findall(all(coords .== xy, dims=1))[1][2])
+	end
+	pos
+	Ts=sol_xy[iT,:][1] .- 273.15
+
+	p=Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"), size=(300,300))
+	Plots.contourf!(p,xs/ufac"cm",ys/ufac"cm", lw=0,Ts[pos],aspect_ratio=1)
+	#Plots.savefig(p,"../img/out/Ttop.svg")
+	
+	#@views x,y,z = bnode.coord[:,bnode.index]		
+	#Glamp =FluxEmbed*FluxIntp(x,y)
+end
+  ╠═╡ =#
+
+# ╔═╡ 9e505f6b-f05d-47fd-bdc7-70ca4daac04a
+#=╠═╡
+function IrradFlux(sol,data)
+	(;iT,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,FluxIntp,Tglass)=data
+	
+	sol_xy, grid_xy = TopPlane(data_embed,sol)
+	coords=grid_xy[Coordinates]
+
+	xs=unique(grid_xy[Coordinates][1,:])
+	ys=unique(grid_xy[Coordinates][2,:])
+
+	x_=repeat(xs,outer=length(ys))
+	y_=repeat(ys,inner=length(xs))
+	xy_=hcat(x_,y_)
+	xy_'[:,1] == coords[:,1]
+	
+	pos=[]
+	for (i,xy) in enumerate(eachcol(xy_'))
+		push!(pos,findall(all(coords .== xy, dims=1))[1][2])
+	end
+	pos
+	Ts=sol_xy[iT,:][1]
+	Ts_=reshape(Ts[pos], length(xs),length(ys))
+
+	flux_vis=zeros(eltype(sol),length(xs),length(ys))
+	flux_IR=zeros(eltype(sol),length(xs),length(ys))
+	Glamp_=zeros(eltype(sol),length(xs),length(ys))
+	
+	# window properties (1)
+	tau1_vis=uc_window.tau_vis
+	rho1_vis=uc_window.rho_vis
+	rho1_IR=uc_window.rho_IR
+	eps1=uc_window.eps
+	# catalyst layer properties (2)
+	rho2_vis=uc_cat.rho_vis
+	rho2_IR=uc_cat.rho_IR
+	alpha2_vis=uc_cat.alpha_vis
+	alpha2_IR=uc_cat.alpha_IR
+	eps2=uc_cat.eps
+	# uncoated frit properties (3)
+	rho3_vis=uc_frit.rho_vis
+	rho3_IR=uc_frit.rho_IR
+	alpha3_vis=uc_frit.alpha_vis
+	alpha3_IR=uc_frit.alpha_IR
+	eps3=uc_frit.eps
+	#view factors
+	ϕ12=vf_uc_window_cat
+	ϕ13=vf_uc_window_frit
+
+	
+	for(j,y) in enumerate(ys)
+		for (i,x) in enumerate(xs)
+			Glamp =FluxIntp(x,y)
+			Glamp_[i,j] = Glamp
+			G1_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
+			# here the simplification is applied: only local value of T (u[iT]) is available, it is used for both surfaces
+			G1_IR = eps1*ph"σ"*Tglass^4 
+			#G1_IR = (eps1*ph"σ"*Tglass^4 + rho1_IR*(ϕ12*eps2*ph"σ"*Ts_[i,j]^4+ϕ13*eps3*ph"σ"*Ts_[i,j]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
+
+			# upper chamber cat
+			if (-5.0<=x<=5.0) && (-5.0<=y<=5.0)
+				#flux_irrad[i,j] = -eps2*ph"σ"*Ts_[i,j]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR
+				flux_vis[i,j] = G1_vis
+				flux_IR[i,j] = G1_IR
+			else # upper chamber frit
+				#flux_irrad[i,j] = -eps3*ph"σ"*Ts_[i,j]^4 + alpha3_vis*G1_vis + alpha3_IR*G1_IR
+				flux_vis[i,j] = G1_vis
+				flux_IR[i,j] = G1_IR
+			end
+
+		end
+	end
+	xs,ys,flux_vis,flux_IR,Glamp_
+end
+  ╠═╡ =#
+
+# ╔═╡ 0fa0d077-4e4a-47e2-b483-db2545b8100b
+#=╠═╡
+let
+	
+	
+	(;wi)=data_embed
+	X,Y,flux_vis,flux_IR,Glamp=IrradFlux(sol,data_embed)
+	clim_=(minimum(Glamp),maximum(Glamp))
+
+	flux_tot=flux_vis+flux_IR
+	DeltaFlux = @. (flux_tot-Glamp) / Glamp * 100
+	#DeltaFlux = @. (flux_vis-Glamp) / Glamp * 100
+
+	p=Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"), size=(300,300))
+	Plots.contourf!(p,X/ufac"cm",Y/ufac"cm",DeltaFlux, aspect_ratio=1,clim=(-5,5),lw=0,c=:RdBu)
+	#Plots.contourf!(p,X/ufac"cm",Y/ufac"cm",flux_tot/ufac"kW/m^2", aspect_ratio=1,clim=(minimum(M12),maximum(M12))./ufac"kW/m^2",lw=0,c=:inferno)
+	
+	#Plots.savefig(p,"../img/out/FluxOnCat.svg")
+	#p1=Plots.contourf(X,Y,Glamp,clim=clim_,aspect_ratio=1)
+	#p2=Plots.contourf(X,Y,flux_vis,clim=clim_,aspect_ratio=1)
+	#p3=Plots.contourf(X,Y,flux_IR,aspect_ratio=1)
+	#Plots.plot(p1,p2,p3)
+
+	#flux_vis./Glamp
 end
   ╠═╡ =#
 
@@ -1914,9 +2066,38 @@ end
 let
 	sol_xy, grid_xy = TopPlane(data_embed,sol)
 	sol_xz, grid_xz = CutPlane(data_embed,sol)
-	vis=GridVisualizer(layout=(1,2), resolution=(700, 300),)
+	vis=GridVisualizer(layout=(1,2), resolution=(700, 300))
 	scalarplot!(vis[1,1], grid_xy, sol_xy[data_embed.iT] .-273.15, colormap= :inferno, show=true)
-	scalarplot!(vis[1,2], grid_xz, sol_xz[data_embed.iT] .-273.15, colormap= :inferno, show=true)
+	scalarplot!(vis[1,2], grid_xz, sol_xz[data_embed.iT] .-273.15, aspect=4, colormap= :inferno, show=true)
+	
+end
+  ╠═╡ =#
+
+# ╔═╡ 3dfc1ac2-93dc-4b5b-adbc-e66e92bf76b0
+#=╠═╡
+let
+	(;iT,wi,h,cath)=data_embed
+	sol_xz, grid_xz = CutPlane(data_embed,sol)
+	coords=grid_xz[Coordinates]
+
+	xs=unique(grid_xz[Coordinates][1,:])
+	zs=unique(grid_xz[Coordinates][2,:])
+
+	x_=repeat(xs,outer=length(zs))
+	z_=repeat(zs,inner=length(xs))
+	xz_=hcat(x_,z_)
+	xz_'[:,1] == coords[:,1]
+	
+	pos=[]
+	for (i,xz) in enumerate(eachcol(xz_'))
+		push!(pos,findall(all(coords .== xz, dims=1))[1][2])
+	end
+	pos
+	Ts=sol_xz[iT,:][1] .- 273.15
+
+	p2=Plots.plot(xguide="X Coordinate / cm", yguide="Z Coordinate / cm", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(0, (h+cath)/ufac"cm"), size=(300,300))
+	Plots.contourf!(p2,xs/ufac"cm",zs/ufac"cm", aspect_ratio=10, lw=0,Ts[pos],)
+	#Plots.savefig(p2,"../img/out/Tcut.svg")
 end
   ╠═╡ =#
 
@@ -2167,11 +2348,11 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─bcaf83fb-f215-428d-9c84-f5b557fe143f
 # ╟─7f94d703-2759-4fe1-a8c8-ddf26732a6ca
 # ╟─906ad096-4f0c-4640-ad3e-9632261902e3
+# ╟─8139166e-42f9-41c3-a360-50d3d4e5ee86
+# ╟─44d91c2e-8082-4a90-89cc-81aba783d5ac
 # ╟─39e74955-aab6-4bba-a1b8-b2307b45e673
 # ╟─6798d5e2-b8c7-4f54-aa71-6ea1ccab78fb
 # ╟─ed3609cb-8483-4184-a385-dca307d13f17
-# ╟─8139166e-42f9-41c3-a360-50d3d4e5ee86
-# ╟─44d91c2e-8082-4a90-89cc-81aba783d5ac
 # ╟─58d0610b-1739-4260-8d16-5a31ba362d69
 # ╠═d0993435-ed0b-4a43-b848-26f5266017a1
 # ╟─634d1042-b110-45ef-bfbe-51b827fc922f
@@ -2180,10 +2361,12 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╠═e459bbff-e065-49e1-b91b-119add7d4a71
 # ╠═48b99de4-682d-439b-935e-408510c44e37
 # ╟─cfa366bc-f8b9-4219-b210-51b9fc5ff3f6
+# ╟─f4ebb596-824a-4124-afb7-c368c1cabb00
+# ╟─3aef8203-ce28-4197-a43e-784840f7bc1e
 # ╟─d9dee38e-6036-46b8-bc06-e545baa06789
 # ╟─e58ec04f-023a-4e00-98b8-f9ae85ca506f
 # ╟─80d2b5db-792a-42f9-b9c2-91d0e18cfcfb
-# ╟─b1ae3b4d-59ca-420f-a1a0-dc698b52e5b0
+# ╟─6de46bcb-9aff-4a21-b8d6-f14e64aac95c
 # ╟─b1ef2a89-27db-4f21-a2e3-fd6356c394da
 # ╟─4dae93b2-be63-4ee9-bc1e-871a31ade811
 # ╠═9547ed7c-3304-4c63-a6c1-5f84e0001c54
@@ -2192,18 +2375,20 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╠═fdaeafb6-e29f-41f8-8468-9c2b03b9eed7
 # ╟─2e631f58-6a4b-4c6d-86ad-b748fd2d463a
 # ╟─a395374d-5897-4764-8499-0ebe7f2b4239
-# ╟─7db215d7-420e-435b-8889-43c4fff150e0
+# ╠═7db215d7-420e-435b-8889-43c4fff150e0
 # ╟─8b485112-6b1a-4b38-af91-deb9b79527e0
 # ╟─25edaf7b-4051-4934-b4ad-a4655698a6c7
 # ╟─3fe2135d-9866-4367-8faa-56cdb42af7ed
 # ╟─652497ee-d07b-45e2-aeaf-87ad5bcc23ad
 # ╟─6bd59a54-f059-4646-b053-0fa41ead87fd
-# ╟─f5d78670-a98b-46a1-8bf3-3d2599cfdd88
+# ╠═f5d78670-a98b-46a1-8bf3-3d2599cfdd88
 # ╠═162122bc-12ae-4a81-8df6-86498041be40
 # ╠═221a1ee4-f7e9-4233-b45c-a715c9edae5f
-# ╟─04058f1d-9622-4b59-bf07-93483bc269f2
 # ╟─2228bbd4-bc84-4617-a837-2bf9bba76793
 # ╟─09d976a7-f6c6-465b-86f4-9bc654ae158c
+# ╟─5c9aad13-914a-4f5e-af32-a9c6403c52d0
+# ╟─ff764eea-e282-4fed-90b4-5f418ae426f0
+# ╟─dfed01d4-8d88-4ce7-afe5-1fd27e2cc746
 # ╟─4ebbe06f-0993-4c5c-9af3-76b2b645e592
 # ╟─0bc79692-8db4-44a2-9433-5b6ce97b656f
 # ╠═7da59e27-62b9-4b89-b315-d88a4fd34f56
@@ -2242,12 +2427,16 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─a6e61592-7958-4094-8614-e77446eb2223
 # ╟─2739bcff-3fb0-4169-8a1a-2b0a14998cec
 # ╠═30393c90-298c-412d-86ce-e36106613d35
+# ╠═06ad2f54-6ae9-4c32-8391-e6cc8c5cfe68
+# ╠═3dfc1ac2-93dc-4b5b-adbc-e66e92bf76b0
 # ╟─9952c815-5459-44ff-b1f8-07ab24ce0c53
 # ╟─b22387c4-cda5-424d-99b7-d7deda24c678
 # ╠═15604034-91fd-4fd4-b09e-e3c5cfe7a265
 # ╠═808aed68-7077-4079-be75-1bea962c716d
 # ╠═4d9c50ef-3756-492c-90a1-eeb5e51b5515
-# ╠═5de9edf7-6059-47d5-b917-e7491068ebdc
+# ╟─e4fcce3f-f41b-4e9e-aa84-3fd6a0013f0c
+# ╠═9e505f6b-f05d-47fd-bdc7-70ca4daac04a
+# ╠═0fa0d077-4e4a-47e2-b483-db2545b8100b
 # ╠═a55c5ee7-2274-4447-b0b2-58052f064bc9
 # ╠═68e2628a-056a-4ec3-827f-2654f49917d9
 # ╠═fec9ca6d-d815-4b50-bec7-f8fb3d8195ba

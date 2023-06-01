@@ -805,10 +805,11 @@ function HeatFluxes_EB_VI_plot(heatflows)
         
     p=Plots.plot(size=(400,300), yguide="Heat flow contribution / %")
     Plots.plot!(p, permutedims(x), permutedims(y); st=:bar, label=permutedims(labelsx))    
-    Plots.annotate!(p, x, y, round.(y, sigdigits=2), :bottom)
+    Plots.annotate!(p, x, y, round.(y, digits=1), :bottom)
     Plots.annotate!(p, 12.0, 22.5,
         "Σ flows = "*string(round(sum(flows)/Qin*100.0,sigdigits=3))*" %", :right
-        )    
+        )
+    #Plots.savefig(p,"img/out/HeatFlowDistr.svg")
 
 end
 

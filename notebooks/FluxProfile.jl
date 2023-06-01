@@ -30,6 +30,7 @@ end;
 begin
 	FluxMap = CSV.read("../data/IrradiationFluxProfiles/IrradFlux.csv", DataFrame, delim=";")
 	M=Matrix(FluxMap)
+	reverse!(M; dims=1) 
 end;
 
 # ╔═╡ c2c77844-c43c-4580-877f-62c238fc68bb
