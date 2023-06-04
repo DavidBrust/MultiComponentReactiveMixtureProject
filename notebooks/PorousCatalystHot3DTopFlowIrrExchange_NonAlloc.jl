@@ -27,14 +27,14 @@ begin
 
 	using LessUnitful
 	
-	using PlutoVista, Plots, GLMakie, CairoMakie
+	using PlutoVista, Plots, GLMakie
 	using PlutoUI
 	using CSV,DataFrames
 	using Interpolations
 
 	using FixedBed
 	
-	GridVisualize.default_plotter!(PlutoVista)
+	#GridVisualize.default_plotter!(PlutoVista)
 end;
 
 # ╔═╡ 863c9da7-ef45-49ad-80d0-3594eca4a189
@@ -392,6 +392,40 @@ md"""
 where $G_1^{\text{vis}}$ and $G_1^{\text{IR}}$ are the surface brightnesses (cumulative irradiation flux resulting from emission, transmission and reflection) of surface 1 in the visible and IR spectral range respectively. The temperature of the quartz window $T_1$ is calculated iteratively after each simulation iteration.
 """
 
+# ╔═╡ 79e6cb48-53e2-4655-9d77-51f3deb67b94
+function radiosity_window(f,u,bnode,data)
+    (;iT,FluxIntp,FluxEmbed,Tglass,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
+    # irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
+    # window properties (1)
+    tau1_vis=uc_window.tau_vis
+    rho1_vis=uc_window.rho_vis
+    tau1_IR=uc_window.tau_IR
+    rho1_IR=uc_window.rho_IR
+    eps1=uc_window.eps
+
+    # obtain local irradiation flux value from interpolation + embedding	
+    @views y,x,_ = bnode.coord[:,bnode.index] 
+    Glamp =FluxEmbed*FluxIntp(x,y)
+
+    #G1_bot_vis = 0.0
+    G1_bot_IR = eps1*ph"σ"*Tglass^4
+    if bnode.region==Γ_top_cat
+        # catalyst layer (2)
+        rho2_vis=uc_cat.rho_vis
+		
+        # vis radiosity of quartz window inwards / towards catalyst 
+        G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*rho2_vis)
+
+    elseif bnode.region==Γ_top_frit
+        # uncoated frit (3)
+        rho3_vis=uc_frit.rho_vis
+
+		# vis radiosity of quartz window inwards / towards catalyst
+        G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*rho3_vis)
+    end
+    return G1_bot_vis,G1_bot_IR
+end
+
 # ╔═╡ 4dae93b2-be63-4ee9-bc1e-871a31ade811
 md"""
 The optical properties $\tau, \rho, \alpha, \epsilon$ are effective values, integrated over the respective spectral distributions of irradiative power from the lamp (visible, vis) and from emitted thermal radition (infrared, IR) for the surfaces 1, 2 and 3 respectively.
@@ -613,9 +647,12 @@ The heat flux through the side walls of the modelling domain $\dot q_{\text{side
 """
 
 # ╔═╡ ff764eea-e282-4fed-90b4-5f418ae426f0
+# ╠═╡ skip_as_script = true
+#=╠═╡
 md"""
 $(LocalResource("../img/SideBCConv.png", :width=>400)) 
 """
+  ╠═╡ =#
 
 # ╔═╡ dfed01d4-8d88-4ce7-afe5-1fd27e2cc746
 md"""
@@ -665,11 +702,8 @@ function side(f,u,bnode,data)
 
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
 		#f[iT] = α_w*(u[iT]-Tamb)
-		# consider factor 10 in height ratio of modelling domain/outer reactor wall
 		f[iT] = shellh/(h+cath)*k_nat_conv*(u[iT]-Tamb)
 	end
-	#iT=data.iT
-	#boundary_robin!(f,u,bnode;species=iT,region=[Γ_side_back,Γ_side_right], factor=data.α_w, value=data.Tamb*data.α_w)	
 end
 
 # ╔═╡ 02b76cda-ffae-4243-ab40-8d0fe1325776
@@ -730,7 +764,7 @@ begin
 	isreactive::Bool = 0
 		
 	#α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
-	k_nat_conv::Float64=15.0*ufac"W/(m^2*K)" # natural convection heat transfer coefficient	
+	k_nat_conv::Float64=10.0*ufac"W/(m^2*K)" # natural convection heat transfer coefficient	
 	
 	## porous filter data
 	dp::Float64=200.0*ufac"μm" # average pore size, por class 0
@@ -929,36 +963,17 @@ function top(f,u,bnode,data)
 		σ=ph"σ"
 
 		# irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
-		# window properties (1)
-		tau1_vis=uc_window.tau_vis
-		rho1_vis=uc_window.rho_vis
-		rho1_IR=uc_window.rho_IR
-		eps1=uc_window.eps
+		
 		# catalyst layer properties (2)
-		rho2_vis=uc_cat.rho_vis
-		rho2_IR=uc_cat.rho_IR
 		alpha2_vis=uc_cat.alpha_vis
 		alpha2_IR=uc_cat.alpha_IR
 		eps2=uc_cat.eps
 		# uncoated frit properties (3)
-		rho3_vis=uc_frit.rho_vis
-		rho3_IR=uc_frit.rho_IR
 		alpha3_vis=uc_frit.alpha_vis
 		alpha3_IR=uc_frit.alpha_IR
 		eps3=uc_frit.eps
-		#view factors
-		ϕ12=vf_uc_window_cat
-		ϕ13=vf_uc_window_frit
 
-		# obtain local irradiation flux value from interpolation + embedding
-		#@views x,y,z = bnode.coord[:,bnode.index]		
-		@views y,x,_ = bnode.coord[:,bnode.index] # different ordering of axes in VoronoiFVM than in interpolated data
-		Glamp =FluxEmbed*FluxIntp(x,y)
-		
-		# surface brigthness of quartz window (1) in vis & IR	
-		G1_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
-		# here the simplification is applied: only local value of T (u[iT]) is available, it is used for both surfaces
-		G1_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*u[iT]^4+ϕ13*eps3*σ*u[iT]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
+		G1_vis, G1_IR = radiosity_window(f,u,bnode,data)
 		
 		if bnode.region==Γ_top_cat
 			flux_irrad = -eps2*σ*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR
@@ -966,26 +981,20 @@ function top(f,u,bnode,data)
 			flux_irrad = -eps3*σ*u[iT]^4 + alpha3_vis*G1_vis + alpha3_IR*G1_IR
 		end
 
-
-		# conductive heat flux through top chamber
 		# mean temperature
         Tm=0.5*(u[iT] + Tglass)
         # thermal conductivity at Tm and inlet composition X0 (H2/CO2 = 1/1)
         @inline _,λf=dynvisc_thermcond_mix(data, Tm, X0)
 
+		# conductive heat flux through top chamber
         #flux_cond = -λf*(Tglass-u[iT])/uc_h
 		dh=2*uc_h
 		kconv=Nu*λf/dh*ufac"W/(m^2*K)"
 		flux_conv = kconv*(u[iT]-Tm)
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
 
-		# include convective therm. energy flux
-		# use species enthalpy (incl. Δh_formation) for conv. therm. eng. flux 2/2
 		#f[iT] = -flux_irrad + flux_cond + flux_entahlpy
-		f[iT] = -flux_irrad + flux_conv + flux_entahlpy
-		
-		
-
+		f[iT] = -flux_irrad + flux_conv + flux_entahlpy		
 	end
 end
 
@@ -1027,15 +1036,11 @@ function bottom(f,u,bnode,data)
 
 		X=MVector{ngas(data),eltype(u)}(undef)
 		@inline mole_frac!(bnode,data,X,u)
-		#X=zeros(eltype(u), ng)
-		#mole_frac!(bnode,data,X,u)
+		
 
 		# use species enthalpy (incl. Δh_formation) for conv. therm. eng. flux 1/2
-		#hmix=enthalpy_mix(Fluids, u[iT], X)
 		@inline hmix=enthalpy_mix(Fluids, u[iT], X)
 		flux_entahlpy=ubot*u[ip]/(ph"R"*u[iT])*hmix
-		#cf=heatcap_mix(Fluids, u[iT], X)		
-		#flux_entahlpy=ubot*u[ip]/(ph"R"*u[iT])*cf*(u[iT]-Tamb)
 
 		# irradiation exchange between porous frit (1) and Al bottom plate (2)
 		# porous frit properties (1)
@@ -1060,9 +1065,7 @@ function bottom(f,u,bnode,data)
 		
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
 		# f[iT] = -flux_irrad + flux_entahlpy - flux_cond
-		f[iT] = -flux_irrad + flux_entahlpy + flux_conv
-
-		
+		f[iT] = -flux_irrad + flux_entahlpy + flux_conv		
 		
 		for i=1:ng
 			# specify flux at boundary: flow velocity is normal to bot boundary
@@ -1186,6 +1189,12 @@ end
 md"""
 ## Temperature Plot
 """
+
+# ╔═╡ b99610da-ca0c-46e7-b0a7-bc7858a45a35
+# ╠═╡ skip_as_script = true
+#=╠═╡
+#writeVTK("../data/out/3D_Temperature.vtu", grid; point_data = sol[data_embed.iT,:])
+  ╠═╡ =#
 
 # ╔═╡ 2790b550-3105-4fc0-9070-d142c19678db
 md"""
@@ -1372,9 +1381,6 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 		
 		# irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
 		# window properties (1)
-		tau1_vis=uc_window.tau_vis
-		rho1_vis=uc_window.rho_vis
-		rho1_IR=uc_window.rho_IR
 		alpha1_IR=uc_window.alpha_IR
 		alpha1_vis=uc_window.alpha_vis
 		eps1=uc_window.eps
@@ -1398,14 +1404,9 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 			Tglass=x[1]
 	
 			function flux_abs_top_catalyst_layer(f,u,bnode,data)
-				if bnode.region==Γ_top_cat
+				if bnode.region==Γ_top_cat   
 
-					@views x,y,z = bnode.coord[:,bnode.index]		
-					Glamp =FluxEmbed*FluxIntp(x,y)
-					
-					G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
-			
-					G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*u[iT]^4+ϕ13*eps3*σ*u[iT]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))	        		
+					G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
 			
 					G2_vis = rho2_vis*G1_bot_vis		
 					
@@ -1418,12 +1419,7 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 			function flux_abs_top_frit(f,u,bnode,data)
 				if bnode.region==Γ_top_frit
 
-					@views x,y,z = bnode.coord[:,bnode.index]		
-					Glamp =FluxEmbed*FluxIntp(x,y)
-					
-					G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
-					
-					G1_bot_IR = (eps1*σ*Tglass^4 + rho1_IR*(ϕ12*eps2*σ*u[iT]^4+ϕ13*eps3*σ*u[iT]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
+					G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
 			
 					G3_vis = rho3_vis*G1_bot_vis
 	
@@ -1479,7 +1475,7 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 			Atop = sum(areas(sol,sys,grid,data)[[Γ_top_cat,Γ_top_frit]])
 	
 			Qconv0 = 4*Atop*k_nat_conv*(Tglass-Tamb)
-			Qemit0 = 4*Atop*uc_window.eps*σ*Tglass^4		
+			Qemit0 = 4*Atop*eps1*σ*Tglass^4		
 	
 			#F[1] = -Qconv0 +Qcond_10 +Qcond_20 - 2*Qemit0 +Qabs_10 +Qabs_20
 			F[1] = -Qconv0 +Qconv_10 +Qconv_20 - 2*Qemit0 +Qabs_10 +Qabs_20
@@ -1712,7 +1708,7 @@ Heat is transported within the domain via conduction and convective transport. B
 md"""
 Total irradiated power on aperture (from measurement): __$(Integer(round(sum(M12)*(0.06579*ufac"cm")^2,digits=0))) W__
 
-Total irradiated power on aperture (for interpolation on computational grid): __$(Pwr=PowerIn(sol,sys,grid,data_embed);Integer(round(sum(Pwr[[Γ_top_cat,Γ_top_frit]]),digits=0))) W__
+Total irradiated power on aperture (for interpolation on computational grid): __$(Pwr=PowerIn(sol,sys,grid,data_embed);round(sum(Pwr[[Γ_top_cat,Γ_top_frit]]),digits=2)) W__
 """
   ╠═╡ =#
 
@@ -1720,13 +1716,8 @@ Total irradiated power on aperture (for interpolation on computational grid): __
 #=╠═╡
 let
 	iT=data_embed.iT
-	#vis=GridVisualizer(resolution=(600,400), title="Temperature °C", Plotter=PyPlot)
-    #vis=GridVisualizer(resolution=(600,400), title="Temperature °C")
-	
-	GridVisualize.scalarplot(grid, sol[iT,:].-273.15,levelalpha=0.8,levels=7,colormap=:inferno)
 
-	#reveal(vis)
-	#save("../img/out/Temeprature.png", reveal(vis), Plotter=PyPlot)
+	scalarplot(grid, sol[iT,:].-273.15,levelalpha=0.8,levels=7,colormap=:inferno,Plotter=PlutoVista)
 end
   ╠═╡ =#
 
@@ -1760,6 +1751,7 @@ end
   ╠═╡ =#
 
 # ╔═╡ 0c3eb801-f271-4cf4-a109-25a283a51779
+# ╠═╡ skip_as_script = true
 #=╠═╡
 data_embed.mdotin/ufac"kg/hr"
   ╠═╡ =#
@@ -1772,6 +1764,7 @@ end;
   ╠═╡ =#
 
 # ╔═╡ 8b1a0902-2542-40ed-9f91-447bffa4290f
+# ╠═╡ skip_as_script = true
 #=╠═╡
 md"""
 Mass flows:
@@ -2052,6 +2045,7 @@ function CutPlane(data,sol)
 end
 
 # ╔═╡ 60b475d1-219e-4037-bd36-e0671cfa1893
+# ╠═╡ skip_as_script = true
 #=╠═╡
 let
 	data=data_embed
@@ -2368,6 +2362,7 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─80d2b5db-792a-42f9-b9c2-91d0e18cfcfb
 # ╟─6de46bcb-9aff-4a21-b8d6-f14e64aac95c
 # ╟─b1ef2a89-27db-4f21-a2e3-fd6356c394da
+# ╠═79e6cb48-53e2-4655-9d77-51f3deb67b94
 # ╟─4dae93b2-be63-4ee9-bc1e-871a31ade811
 # ╠═9547ed7c-3304-4c63-a6c1-5f84e0001c54
 # ╠═9d191a3a-e096-4ad7-aae6-bbd63d478fa2
@@ -2375,15 +2370,15 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╠═fdaeafb6-e29f-41f8-8468-9c2b03b9eed7
 # ╟─2e631f58-6a4b-4c6d-86ad-b748fd2d463a
 # ╟─a395374d-5897-4764-8499-0ebe7f2b4239
-# ╠═7db215d7-420e-435b-8889-43c4fff150e0
+# ╟─7db215d7-420e-435b-8889-43c4fff150e0
 # ╟─8b485112-6b1a-4b38-af91-deb9b79527e0
 # ╟─25edaf7b-4051-4934-b4ad-a4655698a6c7
 # ╟─3fe2135d-9866-4367-8faa-56cdb42af7ed
 # ╟─652497ee-d07b-45e2-aeaf-87ad5bcc23ad
 # ╟─6bd59a54-f059-4646-b053-0fa41ead87fd
-# ╠═f5d78670-a98b-46a1-8bf3-3d2599cfdd88
-# ╠═162122bc-12ae-4a81-8df6-86498041be40
-# ╠═221a1ee4-f7e9-4233-b45c-a715c9edae5f
+# ╟─f5d78670-a98b-46a1-8bf3-3d2599cfdd88
+# ╟─162122bc-12ae-4a81-8df6-86498041be40
+# ╟─221a1ee4-f7e9-4233-b45c-a715c9edae5f
 # ╟─2228bbd4-bc84-4617-a837-2bf9bba76793
 # ╟─09d976a7-f6c6-465b-86f4-9bc654ae158c
 # ╟─5c9aad13-914a-4f5e-af32-a9c6403c52d0
@@ -2407,6 +2402,7 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╠═3a35ac76-e1b7-458d-90b7-d59ba4f43367
 # ╟─b2df1087-6628-4889-8cd6-c5ee7629cd93
 # ╠═3bd80c19-0b49-43f6-9daa-0c87c2ea8093
+# ╠═b99610da-ca0c-46e7-b0a7-bc7858a45a35
 # ╟─2790b550-3105-4fc0-9070-d142c19678db
 # ╠═bea97fb3-9854-411c-8363-15cbef13d033
 # ╟─31add356-6854-43c5-9ebd-ef10add6cc3d

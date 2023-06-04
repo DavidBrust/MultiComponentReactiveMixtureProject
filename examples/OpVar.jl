@@ -1,6 +1,6 @@
 module OpVar
 
-using LessUnitful, GLMakie, CairoMakie
+using LessUnitful, GLMakie
 
 include("../notebooks/PorousCatalystHot3DTopFlowIrrExchange_NonAlloc.jl")
 
