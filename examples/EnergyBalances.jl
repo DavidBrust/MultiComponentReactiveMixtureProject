@@ -19,46 +19,6 @@ function flux_in_profile(f,u,bnode,data)
 end
 
 
-# function radiosity_window(f,u,bnode,data)
-#     if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
-#         (;iT,FluxIntp,FluxEmbed,Tglass,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
-
-
-#         # irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
-#         # window properties (1)
-#         tau1_vis=uc_window.tau_vis
-#         rho1_vis=uc_window.rho_vis
-#         tau1_IR=uc_window.tau_IR
-#         rho1_IR=uc_window.rho_IR
-#         eps1=uc_window.eps
-#         # catalyst layer properties (2)
-#         rho2_vis=uc_cat.rho_vis
-#         rho2_IR=uc_cat.rho_IR
-#         eps2=uc_cat.eps
-#         # uncoated frit properties (3)
-#         rho3_vis=uc_frit.rho_vis
-#         rho3_IR=uc_frit.rho_IR
-#         eps3=uc_frit.eps
-#         #view factors
-#         ϕ12=vf_uc_window_cat
-#         ϕ13=vf_uc_window_frit
-
-#         # obtain local irradiation flux value from interpolation + embedding
-#         # different ordering of axes in VoronoiFVM than in interpolated data
-#         # @views x,y,z = bnode.coord[:,bnode.index]		
-#         @views y,x,_ = bnode.coord[:,bnode.index] 
-# 		Glamp =FluxEmbed*FluxIntp(x,y)
-		
-
-#         # surface radiosity of quartz window inwards / towards catalyst facing, vis & IR	
-#         G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
-
-#         G1_bot_IR = (eps1*ph"σ"*Tglass^4 + rho1_IR*(ϕ12*eps2*ph"σ"*u[iT]^4+ϕ13*eps3*ph"σ"*u[iT]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
-
-#         G1_bot_vis,G1_bot_IR
-#     end
-# end
-
 function radiosity_window(f,u,bnode,data)
     (;iT,FluxIntp,FluxEmbed,Tglass,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
     # irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
