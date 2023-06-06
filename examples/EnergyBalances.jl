@@ -1,6 +1,6 @@
 module EnergyBalances
 
-using DataFrames, CSV
+using DataFrames, CSV, Plots.PlotMeasures
 
 
 include("../notebooks/PorousCatalystHot3DTopFlowIrrExchange_NonAlloc.jl")
@@ -923,13 +923,15 @@ function HeatFluxes_EB_VI_plot(heatflows)
 
     y = flows / Qin * 100.0
         
-    p=Plots.plot(size=(400,300), yguide="Heat flow contribution / %")
+    p=Plots.plot(size=(400,300), yguide="Heat flow contribution / %", grid=false, 
+    top_margin=5mm)
     Plots.plot!(p, permutedims(x), permutedims(y); st=:bar, label=permutedims(labelsx))    
     Plots.annotate!(p, x, y, round.(y, digits=1), :bottom)
     Plots.annotate!(p, 12.0, 22.5,
         "Σ flows = "*string(round(sum(flows)/Qin*100.0,digits=2))*" %", :right
         )
-    #Plots.savefig(p,"img/out/HeatFlowDistr.svg")
+    # Plots.savefig(p,"img/out/HeatFlowDistr.svg")
+    Plots.savefig(p,"img/out/HeatFlows_baseCase230606.pdf")
 
 end
 

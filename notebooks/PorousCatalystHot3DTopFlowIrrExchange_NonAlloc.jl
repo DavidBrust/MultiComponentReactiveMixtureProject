@@ -1190,12 +1190,6 @@ md"""
 ## Temperature Plot
 """
 
-# ╔═╡ b99610da-ca0c-46e7-b0a7-bc7858a45a35
-# ╠═╡ skip_as_script = true
-#=╠═╡
-#writeVTK("../data/out/3D_Temperature.vtu", grid; point_data = sol[data_embed.iT,:])
-  ╠═╡ =#
-
 # ╔═╡ 2790b550-3105-4fc0-9070-d142c19678db
 md"""
 ## Partial Pressure Plot
@@ -1719,6 +1713,12 @@ let
 
 	scalarplot(grid, sol[iT,:].-273.15,levelalpha=0.8,levels=7,colormap=:inferno,Plotter=PlutoVista)
 end
+  ╠═╡ =#
+
+# ╔═╡ b99610da-ca0c-46e7-b0a7-bc7858a45a35
+# ╠═╡ skip_as_script = true
+#=╠═╡
+writeVTK("../data/out/3D_Temperature.vtu", grid; point_data = sol[data_embed.iT,:] .-273.15)
   ╠═╡ =#
 
 # ╔═╡ bea97fb3-9854-411c-8363-15cbef13d033
