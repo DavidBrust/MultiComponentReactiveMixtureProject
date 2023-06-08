@@ -394,7 +394,7 @@ where $G_1^{\text{vis}}$ and $G_1^{\text{IR}}$ are the surface brightnesses (cum
 
 # ╔═╡ 79e6cb48-53e2-4655-9d77-51f3deb67b94
 function radiosity_window(f,u,bnode,data)
-    (;iT,FluxIntp,FluxEmbed,Tglass,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
+    (;iT,iTw,FluxIntp,FluxEmbed,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
     # irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
     # window properties (1)
     tau1_vis=uc_window.tau_vis
@@ -407,7 +407,8 @@ function radiosity_window(f,u,bnode,data)
     @views y,x,_ = bnode.coord[:,bnode.index] 
     Glamp =FluxEmbed*FluxIntp(x,y)
 
-    #G1_bot_vis = 0.0
+	# local tempererature of quartz window
+    Tglass = u[iTw]
     G1_bot_IR = eps1*ph"σ"*Tglass^4
     if bnode.region==Γ_top_cat
         # catalyst layer (2)
@@ -691,6 +692,95 @@ This will lead to an error, that should be estimated.
 
 """
 
+# ╔═╡ f8471857-38b3-4cca-85e6-cba7c0f0c741
+# ╠═╡ skip_as_script = true
+#=╠═╡
+md"""
+$(LocalResource("../img/WindowEB.png")) 
+"""
+  ╠═╡ =#
+
+# ╔═╡ 1447a715-75bb-4a22-b76d-7f809f3686f9
+md"""
+At steady state, the net transfer of energy to/from the balance region around the quartz window must vanish. This leads to:
+
+```math
+0=-\dot q_{\text{conv,top}} - 2 \dot q_{\text{emit}} + \dot q_{\text{conv,bot,2}} + \dot q_{\text{conv,bot,3}} + \dot q_{\text{abs,bot,2}} + \dot q_{\text{abs,bot,3}}
+```
+
+with
+```math
+	\begin{align}
+	\dot q_{\text{conv,top}} &= \alpha_{\text{conv}} (T_1-T_{\text{amb}}) \\
+	\dot q_{\text{emit}} &= \epsilon_1\sigma T_1^4 \quad(\text{once for top \& bottom surfaces}) \\
+	\dot q_{\text{conv,bot,2}} &= \alpha_{\text{inner. conv}}(T_{\text m}-T_1), \quad T_{\text m}=\frac{T_1+T_2}{2} \\
+	\dot q_{\text{conv,bot,3}} &= \alpha_{\text{inner. conv}}(T_{\text m}-T_1), \quad T_{\text m}=\frac{T_1+T_3}{2} \\
+	\dot q_{\text{abs,bot,2}} &= \alpha_1^{\text{IR}} \phi_{12} G_2^{\text{IR}} + \alpha_1^{\text{vis}} \phi_{12} G_2^{\text{vis}} \\
+	\dot q_{\text{abs,bot,3}} &= \alpha_1^{\text{IR}} \phi_{13} G_3^{\text{IR}} + \alpha_1^{\text{vis}} \phi_{13} G_3^{\text{vis}}
+	\end{align}
+```
+
+From this balance, the steady-state window temperature $T_1$ can be obtained.
+"""
+
+# ╔═╡ 7a3d5f60-4159-4025-908b-fe804e07eaac
+# ╠═╡ skip_as_script = true
+#=╠═╡
+md"""
+$(LocalResource("../img/BotChamberEB.png")) 
+"""
+  ╠═╡ =#
+
+# ╔═╡ e875be60-1e57-4a87-9348-a930fc591aa9
+md"""
+At steady state, the net transfer of energy to/from the balance region around the bottom plate must vanish. This leads to:
+
+```math
+0=-\dot q^{\text{nat}}_{\text{conv}} - 2 \dot q_{\text{emit}} + \dot q^{\text{int}}_{\text{conv}} + \dot q_{\text{abs,1}} 
+```
+
+with
+```math
+	\begin{align}
+	\dot q^{\text{nat}}_{\text{conv}} &= k^{\text{nat}}_{\text{conv}} (T_2-T_{\text{amb}}) \\
+
+	\dot q_{\text{emit}} &= \epsilon_2\sigma T_2^4 \quad(\text{once for top \& bottom surfaces}) \\
+	\dot q^{\text{int}}_{\text{conv}} &= k^{\text{int}}_{\text{conv}}(T_2-T_{\text m}), \quad T_{\text m}=\frac{T_1+T_2}{2} \\
+	
+	\dot q_{\text{abs,1}} &= \alpha_2^{\text{IR}} G_1^{\text{IR}} \\
+	
+	\end{align}
+```
+
+The surface brigthness of the frit, that solely lies in the IR spectral range $G_1^{\text{IR}}$ is computed via:
+
+```math
+	G_1^{\text{IR}} = \frac{\epsilon_1 \sigma T_1^4 + \rho_1^{\text{IR}} \epsilon_2 \sigma T_2^4}{1-\rho_1^{\text{IR}} \rho_2^{\text{IR}}}
+
+```
+
+We obtain the mean temperature of the frit $T_1$ from the simulation. From this balance, the steady-state bottom plate temperature $T_2$ can be obtained.
+"""
+
+# ╔═╡ 36b3acab-4ead-4cdf-be0d-3df09b7ec687
+md"""
+__Test boundary flux on plate temperature boundary species__
+"""
+
+# ╔═╡ dec81e61-d1eb-4a6c-8648-a07b98a8a7a9
+function bflux(f, u, bedge, data)
+	# window temperature distribution
+	if bedge.region == Γ_top_cat || bedge.region == Γ_top_frit
+		(;iTw,λ_window) = data
+		f[iTw] = λ_window * (u[iTw, 1] - u[iTw, 2])
+	end
+	
+	if bedge.region == Γ_bottom
+		(;iTp,λ_Al) = data
+		f[iTp] = λ_Al * (u[iTp, 1] - u[iTp, 2])
+	end
+end
+
 # ╔═╡ edd9fdd1-a9c4-4f45-8f63-9681717d417f
 function side(f,u,bnode,data)
 	# side wall boundary condition
@@ -722,11 +812,8 @@ md"""
 """
 
 # ╔═╡ 3a35ac76-e1b7-458d-90b7-d59ba4f43367
-#Base.@kwdef mutable struct ModelData <:AbstractModelData
-
 begin
-	# !!!ALLOC We need ng as a "static" parameter (known at compile time)
-	# !!!ALLOC so we make it a type parameter instead of a struct entry
+	
 	Base.@kwdef mutable struct ModelData{NG} <:AbstractModelData
 	
 	# catalyst / chemistry data
@@ -738,6 +825,9 @@ begin
 	#ng::Int64		 		= kinpar.ng
 	ip::Int64=NG+1 # index of total pressure variable
 	iT::Int64=ip+1 # index of Temperature variable
+	# register window & plate temperatures as boundary species
+	iTw::Int64=iT+1 # index of window Temperature (upper chamber)
+	iTp::Int64=iTw+1 # index of plate Temperature (lower chamber)
 
 	# names and fluid indices
 	gn::Dict{Int, Symbol} 	= kinpar.gn
@@ -811,10 +901,6 @@ begin
 	# lower chamber:  Al bottom plate eff. optical properties
 	lc_plate::SurfaceOpticalProps = lc_plate
 	
-	Tglass::Float64 = 373.15*ufac"K" # glass temperature on surface facing catalyst
-	Tplate::Float64 = 373.15*ufac"K" # bottom Al plate temperature facing frit
-	
-
 	# Solid Boro-Silikatglas
 	ρs::Float64=2.23e3*ufac"kg/m^3" # density of non-porous Boro-Solikatglas 3.3
 	#λs::Float64=1.4*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2
@@ -839,6 +925,9 @@ begin
 	a_v::Float64=a_s*ρfrit*ufac"m^2/m^3" # volume specific interface area
 	## END porous filter data
 
+	# quartz window / Al bottom plate thermal conductivities
+	λ_window::Float64=1.38*ufac"W/(m*K)"
+	λ_Al::Float64=235.0*ufac"W/(m*K)"
 
 	## Flow data
 	#norm conditions
@@ -940,7 +1029,7 @@ end
 function top(f,u,bnode,data)
 	# top boundaries (cat layer & frit)
 	if bnode.region==Γ_top_frit || bnode.region==Γ_top_cat 
-		(;iT,FluxIntp,FluxEmbed,Tglass,X0,Fluids,Tamb,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h,Nu)=data
+		(;iT,iTw,FluxIntp,FluxEmbed,X0,Fluids,Tamb,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h,Nu,k_nat_conv)=data
 		ng=ngas(data)
 		# convective therm. energy flux
 		flux_entahlpy=zero(eltype(u))
@@ -958,17 +1047,24 @@ function top(f,u,bnode,data)
 		end
 
 		
-		#flux_irrad=0.0
 		flux_irrad=zero(eltype(u))
+		# calculate local absortion in window
+		flux_abs_w=zero(eltype(u))
 		σ=ph"σ"
 
 		# irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
-		
+		# window properties (1)
+		alpha1_vis=uc_window.alpha_vis
+        alpha1_IR=uc_window.alpha_IR
 		# catalyst layer properties (2)
+		rho2_vis=uc_cat.rho_vis
+        rho2_IR=uc_cat.rho_IR
 		alpha2_vis=uc_cat.alpha_vis
 		alpha2_IR=uc_cat.alpha_IR
 		eps2=uc_cat.eps
 		# uncoated frit properties (3)
+		rho3_vis=uc_frit.rho_vis
+        rho3_IR=uc_frit.rho_IR
 		alpha3_vis=uc_frit.alpha_vis
 		alpha3_IR=uc_frit.alpha_IR
 		eps3=uc_frit.eps
@@ -977,10 +1073,17 @@ function top(f,u,bnode,data)
 		
 		if bnode.region==Γ_top_cat
 			flux_irrad = -eps2*σ*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR
+			G2_vis = rho2_vis*G1_vis		
+            G2_IR = eps2*ph"σ"*u[iT]^4 + rho2_IR*G1_IR
+			flux_abs_w = alpha1_vis*G2_vis + alpha1_IR*G2_IR
 		else # upper chamber frit
 			flux_irrad = -eps3*σ*u[iT]^4 + alpha3_vis*G1_vis + alpha3_IR*G1_IR
+			G3_vis = rho3_vis*G1_vis
+        	G3_IR = eps3*ph"σ"*u[iT]^4 + rho3_IR*G1_IR			
+			flux_abs_w = alpha1_vis*G3_vis + alpha1_IR*G3_IR
 		end
 
+		Tglass = u[iTw]
 		# mean temperature
         Tm=0.5*(u[iT] + Tglass)
         # thermal conductivity at Tm and inlet composition X0 (H2/CO2 = 1/1)
@@ -994,7 +1097,12 @@ function top(f,u,bnode,data)
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
 
 		#f[iT] = -flux_irrad + flux_cond + flux_entahlpy
-		f[iT] = -flux_irrad + flux_conv + flux_entahlpy		
+		f[iT] = -flux_irrad + flux_conv + flux_entahlpy
+
+		# calculate local window temperature from (local) flux balance
+		flux_conv_top_w = k_nat_conv*(u[iTw]-Tamb)
+		flux_emit_w = uc_window.eps*ph"σ"*u[iTw]^4
+		f[iTw] = -flux_conv -flux_abs_w +flux_conv_top_w +2*flux_emit_w
 	end
 end
 
@@ -1031,7 +1139,7 @@ end
 # ╔═╡ 40906795-a4dd-4e4a-a62e-91b4639a48fa
 function bottom(f,u,bnode,data)
 	if bnode.region==Γ_bottom # bottom boundary
-		(;iT,ip,Fluids,ubot,Tamb,lc_frit,lc_plate,Tplate,lc_h,Nu) = data
+		(;iT,ip,iTp,Fluids,ubot,Tamb,k_nat_conv,lc_frit,lc_plate,lc_h,Nu) = data
 		ng=ngas(data)
 
 		X=MVector{ngas(data),eltype(u)}(undef)
@@ -1044,12 +1152,17 @@ function bottom(f,u,bnode,data)
 
 		# irradiation exchange between porous frit (1) and Al bottom plate (2)
 		# porous frit properties (1)
-		eps1=lc_frit.eps; alpha1_IR=lc_frit.alpha_IR; rho1_IR=lc_frit.rho_IR; 	
+		rho1_IR=lc_frit.rho_IR
+		alpha1_IR=lc_frit.alpha_IR
+		eps1=lc_frit.eps
 		# Al bottom plate properties (2)
-		eps2=lc_plate.eps; rho2_IR=lc_plate.rho_IR;
-		
+		rho2_IR=lc_plate.rho_IR
+		alpha2_IR=lc_plate.alpha_IR
+		eps2=lc_plate.eps
 		#(;eps1,alpha1_IR,rho1_IR,rho2_IR,eps2,rho2_IR) = lower_chamber
 		σ=ph"σ"
+
+		Tplate = u[iTp]
 		flux_irrad = -eps1*σ*u[iT]^4 + alpha1_IR/(1-rho1_IR*rho2_IR)*(eps2*σ*Tplate^4+rho2_IR*eps1*σ*u[iT]^4)
 
 		# conductive heat flux through top chamber
@@ -1061,7 +1174,7 @@ function bottom(f,u,bnode,data)
         # flux_cond = -λf*(u[iT]-Tplate)/lc_h # positive flux in positive z coord.
 		dh=2*lc_h
 		kconv=Nu*λf/dh*ufac"W/(m^2*K)"
-		flux_conv = kconv*(u[iT]-Tm) # positive flux in negative z coord.
+		flux_conv = kconv*(u[iT]-Tm) # positive flux in negative z coord. (towards plate)
 		
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
 		# f[iT] = -flux_irrad + flux_entahlpy - flux_cond
@@ -1071,6 +1184,13 @@ function bottom(f,u,bnode,data)
 			# specify flux at boundary: flow velocity is normal to bot boundary
 			f[i] = ubot*u[i]/(ph"R"*u[iT])			
 		end
+
+		# calculate (local) plate temperature from (local) flux balance
+		flux_conv_bot_p = k_nat_conv*(u[iTp]-Tamb)
+		flux_emit_p = lc_plate.eps*ph"σ"*u[iTp]^4
+		G1_IR = (eps1*ph"σ"*u[iT]^4 + rho1_IR*eps2*ph"σ"*u[iTp]^4)/(1-rho1_IR*rho2_IR)
+		flux_abs_p = alpha2_IR*G1_IR
+		f[iTp] =  -flux_conv -flux_abs_p +flux_conv_bot_p +2*flux_emit_p
 	end
 end
 
@@ -1185,159 +1305,12 @@ function flux(f,u,edge,data)
 	#f[ip] via reaction: ∑pi = p
 end
 
-# ╔═╡ b2df1087-6628-4889-8cd6-c5ee7629cd93
-md"""
-## Temperature Plot
-"""
-
-# ╔═╡ 2790b550-3105-4fc0-9070-d142c19678db
-md"""
-## Partial Pressure Plot
-"""
-
-# ╔═╡ 31add356-6854-43c5-9ebd-ef10add6cc3d
-md"""
-### CO molar fraction in Cross-section
-"""
-
-# ╔═╡ bd7552d2-2c31-4834-97d9-ccdb4652242f
-function SolAlongLine(data,sol)
-	ng=ngas(data)		
-	grid=grid_fun(data)
-	
-	mid_x=argmin(abs.(grid[Coordinates][1,:] .-data.wi/4))
-	mid_x=grid[Coordinates][1,mid_x]
-	mid_y=argmin(abs.(grid[Coordinates][2,:] .-data.le/4))
-	mid_y=grid[Coordinates][2,mid_y]
-	
-
-	Nodes = findall(x->x[1] == mid_x && x[2] == mid_y, eachcol(grid[Coordinates]))
-	
-	grid1D = grid[Coordinates][:,Nodes]
-	grid1D = grid1D[3,:] # extract z-coordinate
-
-
-	sol_p = []
-	for i=1:(ng+2)
-		push!(sol_p, sol[i,Nodes])
-	end
-
-	sol_p,grid1D,mid_x,mid_y
-end
-
-# ╔═╡ e81e803a-d831-4d62-939c-1e4a4fdec74f
-md"""
-# Post-Processing
-"""
-
-# ╔═╡ c4521a0c-c5af-43cd-97bc-a4a7a42d27b1
-md"""
-The following reactor performance metrics are considered in post processing:
-1. Mass and molar flow rates
-1. Catalyst layer average temperature
-1. CO Yield (Converion x Selectivity)
-1. Solar-to-chemical efficiency
-"""
-
-# ╔═╡ b34c1d1b-a5b8-4de9-bea9-3f2d0503c1c0
-md"""
-## Mass and Molar flows
-"""
-
-# ╔═╡ f39dd714-972c-4d29-bfa8-d2c3795d2eef
-function massflow(data, bflux)
-	ng=ngas(data)
-	mdot=0.0
-	for i=1:ng
-		mdot += bflux[i] * data.Fluids[i].MW
-	end
-	mdot/ufac"kg/hr"
-end
-
-# ╔═╡ 6ae6d894-4923-4408-9b77-1067ba9e2aff
-function MoleFlows(sol,sys,data)
-	ng=ngas(data)
-	# bottom - inflow
-	Ibot=integrate(sys,bottom,sol; boundary=true)[:,Γ_bottom]
-	# top: outflow
-	# uncoated outer frit area, inner cat coated area
-	Itop=integrate(sys,top,sol; boundary=true)[:,[Γ_top_frit,Γ_top_cat]] 
-	Itop=sum(Itop, dims=2)
-	Ibot[1:ng],Itop[1:ng]
-end
-
-# ╔═╡ ed0c6737-1237-40d0-81df-32d6a842cbb0
-function cat_mass(data)
-	data.mcat
-end
-
-# ╔═╡ 7f2276d5-bb78-487c-868a-0486595d0113
-function avg_RR(sol,sys,data)
-	# sign convention: source term <0
-	PRs=-integrate(sys,reaction,sol;)[:,2] # mol/s
-	# catalyst mass specific prodcution rate of CO
-
-	PRs[1] / cat_mass(data) # mol/ (s kgcat)
-end
-
-# ╔═╡ a6e61592-7958-4094-8614-e77446eb2223
-md"""
-##  Average Catalyst Temperature
-"""
-
-# ╔═╡ 808aed68-7077-4079-be75-1bea962c716d
-function TmaxSide(sol,sys,grid,data)
-
-    (;iT)=data
-	if grid_fun == prism_sq_full 
-		sub=subgrid(grid,[Γ_side_front,Γ_side_back,Γ_side_right,Γ_side_left],boundary=true)
-	else
-		sub=subgrid(grid,[Γ_side_back,Γ_side_right],boundary=true)
-	end
-
-    Tsides = view(sol[iT, :], sub) .- 273.15
-    maximum(Tsides)
-		
-	
-end
-
-# ╔═╡ 4d9c50ef-3756-492c-90a1-eeb5e51b5515
-function PowerIn(sol,sys,grid,data)
-	(;iT)=data
-	function FluxIn(f,u,bnode,data)
-	    if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
-	        (;FluxIntp)=data
-			
-			@views x,y,z = bnode.coord[:,bnode.index]		
-	        f[iT] = FluxIntp(x,y)
-	    end
-	end
-	Pin=integrate(sys,FluxIn,sol; boundary=true)[[iT],:]
-	#Pin=sum(Pin)
-end
-
-# ╔═╡ e4fcce3f-f41b-4e9e-aa84-3fd6a0013f0c
-md"""
-## Flux Profile on Catalyst Surface
-"""
-
-# ╔═╡ a55c5ee7-2274-4447-b0b2-58052f064bc9
-function areas(sol,sys,grid,data)
-	iT = data.iT
-	function area(f,u,bnode,data)
-		# repurpose temperature index to hold area information
-		f[iT] = one(eltype(u))
-	end
-
-	integrate(sys,area,sol; boundary=true)[iT,:]
-end
-
 # ╔═╡ 333b5c80-259d-47aa-a441-ee7894d6c407
 function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:cellwise )
 
 	
 	grid=grid_fun(data)
-	(;iT,p,X0,Tamb)=data
+	(;iT,iTw,iTp,p,X0,Tamb)=data
 	ng=ngas(data)
 	
 	sys=VoronoiFVM.System( 	grid;
@@ -1345,9 +1318,13 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 							flux=flux,
 							reaction=reaction,
 							bcondition=bcond,
+							bflux=bflux,
 		                    assembly
 							)
 	enable_species!(sys; species=collect(1:(ng+2))) # gas phase species + p + T
+	enable_boundary_species!(sys, iTw, [Γ_top_cat,Γ_top_frit]) # window temperature as boundary species in upper chamber
+	enable_boundary_species!(sys, iTp, [Γ_bottom]) # plate temperature as boundary species in lower chamber
+	
 
 	# this is not  good...
 	#precon_linear=BlockPreconditioner(partitioning=partitioning(sys),factorization=UMFPACKFactorization())
@@ -1357,228 +1334,15 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 	for i=1:ng
 		inival[i,:] .*= X0[i]
 	end
-	inival[iT,:] .= Tamb
+	inival[[iT,iTw,iTp],:] .= Tamb
+
 
 	sol=solve(sys;inival,control=control(sys))
-
-	# update view factors as they manifest in the computational grid
-	# for coarse grids, the computed view-factors might deviate from the geometric values
-	A=areas(sol,sys,grid,data)
-	Acat=A[Γ_top_cat]
-	Afrit=A[Γ_top_frit]
-	data.vf_uc_window_cat = Acat/sum(Acat+Afrit)
-	data.vf_uc_window_frit = Afrit/sum(Acat+Afrit)
-
-	function WindowTemperature_(sol,sys,data)
-		(;iT,FluxEmbed,FluxIntp,k_nat_conv,X0,Tamb,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,uc_h,Nu)=data
-		σ=ph"σ"
-		
-		# irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
-		# window properties (1)
-		alpha1_IR=uc_window.alpha_IR
-		alpha1_vis=uc_window.alpha_vis
-		eps1=uc_window.eps
-		# catalyst layer properties (2)
-		rho2_vis=uc_cat.rho_vis
-		rho2_IR=uc_cat.rho_IR
-		alpha2_vis=uc_cat.alpha_vis
-		alpha2_IR=uc_cat.alpha_IR
-		eps2=uc_cat.eps
-		# uncoated frit properties (3)
-		rho3_vis=uc_frit.rho_vis
-		rho3_IR=uc_frit.rho_IR
-		alpha3_vis=uc_frit.alpha_vis
-		alpha3_IR=uc_frit.alpha_IR
-		eps3=uc_frit.eps
-		#view factors
-		ϕ12=vf_uc_window_cat
-		ϕ13=vf_uc_window_frit
-	
-		function f!(F, x)		
-			Tglass=x[1]
-	
-			function flux_abs_top_catalyst_layer(f,u,bnode,data)
-				if bnode.region==Γ_top_cat   
-
-					G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
-			
-					G2_vis = rho2_vis*G1_bot_vis		
-					
-					G2_IR = eps2*σ*u[iT]^4 + rho2_IR*G1_bot_IR
-			
-					f[iT] = alpha1_vis*G2_vis + alpha1_IR*G2_IR
-				end
-			end
-	
-			function flux_abs_top_frit(f,u,bnode,data)
-				if bnode.region==Γ_top_frit
-
-					G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
-			
-					G3_vis = rho3_vis*G1_bot_vis
-	
-					G3_IR = eps3*σ*u[iT]^4 + rho3_IR*G1_bot_IR
-			
-					f[iT] = alpha1_vis*G3_vis + alpha1_IR*G3_IR
-				end
-			end
-	
-			function flux_conduction_top(f,u,bnode,data)
-				if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
-			
-					# mean temperature
-					Tm=0.5*(u[iT] + Tglass)
-			
-					# thermal conductivity at Tm and inlet composition X0 (H2/CO2 = 1/1)
-					@inline _,λf=dynvisc_thermcond_mix(data, Tm, X0)
-			
-					# positive flux in positive z-coordinate
-					q_cond = -λf*(Tglass-u[iT])/uc_h			
-					f[iT] = q_cond			
-				end
-			end
-
-			function flux_convection_top(f,u,bnode,data)
-				if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
-			
-					# mean temperature
-					Tm=0.5*(u[iT] + Tglass)
-			
-					# thermal conductivity at Tm and inlet composition X0 (H2/CO2 = 1/1)
-					@inline _,λf=dynvisc_thermcond_mix(data, Tm, X0)
-			
-					# positive flux in positive z-coordinate
-					dh=2*uc_h
-					alpha=Nu*λf/dh*ufac"W/(m^2*K)"
-					#q_conv = alpha*(u[iT]-Tm)
-					# 2nd variant:
-					q_conv = alpha*(Tm-Tglass)	
-					f[iT] = q_conv			
-				end
-			end		
-			
-			Qabs_10 = 4*integrate(sys,flux_abs_top_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
-			Qabs_20 = 4*integrate(sys,flux_abs_top_frit,sol; boundary=true)[iT,Γ_top_frit]
-	
-	
-			#Qcond_10=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
-			Qconv_10=4*integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
-			#Qcond_20=4*integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
-			Qconv_20=4*integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
-	
-			Atop = sum(areas(sol,sys,grid,data)[[Γ_top_cat,Γ_top_frit]])
-	
-			Qconv0 = 4*Atop*k_nat_conv*(Tglass-Tamb)
-			Qemit0 = 4*Atop*eps1*σ*Tglass^4		
-	
-			#F[1] = -Qconv0 +Qcond_10 +Qcond_20 - 2*Qemit0 +Qabs_10 +Qabs_20
-			F[1] = -Qconv0 +Qconv_10 +Qconv_20 - 2*Qemit0 +Qabs_10 +Qabs_20
-			
-		end
-	
-		sol = nlsolve(f!, [573.15], autodiff=:forward)
-		sol.zero[1]
-		
-	end
-
-	function PlateTemperature_(sol,sys,data)
-		(;iT,gni,k_nat_conv,Tamb,lc_frit,lc_plate,lc_h,Nu)=data
-	
-		σ=ph"σ"
-		
-		# irradiation exchange between frit surface (1) & Al bottom plate (2)
-		# frit properties
-		eps1=lc_frit.eps
-		rho1_IR=lc_frit.rho_IR
-		# plate properties
-		alpha2_IR=lc_plate.alpha_IR
-		eps2=lc_plate.eps
-		rho2_IR=lc_plate.rho_IR	
-		
-		
-		function f!(F, x)
-			Tplate=x[1]
-
-			function flux_abs_bot(f,u,bnode,data)
-			    if bnode.region==Γ_bottom
-					
-					eps1=lc_frit.eps;  rho1_IR=lc_frit.rho_IR; 	
-					# Al bottom plate properties (2)
-					eps2=lc_plate.eps; rho2_IR=lc_plate.rho_IR;
-					
-			
-			        G1_IR = (eps1*σ*u[iT]^4 + rho1_IR*eps2*σ*Tplate^4)/(1-rho1_IR*rho2_IR)
-			
-			        f[iT] = alpha2_IR*G1_IR
-			    end
-			end
-
-			Qabs_34 = 4*integrate(sys,flux_abs_bot,sol; boundary=true)[iT,Γ_bottom]
-
-			# conductive heat flux through bottom chamber
-			function flux_conduction_bottom(f,u,bnode,data)
-			    if bnode.region==Γ_bottom
-			        			
-			        X=zeros(eltype(u), ng)
-					mole_frac!(bnode,data,X,u)
-			
-			        Tm=0.5*(u[iT] + Tplate)
-			        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X)
-			
-			        # positive flux in negative z coord. -> pointing towards bottom plate
-			        q_cond = -λf*(Tplate-u[iT])/lc_h 			
-			        f[iT] = q_cond			
-			    end
-			end
-
-			function flux_convection_bottom(f,u,bnode,data)
-				 if bnode.region==Γ_bottom
-			
-					X=zeros(eltype(u), ng)
-					mole_frac!(bnode,data,X,u)
-			
-			        Tm=0.5*(u[iT] + Tplate)
-			        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X)
-			
-			        # positive flux in negative z coord. -> pointing towards bottom plate
-					 
-			        # q_cond = -λf*(Tplate-u[iT])/lc_h 			
-			        # f[iT] = q_cond			
-
-					dh=2*lc_h
-					alpha=Nu*λf/dh*ufac"W/(m^2*K)"
-					#q_conv = alpha*(u[iT]-Tm)
-					# 2nd variant:
-					q_conv = alpha*(Tm-Tplate)	
-					f[iT] = q_conv			
-				end
-			end		
-
-			# Qcond_34 = 4*integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
-			Qconv_34 = 4*integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,Γ_bottom]
-			
-			Abot = areas(sol,sys,grid,data)[Γ_bottom]
-	
-			Qconv4 = 4*Abot*k_nat_conv*(Tplate-Tamb)
-			Qemit4 = 4*Abot*lc_plate.eps*σ*Tplate^4		
-	
-			#F[1] = -Qconv4 +Qcond_34 -2*Qemit4 +Qabs_34
-			F[1] = -Qconv4 +Qconv_34 -2*Qemit4 +Qabs_34
-		end
-	
-		sol = nlsolve(f!, [573.15], autodiff=:forward)
-		sol.zero[1]
-	end
-
 	
 	function pre(sol,par)
 		@info par
 		ng=ngas(data)
-		# set glass emperature
-		data.Tglass = WindowTemperature_(sol,sys,data)
 
-		# set bottom plate temperature
-		data.Tplate = PlateTemperature_(sol,sys,data)
 		
 		# iteratively adapt bottom outflow boundary condition
 	 	function Intbot(f,u,bnode,data)			
@@ -1628,30 +1392,11 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 	 )
 	
 	embed=[0.0,1.0]
+	
 	sol=solve(sys;control=mycontrol,inival,embed,pre,)
-	sol_end_embed=sol(sol.t[end])
-	
-	
-	sol_old=sol_end_embed
-	ΔT = [Inf,Inf]
-	
-	MAX_ITER=5
-	ΔT_MAX=0.1*ufac"K"
-	# iteratively solve system and update glass and plate temperatures
-	iter=1
-	while iter <= MAX_ITER && !all(ΔT .< ΔT_MAX)
-		Told=[data.Tglass,data.Tplate]
-		sol=solve(sys;inival=sol_old, control=control(sys))
 
-		data.Tglass = WindowTemperature_(sol,sys,data)
-		data.Tplate = PlateTemperature_(sol,sys,data)
-		ΔT = abs.(Told .-[data.Tglass,data.Tplate])
-		sol_old=sol
-		@info "iter=$(iter), ΔT=$(ΔT)"
-		iter += 1
-	end	
 	
-	sol,grid,sys,data
+	sol(sol.t[end]),grid,sys,data
 end;
 
 # ╔═╡ aa498412-e970-45f2-8b11-249cc5c2b18d
@@ -1697,29 +1442,60 @@ Heat is transported within the domain via conduction and convective transport. B
 """
   ╠═╡ =#
 
-# ╔═╡ cfa366bc-f8b9-4219-b210-51b9fc5ff3f6
-#=╠═╡
+# ╔═╡ b2df1087-6628-4889-8cd6-c5ee7629cd93
 md"""
-Total irradiated power on aperture (from measurement): __$(Integer(round(sum(M12)*(0.06579*ufac"cm")^2,digits=0))) W__
-
-Total irradiated power on aperture (for interpolation on computational grid): __$(Pwr=PowerIn(sol,sys,grid,data_embed);round(sum(Pwr[[Γ_top_cat,Γ_top_frit]]),digits=2)) W__
+## Temperature Plot
 """
-  ╠═╡ =#
 
 # ╔═╡ 3bd80c19-0b49-43f6-9daa-0c87c2ea8093
 #=╠═╡
 let
 	iT=data_embed.iT
 
-	scalarplot(grid, sol[iT,:].-273.15,levelalpha=0.8,levels=7,colormap=:inferno,Plotter=PlutoVista)
+	scalarplot(grid, sol[iT,:].-273.15,levelalpha=0.8,colormap=:inferno,Plotter=PlutoVista)
 end
   ╠═╡ =#
 
 # ╔═╡ b99610da-ca0c-46e7-b0a7-bc7858a45a35
 # ╠═╡ skip_as_script = true
 #=╠═╡
-writeVTK("../data/out/3D_Temperature.vtu", grid; point_data = sol[data_embed.iT,:] .-273.15)
+#writeVTK("../data/out/3D_Temperature.vtu", grid; point_data = sol[data_embed.iT,:] .-273.15)
   ╠═╡ =#
+
+# ╔═╡ 2790b550-3105-4fc0-9070-d142c19678db
+md"""
+## Partial Pressure Plot
+"""
+
+# ╔═╡ 31add356-6854-43c5-9ebd-ef10add6cc3d
+md"""
+### CO molar fraction in Cross-section
+"""
+
+# ╔═╡ bd7552d2-2c31-4834-97d9-ccdb4652242f
+function SolAlongLine(data,sol)
+	ng=ngas(data)		
+	grid=grid_fun(data)
+	
+	mid_x=argmin(abs.(grid[Coordinates][1,:] .-data.wi/4))
+	mid_x=grid[Coordinates][1,mid_x]
+	mid_y=argmin(abs.(grid[Coordinates][2,:] .-data.le/4))
+	mid_y=grid[Coordinates][2,mid_y]
+	
+
+	Nodes = findall(x->x[1] == mid_x && x[2] == mid_y, eachcol(grid[Coordinates]))
+	
+	grid1D = grid[Coordinates][:,Nodes]
+	grid1D = grid1D[3,:] # extract z-coordinate
+
+
+	sol_p = []
+	for i=1:(ng+2)
+		push!(sol_p, sol[i,Nodes])
+	end
+
+	sol_p,grid1D,mid_x,mid_y
+end
 
 # ╔═╡ bea97fb3-9854-411c-8363-15cbef13d033
 #=╠═╡
@@ -1750,11 +1526,52 @@ let
 end
   ╠═╡ =#
 
+# ╔═╡ e81e803a-d831-4d62-939c-1e4a4fdec74f
+md"""
+# Post-Processing
+"""
+
+# ╔═╡ c4521a0c-c5af-43cd-97bc-a4a7a42d27b1
+md"""
+The following reactor performance metrics are considered in post processing:
+1. Mass and molar flow rates
+1. Catalyst layer average temperature
+1. CO Yield (Converion x Selectivity)
+1. Solar-to-chemical efficiency
+"""
+
+# ╔═╡ b34c1d1b-a5b8-4de9-bea9-3f2d0503c1c0
+md"""
+## Mass and Molar flows
+"""
+
 # ╔═╡ 0c3eb801-f271-4cf4-a109-25a283a51779
 # ╠═╡ skip_as_script = true
 #=╠═╡
 data_embed.mdotin/ufac"kg/hr"
   ╠═╡ =#
+
+# ╔═╡ f39dd714-972c-4d29-bfa8-d2c3795d2eef
+function massflow(data, bflux)
+	ng=ngas(data)
+	mdot=0.0
+	for i=1:ng
+		mdot += bflux[i] * data.Fluids[i].MW
+	end
+	mdot/ufac"kg/hr"
+end
+
+# ╔═╡ 6ae6d894-4923-4408-9b77-1067ba9e2aff
+function MoleFlows(sol,sys,data)
+	ng=ngas(data)
+	# bottom - inflow
+	Ibot=integrate(sys,bottom,sol; boundary=true)[:,Γ_bottom]
+	# top: outflow
+	# uncoated outer frit area, inner cat coated area
+	Itop=integrate(sys,top,sol; boundary=true)[:,[Γ_top_frit,Γ_top_cat]] 
+	Itop=sum(Itop, dims=2)
+	Ibot[1:ng],Itop[1:ng]
+end
 
 # ╔═╡ 7ab38bc2-9ca4-4206-a4c3-5fed673557f1
 #=╠═╡
@@ -1793,6 +1610,20 @@ Chemical species flows through porous frit from bottom and top:
 """
   ╠═╡ =#
 
+# ╔═╡ ed0c6737-1237-40d0-81df-32d6a842cbb0
+function cat_mass(data)
+	data.mcat
+end
+
+# ╔═╡ 7f2276d5-bb78-487c-868a-0486595d0113
+function avg_RR(sol,sys,data)
+	# sign convention: source term <0
+	PRs=-integrate(sys,reaction,sol;)[:,2] # mol/s
+	# catalyst mass specific prodcution rate of CO
+
+	PRs[1] / cat_mass(data) # mol/ (s kgcat)
+end
+
 # ╔═╡ 84093807-8ea9-4290-8bf7-bd94c5c28691
 #=╠═╡
 md"""
@@ -1813,12 +1644,91 @@ __Lou, D., et al. (2021).__ "A core-shell catalyst design boosts the performance
 """
   ╠═╡ =#
 
+# ╔═╡ a6e61592-7958-4094-8614-e77446eb2223
+md"""
+##  Average Catalyst Temperature
+"""
+
+# ╔═╡ 6737a651-0bd3-44f8-b735-21b8d6c9ed90
+#=╠═╡
+let
+	(;iTp,iTw)=data_embed
+	function _3to2(a,b)
+		a[1]=b[1]
+		a[2]=b[2]
+	end
+
+    #bgrid = subgrid(grid, [Γ_top_cat,Γ_top_frit]; boundary = true, transform = _3to2)
+	#bsol=view(sol[iTw, :], bgrid)
+	bgrid = subgrid(grid, [Γ_bottom]; boundary = true, transform = _3to2)
+	bsol=view(sol[iTp, :], bgrid)
+
+	scalarplot(bgrid, bsol.-273.15,colormap=:inferno,Plotter=PlutoVista,show=true)
+end
+  ╠═╡ =#
+
+# ╔═╡ 808aed68-7077-4079-be75-1bea962c716d
+function TmaxSide(sol,sys,grid,data)
+
+    (;iT)=data
+	if grid_fun == prism_sq_full 
+		sub=subgrid(grid,[Γ_side_front,Γ_side_back,Γ_side_right,Γ_side_left],boundary=true)
+	else
+		sub=subgrid(grid,[Γ_side_back,Γ_side_right],boundary=true)
+	end
+
+    Tsides = view(sol[iT, :], sub) .- 273.15
+    maximum(Tsides)
+		
+	
+end
+
 # ╔═╡ b22387c4-cda5-424d-99b7-d7deda24c678
 #=╠═╡
 md"""
 __Side wall maximum__ temperature: $(round(TmaxSide(sol,sys,grid,data_embed))) °C
 """
   ╠═╡ =#
+
+# ╔═╡ 4d9c50ef-3756-492c-90a1-eeb5e51b5515
+function PowerIn(sol,sys,grid,data)
+	(;iT)=data
+	function FluxIn(f,u,bnode,data)
+	    if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
+	        (;FluxIntp)=data
+			
+			@views x,y,z = bnode.coord[:,bnode.index]		
+	        f[iT] = FluxIntp(x,y)
+	    end
+	end
+	Pin=integrate(sys,FluxIn,sol; boundary=true)[[iT],:]
+	#Pin=sum(Pin)
+end
+
+# ╔═╡ cfa366bc-f8b9-4219-b210-51b9fc5ff3f6
+#=╠═╡
+md"""
+Total irradiated power on aperture (from measurement): __$(Integer(round(sum(M12)*(0.06579*ufac"cm")^2,digits=0))) W__
+
+Total irradiated power on aperture (for interpolation on computational grid): __$(Pwr=PowerIn(sol,sys,grid,data_embed);round(sum(Pwr[[Γ_top_cat,Γ_top_frit]]),digits=2)) W__
+"""
+  ╠═╡ =#
+
+# ╔═╡ e4fcce3f-f41b-4e9e-aa84-3fd6a0013f0c
+md"""
+## Flux Profile on Catalyst Surface
+"""
+
+# ╔═╡ a55c5ee7-2274-4447-b0b2-58052f064bc9
+function areas(sol,sys,grid,data)
+	iT = data.iT
+	function area(f,u,bnode,data)
+		# repurpose temperature index to hold area information
+		f[iT] = one(eltype(u))
+	end
+
+	integrate(sys,area,sol; boundary=true)[iT,:]
+end
 
 # ╔═╡ 15604034-91fd-4fd4-b09e-e3c5cfe7a265
 function T_avg(sol,sys,grid,data)
@@ -1838,7 +1748,7 @@ end
 function TopPlane(data,sol)
 	ng=ngas(data)
 	grid=grid_fun(data)
-	(;h,cath,wi)=data
+	(;iTp,h,cath,wi)=data
 	wi=wi/2
 	
 	bid = maximum(grid[BFaceRegions])+1
@@ -1857,7 +1767,7 @@ function TopPlane(data,sol)
 	grid_2D  = subgrid(grid, [bid], boundary=true, transform=_3to2) 
 
 	sol_p = []
-	for i=1:(ng+2)
+	for i=1:iTp
 		sol_i = view(sol[i, :], grid_2D)
 		push!(sol_p, collect(sol_i))
 	end
@@ -1913,7 +1823,7 @@ end
 # ╔═╡ 9e505f6b-f05d-47fd-bdc7-70ca4daac04a
 #=╠═╡
 function IrradFlux(sol,data)
-	(;iT,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,FluxIntp,Tglass)=data
+	(;iT,iTw,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit,FluxIntp)=data
 	
 	sol_xy, grid_xy = TopPlane(data_embed,sol)
 	coords=grid_xy[Coordinates]
@@ -1932,7 +1842,9 @@ function IrradFlux(sol,data)
 	end
 	pos
 	Ts=sol_xy[iT,:][1]
+	Tws=sol_xy[iTw,:][1]
 	Ts_=reshape(Ts[pos], length(xs),length(ys))
+	Tws_=reshape(Tws[pos], length(xs),length(ys))
 
 	flux_vis=zeros(eltype(sol),length(xs),length(ys))
 	flux_IR=zeros(eltype(sol),length(xs),length(ys))
@@ -1962,11 +1874,13 @@ function IrradFlux(sol,data)
 	
 	for(j,y) in enumerate(ys)
 		for (i,x) in enumerate(xs)
+			Tglass=Tws_[i,j]
 			Glamp =FluxIntp(x,y)
 			Glamp_[i,j] = Glamp
 			G1_vis = tau1_vis*Glamp/(1-rho1_vis*(ϕ12*rho2_vis+ϕ13*rho3_vis))
 			# here the simplification is applied: only local value of T (u[iT]) is available, it is used for both surfaces
-			G1_IR = eps1*ph"σ"*Tglass^4 
+			G1_IR = eps1*ph"σ"*Tglass^4
+			
 			#G1_IR = (eps1*ph"σ"*Tglass^4 + rho1_IR*(ϕ12*eps2*ph"σ"*Ts_[i,j]^4+ϕ13*eps3*ph"σ"*Ts_[i,j]^4))/(1-rho1_IR*(ϕ12*rho2_IR+ϕ13*rho3_IR))
 
 			# upper chamber cat
@@ -2017,7 +1931,7 @@ end
 function CutPlane(data,sol)
 	ng=ngas(data)
 	grid=grid_fun(data)
-	(;h,cath,wi)=data
+	(;iTp,h,cath,wi)=data
 	wi=data.wi/2
 	
 	bid = maximum(grid[BFaceRegions])+1
@@ -2036,7 +1950,7 @@ function CutPlane(data,sol)
 	grid_2D  = subgrid(grid, [bid], boundary=true, transform=_3to2) 
 
 	sol_p = []
-	for i=1:(ng+2)
+	for i=1:iTp
 		sol_i = view(sol[i, :], grid_2D)
 		push!(sol_p, collect(sol_i))
 	end
@@ -2375,8 +2289,8 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─25edaf7b-4051-4934-b4ad-a4655698a6c7
 # ╟─3fe2135d-9866-4367-8faa-56cdb42af7ed
 # ╟─652497ee-d07b-45e2-aeaf-87ad5bcc23ad
-# ╟─6bd59a54-f059-4646-b053-0fa41ead87fd
-# ╟─f5d78670-a98b-46a1-8bf3-3d2599cfdd88
+# ╠═6bd59a54-f059-4646-b053-0fa41ead87fd
+# ╠═f5d78670-a98b-46a1-8bf3-3d2599cfdd88
 # ╟─162122bc-12ae-4a81-8df6-86498041be40
 # ╟─221a1ee4-f7e9-4233-b45c-a715c9edae5f
 # ╟─2228bbd4-bc84-4617-a837-2bf9bba76793
@@ -2387,7 +2301,13 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─4ebbe06f-0993-4c5c-9af3-76b2b645e592
 # ╟─0bc79692-8db4-44a2-9433-5b6ce97b656f
 # ╠═7da59e27-62b9-4b89-b315-d88a4fd34f56
+# ╟─f8471857-38b3-4cca-85e6-cba7c0f0c741
+# ╟─1447a715-75bb-4a22-b76d-7f809f3686f9
 # ╠═40906795-a4dd-4e4a-a62e-91b4639a48fa
+# ╟─7a3d5f60-4159-4025-908b-fe804e07eaac
+# ╟─e875be60-1e57-4a87-9348-a930fc591aa9
+# ╠═36b3acab-4ead-4cdf-be0d-3df09b7ec687
+# ╠═dec81e61-d1eb-4a6c-8648-a07b98a8a7a9
 # ╠═edd9fdd1-a9c4-4f45-8f63-9681717d417f
 # ╠═29d66705-3d9f-40b1-866d-dd3392a1a268
 # ╟─02b76cda-ffae-4243-ab40-8d0fe1325776
@@ -2423,6 +2343,7 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─a6e61592-7958-4094-8614-e77446eb2223
 # ╟─2739bcff-3fb0-4169-8a1a-2b0a14998cec
 # ╠═30393c90-298c-412d-86ce-e36106613d35
+# ╠═6737a651-0bd3-44f8-b735-21b8d6c9ed90
 # ╠═06ad2f54-6ae9-4c32-8391-e6cc8c5cfe68
 # ╠═3dfc1ac2-93dc-4b5b-adbc-e66e92bf76b0
 # ╟─9952c815-5459-44ff-b1f8-07ab24ce0c53
