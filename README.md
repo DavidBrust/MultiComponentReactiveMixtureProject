@@ -1,4 +1,4 @@
-# FixedBed
+# PhotoCatalyticReactor
 Project package for the implementation of a photo-thermal catalytic reactor model.
 
 A 3D (square prismatic) domain of porous material is modelled.
