@@ -213,6 +213,32 @@ const Wolf_rWGS = KinData{}(;
     TKi_ref = Dict( [:R1] .=> [693.0]*ufac"K"),
 )
 
+const Riedel_rWGS = KinData{}(;
+    # ng = ng,
+    # gnames = gnames,
+    # Fluids = [CO,H2,CH4,H2O,CO2,N2],
+    # gn = gn,
+    # gni = Dict(value => key for (key, value) in gn),    
+    nr = 1,
+    rnames = [:R1],
+    rn = Dict(1:1 .=> [:R1]),
+    rni = Dict(value => key for (key, value) in Dict(1:1 .=> [:R1])),
+    nuij = vcat(
+        [1, -1, 0, 1, -1, 0], #R1 : CO2 + H2 -> CO + H2O
+    ),
+    # # values of reaction rate constants
+    ki_ref = Dict( [:R1] .=>  log.([1.51e7]) ),
+    Tki_ref = Dict( [:R1] .=> [Inf]*ufac"K"),
+
+    # # Activation energies
+    Ei = Dict( [:R1] .=> [55.0]*ufac"kJ/mol"),
+    # # reaction enthalpies
+    ΔHi = Dict( [:R1] .=> [-37.92]*ufac"kJ/mol"),
+    # # equilibrium constants Ki
+    Ki_ref = Dict( [:R1] .=> [10.18]),
+    TKi_ref = Dict( [:R1] .=> [693.0]*ufac"K"),
+)
+
 
 #
 # By default, nreac(data) returns data.kinpar.nr. 
@@ -363,11 +389,17 @@ function DEN(data,T,p)
 
     DEN = @inline 1 + sum(  Kj(data, T).*p_)
 end
+
 function K_rWGS_Twigg(T)
     Z=zero(eltype(T))
     Z = 1000.0/T
 	1.0/exp(Z*(Z*(0.63508-0.29353*Z)+4.1778)+0.31688)	
 end
+
+function Kequil_WGS_Zimmermann(T)
+	exp(2073.0/T-2.029)
+end
+
 function ri(data,T,p_)
     
     (;kinpar)=data
@@ -404,6 +436,11 @@ function ri(data,T,p_)
         unitc *=ufac"mol/(s*kg)"
 
         pexp[1] = @inbounds @inline (c[n[:CO2]]*c[n[:H2]]^0.3 - c[n[:CO]]*c[n[:H2O]]/c[n[:H2]]^0.7/K_rWGS_Twigg(T))
+
+    elseif kinpar == Riedel_rWGS
+        p ./= ufac"MPa"
+        unitc *=ufac"mol/(s*g)"
+        pexp[1] = @inbounds @inline (p[n[:CO2]]*p[n[:H2]] - p[n[:CO]]*p[n[:H2O]]*Kequil_WGS_Zimmermann(T)) / (p[n[:CO]] + 65.0*p[n[:H2O]] + 7.4*p[n[:CO2]])
     end
     # ri_ = @inline ki(data,T) .* pexp / DEN(data,T,p)^2 * unitc
     ri_ = @inline ki(data,T) .* pexp * unitc
@@ -411,11 +448,3 @@ function ri(data,T,p_)
 
 
 end
-
-# function ri(kindata::AbstractKineticsData,T,p)
-#     kindata.RR(kindata,T,p)
-# end
-
-# function rr(i,kindata::AbstractKineticsData,T,p)
-#     kindata.RR(i,kindata,T,p)
-# end
