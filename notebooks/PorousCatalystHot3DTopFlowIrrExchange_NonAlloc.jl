@@ -790,8 +790,8 @@ begin
 	# catalyst / chemistry data
 	# kinetic parameters, S3P="simple 3 parameter" kinetics fit to UPV lab scale experimental data
 
-	kinpar::FixedBed.KinData{nreac(S3P)} = S3P
-	#kinpar::FixedBed.KinData{nreac(XuFroment)} = XuFroment
+	#kinpar::FixedBed.KinData{nreac(S3P)} = S3P
+	kinpar::FixedBed.KinData{nreac(XuFroment)} = XuFroment
 	#kinpar::FixedBed.KinData{nreac(Riedel_rWGS)} = Riedel_rWGS
 	#kinpar::FixedBed.KinData{nreac(Wolf_rWGS)} = Wolf_rWGS
 		
@@ -828,6 +828,7 @@ begin
 
 	#mcat::Float64=3.3*ufac"g" # total catalyst loading
 	mcat::Float64=200.0*ufac"mg"
+    
 	# volume specific cat mass loading, UPV lab scale PC reactor
 	lcats::Float64 =1000.0*ufac"kg/m^3"
 	#mcats::Float64=80.0*ufac"kg/m^3" # 200 mg cat total loading, 250μm CL 
@@ -864,8 +865,9 @@ begin
 	Glamp::Float64=1.0*ufac"kW/m^2" # solar simulator irradiation flux
 	FluxIntp::typeof(itp12)=itp12 # interpolator for irradiation flux
 	FluxEmbed::Float64=0.0 # "persistent" embedding parameter avail. outside of solve call w/ embedding
+		
     Flux_target::Float64=1.0
-
+	
 	# upper chamber: quartz window eff. optical properties
 	uc_window::SurfaceOpticalProps = uc_window
 	# upper chamber: catalyst layer eff. optical properties
@@ -916,8 +918,8 @@ begin
 	Tn::Float64 = 273.15*ufac"K"
 
 	
-	Qflow::Float64=340.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
-	#Qflow::Float64=1480.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
+	#Qflow::Float64=340.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
+	Qflow::Float64=1480.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
 	#Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
 	#Qflow::Float64=7400.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
 	#Qflow::Float64=14800.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
@@ -970,35 +972,25 @@ function reaction(f,u,node,data)
 		
 
 		for i=1:ng
-            if kinpar == Hla_WGS
-                pi[i] = u[i]/ufac"kPa"
-			elseif kinpar == Riedel_rWGS
-				pi[i] = u[i]/ufac"MPa"
-			elseif kinpar == Wolf_rWGS
-				pi[i] = u[i]
-			elseif kinpar == XuFroment || kinpar == S3P
-			    pi[i] = u[i]/ufac"bar"
-            end
+			# pi[i] = u[i]/ufac"bar"
+            pi[i] = u[i]
 		end
-
-		
 		# negative sign: sign convention of VoronoiFVM: source term < 0 
 		# for Xu/Froment 1989 kinetics, ri returns reaction rate in mol/(h gcat)
-		#unitc=one(eltype(u))
-		#if kinpar == XuFroment
-		#	unitc *=ufac"mol/(hr*g)"
-        #elseif kinpar == Hla_WGS
-        #    unitc *=ufac"mol/(s*g)"
-		#end
+		# unitc=one(eltype(u))
+		# if kinpar == XuFroment
+		# 	unitc *=ufac"mol/(hr*g)"
+		# end
 
 		#RR = @inline -mcats*ri(data,u[iT],pi)*ufac"mol/(hr*g)"
-		#RR = @inline -lcats*ri(data,u[iT],pi)*unitc
-		 RR = @views @inline -lcats*ri(data,u[iT],u[1:ng])
+		# RR = @inline -lcats*ri(data,u[iT],pi)*unitc
+        # RR = @inline -lcats*ri(data,u[iT],pi)
+        RR = @inline -lcats*ri(data,u[iT],pi)
 		for i=1:ng
 			f[i] = zero(eltype(u))
 			for j=1:nreac(kinpar)
 				#f[i] += nuij[i,j] * RR[j]
-				f[i] += nuij[(j-1)*ng+i] * RR[j]
+                f[i] += nuij[(j-1)*ng+i] * RR[j]
 			end			
 		end
 
@@ -1372,7 +1364,7 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 		(;catwi,cath,mcat,Flux_target)=data
 		Vcat = catwi^2*cath # m^3
 		lcat = mcat/Vcat # kg/m^3"
-		lcats=[10.0, lcat]*ufac"kg/m^3"
+		lcats=[1.0, lcat]*ufac"kg/m^3"
 	 	data.lcats = minimum(lcats) + par*(maximum(lcats)-minimum(lcats))
 
 	 	# irradiation flux density
@@ -1387,8 +1379,10 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 	 mycontrol=control(sys ;
 	 				  		handle_exceptions=true,
 							Δp_min=1.0e-4,					  
-	 				  		Δp=0.25,
-	 				  		Δp_grow=2.0,
+	 				  		#Δp=0.25,
+                            Δp=0.05,
+	 				  		#Δp_grow=2.0,
+                            Δp_grow=1.1,
 	 				  		Δu_opt=100000.0, # large value, due to unit Pa of pressure?
 	 )
 	
@@ -1409,8 +1403,8 @@ begin
 
 		function control(sys;kwargs...)
 			SolverControl(
-			direct_umfpack(),
-			#gmres_umfpack(),
+			#direct_umfpack(),
+			gmres_umfpack(),
 #			gmres_eqnblock_umfpack(),
 #			gmres_eqnblock_iluzero(),
 			sys;
@@ -2348,7 +2342,7 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─b06a7955-6c91-444f-9bf3-72cfb4a011ec
 # ╠═6ae6d894-4923-4408-9b77-1067ba9e2aff
 # ╠═7ab38bc2-9ca4-4206-a4c3-5fed673557f1
-# ╠═84093807-8ea9-4290-8bf7-bd94c5c28691
+# ╟─84093807-8ea9-4290-8bf7-bd94c5c28691
 # ╠═ed0c6737-1237-40d0-81df-32d6a842cbb0
 # ╠═7f2276d5-bb78-487c-868a-0486595d0113
 # ╟─a6e61592-7958-4094-8614-e77446eb2223
