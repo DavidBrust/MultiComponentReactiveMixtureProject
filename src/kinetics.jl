@@ -26,63 +26,13 @@
 #    |    |       |       |
 #    
 
-# the simplified model cosists of 3 fitted model parameters, therefore the name: S3P
-# S3P_old = [
-#     [-1.51715, -11.2379, -Inf], # ki_ref
-#     [0.0, 175.904, 0.0], # Ei
-#     [0.0, 0.0296, 0.0, 0.0, 0.0, 0.0] # Kj_ref
-# ]
 
-# using StrideArraysCore: @gc_preserve, StrideArray, StaticInt, PtrArray
 
 abstract type AbstractKineticsData end
 
 
-
-# Base.@kwdef mutable struct KineticsData{F<:Function} <:AbstractKineticsData
-#     ng::Int64=6 # number of gas phase species
-#     gnames::Vector{Symbol} = [:CO, :H2, :CH4, :H2O, :CO2, :N2]
-#     Fluids::Vector{FluidProps} = [CO,H2,CH4,H2O,CO2,N2]
-#     gn::Dict{Int, Symbol} 	= Dict(1:ng .=> gnames)
-# 	# inverse names and fluid indices
-# 	gni::Dict{Symbol, Int}  = Dict(value => key for (key, value) in gn)
-    
-#     nr::Int64=3 # number of reactions
-#     rnames::Vector{Symbol} = [:R1, :R2, :R3]
-#     rn::Dict{Int, Symbol} 	= Dict(1:nr .=> rnames)
-# 	rni::Dict{Symbol, Int}  = Dict(value => key for (key, value) in rn)
-#     nuij::Array{Int, 2} = vcat(
-#         [-1 0 1], # CO
-#         [1 4 3], # H2
-#         [0 -1 -1], # CH4
-#         [-1 -2 -1], # H2O
-#         [1 1 0], # CO2
-#         [0 0 0], # N2
-#     )
-#     RR::F = RRS3P # RR function
-#     #RR::F = RRS3P_ # RR function
-#     # values of reaction rate constants @ Tref
-# 	ki_ref::Dict{Symbol,Float64} = Dict(:R1=>-1.51715, :R2=>-11.2379, :R3=>-Inf)
-#     Tki_ref::Dict{Symbol,Float64} = Dict( rnames .=> [648.0, 648.0, 648.0]*ufac"K")
-#     # Activation energies
-#     Ei::Dict{Symbol,Float64} = Dict( rnames .=> [0.0, 175.904, 0.0]*ufac"kJ/mol")
-
-#     # equilibrium constants Ki
-#     Ki_ref::Dict{Symbol,Float64} = Dict( rnames .=> [10.18, 1.947e-3, 1.913e-4])
-#     TKi_ref::Dict{Symbol,Float64} = Dict( rnames .=> [693.0, 693.0, 693.0]*ufac"K")
-#     # reaction enthalpies
-#     ΔHi::Dict{Symbol,Float64} = Dict( rnames .=> [-37.92, 182.09, 220.01]*ufac"kJ/mol")
-	
-
-#     # values of gas phase species adsorption coefficients @ Tref
-# 	Kj_ref::Dict{Symbol,Float64} = Dict( gnames .=> [0.0, 0.0296, 0.0, 0.0, 0.0, 0.0])
-#     TKj_ref::Dict{Symbol,Float64} = Dict( gnames .=> [648.0, 648.0, 823.0, 823.0, 823.0, 823.0]*ufac"K" )
-#     ΔHj::Dict{Symbol,Float64} = Dict( gnames .=> [-70.65, -82.9, -38.28, 88.68, 0, 0]*ufac"kJ/mol")
-# end
-
 Base.@kwdef struct KinData{NR} <:AbstractKineticsData
     ng::Int64=6 # number of gas phase species
-    # ng::Int64=NSpec # number of gas phase species
     gnames::Vector{Symbol} = [:CO, :H2, :CH4, :H2O, :CO2, :N2]
     Fluids::Vector{FluidProps} = [CO,H2,CH4,H2O,CO2,N2]
     gn::Dict{Int, Symbol} 	= Dict(1:ng .=> gnames)
@@ -93,21 +43,12 @@ Base.@kwdef struct KinData{NR} <:AbstractKineticsData
     rnames::Vector{Symbol} = [:R1, :R2, :R3]
     rn::Dict{Int, Symbol} 	= Dict(1:nr .=> rnames)
 	rni::Dict{Symbol, Int}  = Dict(value => key for (key, value) in rn)
-    # nuij::Array{Int, 2} = vcat(
-    #     [-1 0 1], # CO
-    #     [1 4 3], # H2
-    #     [0 -1 -1], # CH4
-    #     [-1 -2 -1], # H2O
-    #     [1 1 0], # CO2
-    #     [0 0 0], # N2
-    # )
+
     nuij::Vector{Int64} = vcat(
         [-1, 1, 0, -1, 1, 0], #R1 : CO + H2O -> CO2 + H2
         [0, 4, -1, -2, 1, 0], #R2 : CH4 + 2 H2O -> 4 H2 + CO2
         [1, 3, -1, -1, 0, 0], #R2 : CH4 + H2O -> 3 H2 + CO
     )
-    # RR::F = RRS3P # RR function
-    #RR::F = RRS3P_ # RR function
     # values of reaction rate constants @ Tref
 	ki_ref::Dict{Symbol,Float64} = Dict(:R1=>-1.51715, :R2=>-11.2379, :R3=>-Inf)
     Tki_ref::Dict{Symbol,Float64} = Dict( rnames .=> [648.0, 648.0, 648.0]*ufac"K")
@@ -120,7 +61,6 @@ Base.@kwdef struct KinData{NR} <:AbstractKineticsData
     # reaction enthalpies
     ΔHi::Dict{Symbol,Float64} = Dict( rnames .=> [-37.92, 182.09, 220.01]*ufac"kJ/mol")
 	
-
     # values of gas phase species adsorption coefficients @ Tref
 	Kj_ref::Dict{Symbol,Float64} = Dict( gnames .=> [0.0, 0.0296, 0.0, 0.0, 0.0, 0.0])
     TKj_ref::Dict{Symbol,Float64} = Dict( gnames .=> [648.0, 648.0, 823.0, 823.0, 823.0, 823.0]*ufac"K" )
@@ -134,15 +74,19 @@ end
 nreac(::KinData{NR}) where NR = NR
 
 # !!!ALLOC Additional constructo taking nr as parameter	
-# KinData(;nr=3, kwargs...) = KinData{nr}(;kwargs...)
 
 
 #S3P = KinData{:S3P}()
 const S3P = KinData{}()
 
 
-
-
+#Species indices:
+#1) CO
+#2) H2
+#3) CH4
+#4) H2O
+#5) CO2
+#6) N2
 
 ## Xu & Froment 1989 kinetics
 # different ordering of the 3 reactions compared to S3P kinetics:
@@ -188,11 +132,6 @@ const XuFroment = KinData{}(;
 
 
 const Wolf_rWGS = KinData{}(;
-    # ng = ng,
-    # gnames = gnames,
-    # Fluids = [CO,H2,CH4,H2O,CO2,N2],
-    # gn = gn,
-    # gni = Dict(value => key for (key, value) in gn),    
     nr = 1,
     rnames = [:R1],
     rn = Dict(1:1 .=> [:R1]),
@@ -214,11 +153,6 @@ const Wolf_rWGS = KinData{}(;
 )
 
 const Riedel_rWGS = KinData{}(;
-    # ng = ng,
-    # gnames = gnames,
-    # Fluids = [CO,H2,CH4,H2O,CO2,N2],
-    # gn = gn,
-    # gni = Dict(value => key for (key, value) in gn),    
     nr = 1,
     rnames = [:R1],
     rn = Dict(1:1 .=> [:R1]),
@@ -240,7 +174,6 @@ const Riedel_rWGS = KinData{}(;
 )
 
 
-#
 # By default, nreac(data) returns data.kinpar.nr. 
 function nreac(data::Any)
     data.kinpar.nr
@@ -248,35 +181,13 @@ end
 
 
 
-# # equilibrium constants Ki
-# function Ki(kindata::AbstractKineticsData, T)
-#     nr=kindata.nr
-#     #Ki=zeros(Float64, nr)
-#     Ki=zeros(typeof(T), nr)
-#     Ki_ref = kindata.Ki_ref
-#     TKi_ref = kindata.TKi_ref
-#     ΔHi = kindata.ΔHi
-#     rn = kindata.rn
-#     for i=1:nr
-#         Ki[i] = Ki_ref[rn[i]] * exp(-ΔHi[rn[i]]/ph"R"*(1.0/T - 1.0/TKi_ref[rn[i]]))
-#     end
-# 	Ki
-# end
 # equilibrium constants Ki
-#function Ki(kindata, T)
 function Ki(data, T)
     (;kinpar)=data
-    #nr=kindata.nr
-    #Ki=zeros(Float64, nr)
-    # Ki=zeros(typeof(T), nr)
-    Ki_ref = kinpar.Ki_ref
-    TKi_ref = kinpar.TKi_ref
-    ΔHi = kinpar.ΔHi
-    rn = kinpar.rn
+    (;Ki_ref,TKi_ref,ΔHi,rn)=kinpar
    
     # !!!ALLOC Use MVectors with static size information instef of Vector
     Ki=MVector{nreac(kinpar),eltype(T)}(undef)
-
 
     for i=1:nreac(kinpar)
         Ki[i] = Ki_ref[rn[i]] * exp(-ΔHi[rn[i]]/ph"R"*(1.0/T - 1.0/TKi_ref[rn[i]]))
@@ -287,92 +198,33 @@ end
 
 
 # kinetic pre-factors ki
-# function ki(kindata::AbstractKineticsData, T)
-#     nr=kindata.nr
-#     #ki=zeros(Float64, nr)
-#     ki=zeros(typeof(T), nr)
-#     ki_ref = kindata.ki_ref
-#     Tki_ref = kindata.Tki_ref
-#     Ei = kindata.Ei
-#     rn = kindata.rn
-#     for i=1:nr
-#         ki[i] = exp(ki_ref[rn[i]]) * exp(-Ei[rn[i]]/ph"R"*(1.0/T - 1.0/Tki_ref[rn[i]]))
-#         # @. ki_ref*exp(-1000*Ei/ph"R"*(1/T-1/Tki_ref))
-#     end
-# 	ki
-# end
-# kinetic pre-factors ki
-#function ki(kindata::AbstractKineticsData, T)
 function ki(data, T)
-
     (;kinpar)=data
+    (;ki_ref,Tki_ref,Ei,rn)=kinpar
+
     # !!!ALLOC Use MVectors with static size information instef of Vector
     ki=MVector{nreac(kinpar),eltype(T)}(undef)
 
-    (;ki_ref,Tki_ref,Ei,rn)=kinpar
-    
     for i=1:nreac(kinpar)
         ki[i] = exp(ki_ref[rn[i]]) * exp(-Ei[rn[i]]/ph"R"*(1.0/T - 1.0/Tki_ref[rn[i]]))
     end
 	ki
 end
 
-
-
-#Species indices:
-#1) CO
-#2) H2
-#3) CH4
-#4) H2O
-#5) CO2
-#6) N2
-
-
-
-
-# adsorption constants Kj
-function Kj(kindata::AbstractKineticsData, T)
-    ng=kindata.ng
-    # Kj=zeros(Float64, ng)
-    Kj=zeros(typeof(T), ng)
-
-    Kj_ref = kindata.Kj_ref
-    TKj_ref = kindata.TKj_ref
-    ΔHj = kindata.ΔHj
-    gn = kindata.gn
-
-    for j=1:ng
-        Kj[j] = Kj_ref[gn[j]] * exp(-ΔHj[gn[j]]/ph"R"*(1.0/T - 1.0/TKj_ref[gn[j]]))
-        
-    end
-	Kj
-end
-
 # adsorption constants Kj
 function Kj(data, T)
-
     (;kinpar)=data
+    (;Kj_ref,TKj_ref,ΔHj,gn)=kinpar
+
     # !!!ALLOC Use MVectors with static size information instef of Vector
     Kj=MVector{ngas(data),eltype(T)}(undef)
-
-    (;Kj_ref,TKj_ref,ΔHj,gn)=kinpar
     
     for j=1:ngas(data)
-        Kj[j] = Kj_ref[gn[j]] * exp(-ΔHj[gn[j]]/ph"R"*(1.0/T - 1.0/TKj_ref[gn[j]]))
-        
+        Kj[j] = Kj_ref[gn[j]] * exp(-ΔHj[gn[j]]/ph"R"*(1.0/T - 1.0/TKj_ref[gn[j]]))        
     end
 	Kj
 end
 
-
-
-function DEN(kindata::AbstractKineticsData,T,p)
-	n=kindata.gni
-    # p_=p
-    p_=copy(p)
-	p_[n[:H2O]]=p_[n[:H2O]]/p_[n[:H2]] # p_H2O/p_H2
-	1+sum(Kj(kindata, T).*p_)
-end
 
 function DEN(data,T,p)
 
@@ -430,7 +282,7 @@ function ri(data,T,p_)
         pexp ./= @inline DEN(data,T,p)^2
     
     elseif kinpar == Wolf_rWGS
-        # convert partial pressures (Pa) into molar concentrations for kinetics
+        # convert partial pressures (Pa) into molar concentrations (mol/m3) for Wolf 2016 kinetics
         c=MVector{ngas(data),eltype(p)}(undef)
         c .= p ./ (ph"R"*T)
         unitc *=ufac"mol/(s*kg)"
@@ -438,11 +290,12 @@ function ri(data,T,p_)
         pexp[1] = @inbounds @inline (c[n[:CO2]]*c[n[:H2]]^0.3 - c[n[:CO]]*c[n[:H2O]]/c[n[:H2]]^0.7/K_rWGS_Twigg(T))
 
     elseif kinpar == Riedel_rWGS
+        # convert partial pressures (Pa) into (MPa) for Riedel 2001 kinetics
         p ./= ufac"MPa"
         unitc *=ufac"mol/(s*g)"
         pexp[1] = @inbounds @inline (p[n[:CO2]]*p[n[:H2]] - p[n[:CO]]*p[n[:H2O]]*Kequil_WGS_Zimmermann(T)) / (p[n[:CO]] + 65.0*p[n[:H2O]] + 7.4*p[n[:CO2]])
     end
-    # ri_ = @inline ki(data,T) .* pexp / DEN(data,T,p)^2 * unitc
+    
     ri_ = @inline ki(data,T) .* pexp * unitc
  
 
