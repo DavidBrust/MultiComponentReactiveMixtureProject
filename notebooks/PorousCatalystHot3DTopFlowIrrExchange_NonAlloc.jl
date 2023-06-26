@@ -27,8 +27,8 @@ begin
 
 	using LessUnitful
 	
-	using PlutoVista, Plots, GLMakie
-	using PlutoUI
+	using PlutoVista, Plots
+	using PlutoUI, HypertextLiteral
 	using CSV,DataFrames
 	using Interpolations
 
@@ -44,7 +44,7 @@ PlutoUI.TableOfContents(title="Photo-Catalytic Reactor",depth=6)
 md"""
 Check the box to start the simulation:
 
-__Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=true))
+__Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=false))
 """
 
 # ╔═╡ 2ed3223e-a604-410e-93d4-016580f49093
@@ -73,33 +73,6 @@ begin
 	const Γ_top_cat = 7 # inflow bc, catalyst coated porous frit 
 end;
 
-# ╔═╡ ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
-function prism_sq(data; nref=2, w=data.wi, h=data.h, cath=data.cath, catwi=data.catwi)
-	
-	hw=(w/2.0)/5.0*2.0^(-nref)
-	W=collect(0:hw:(w/2.0))
-	
-	#zCL=h-cath
-	#hhfrit=zCL/5.0
-	#Hfrit=collect(0:hhfrit:zCL)
-	hhfrit=h/5.0
-	Hfrit=collect(0:hhfrit:h)
-	
-	hhCL=cath/5.0
-	#HCL=collect(zCL:hhCL:h)
-	HCL=collect(h:hhCL:h+cath)
-	H=glue(Hfrit,HCL)
-	
-	grid=simplexgrid(W,W,H)
-	
-	# catalyst layer region
-	#cellmask!(grid,[0.0,0.0,h-cath],[catwi/2,catwi/2,h],2)
-	cellmask!(grid,[0.0,0.0,h],[catwi/2,catwi/2,h+cath],2)
-	# catalyst layer boundary
-	#bfacemask!(grid,[0.0,0.0,h],[catwi/2,catwi/2,h],Γ_top_cat)	
-	bfacemask!(grid,[0.0,0.0,h+cath],[catwi/2,catwi/2,h+cath],Γ_top_cat)	
-end
-
 # ╔═╡ 37adb8da-3ad5-4b41-8f08-85da19e15a53
 function prism_sq_full(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.catwi)
 	
@@ -122,7 +95,6 @@ function prism_sq_full(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=
 end
 
 # ╔═╡ e21b9d37-941c-4f2c-9bdf-956964428f90
-#const grid_fun = prism_sq
 const grid_fun = prism_sq_full
 
 # ╔═╡ 2554b2fc-bf5c-4b8f-b5e9-8bc261fe597b
@@ -272,13 +244,12 @@ begin
 	
 	FluxMap = let
 			if splitdir(pwd())[2]=="FixedBed"
-				filepath="data/IrradiationFluxProfiles/IrradFlux.csv"
+				filepath="data/IrradiationFluxProfiles/FlowPhotoChem_Messdaten_20230523_104820.csv"
 			else
-				filepath="../data/IrradiationFluxProfiles/IrradFlux.csv"
+				filepath="../data/IrradiationFluxProfiles/FlowPhotoChem_Messdaten_20230523_104820.csv"
 			end
-		CSV.read(filepath, DataFrame, delim=";")
+		CSV.read(filepath, DataFrame, delim=";",header=false)
 	end
-	M=Matrix(FluxMap)
 end;
 
 # ╔═╡ 634d1042-b110-45ef-bfbe-51b827fc922f
@@ -290,12 +261,12 @@ In the following, only the section of the total flux profile entering the __12 c
 function sel12by12(M;wi=12.0*ufac"cm")
 	# starting coordinates for optimum 10 cm x 10 cm selection
 
-	sr=80
-	sc=82
+	sr=33
+	sc=33
 
 	# (inverse) resolution of flux measurements, distance between data points
-	Dx = 0.06579*ufac"cm"
-	Dy = 0.06579*ufac"cm"
+	Dx = 0.031497*ufac"cm"
+	Dy = 0.031497*ufac"cm"
 	
 	# calculate coordinate offsets, when deviating (expanding/shrinking from the center) from 10cm x 10cm selection 
 	
@@ -311,12 +282,12 @@ function sel12by12(M;wi=12.0*ufac"cm")
 	M=Matrix(FluxMap)
 	# coordinate system of measurement data matrix has its origin at bottom left corner, the excel data matrix (and its coordiinates) start in top left corner
 	reverse!(M; dims=1) 
-	@views M_ = M[sr:(sr+ny),sc:(sc+nx)]*ufac"kW/m^2"
+	@views M_ = M[sr:(sr+ny-1),sc:(sc+nx-1)]*ufac"kW/m^2"
 	
 
 	# origin of coordinate system in the center of the plane
-	x = range(-wi/2,wi/2,length=nx+1)
-	y = range(-wi/2,wi/2,length=ny+1)
+	x = range(-wi/2,wi/2,length=nx)
+	y = range(-wi/2,wi/2,length=ny)
 
 	itp = Interpolations.interpolate((x,y), M_, Gridded(Linear()))
 
@@ -325,7 +296,7 @@ end
 
 # ╔═╡ f9ba467a-cefd-4d7d-829d-0889fc6d0f5e
 begin
-	M12, itp12 = sel12by12(M)
+	M12, itp12 = sel12by12(FluxMap)
 end;
 
 # ╔═╡ f4ebb596-824a-4124-afb7-c368c1cabb00
@@ -818,8 +789,16 @@ begin
 	
 	# catalyst / chemistry data
 	# kinetic parameters, S3P="simple 3 parameter" kinetics fit to UPV lab scale experimental data
+
 	kinpar::FixedBed.KinData{nreac(S3P)} = S3P
-	#kinpar::AbstractKineticsData = XuFroment1989
+	#kinpar::FixedBed.KinData{nreac(XuFroment)} = XuFroment
+	#kinpar::FixedBed.KinData{nreac(Riedel_rWGS)} = Riedel_rWGS
+	#kinpar::FixedBed.KinData{nreac(Wolf_rWGS)} = Wolf_rWGS
+		
+	#kinpar::FixedBed.KinData{T} where {T} = XuFroment
+	
+    
+	
 	
 	# number of gas phase species
 	#ng::Int64		 		= kinpar.ng
@@ -836,22 +815,24 @@ begin
 	gni::Dict{Symbol, Int}  = kinpar.gni
 	# fluids and respective properties in system
 	Fluids::Vector{FluidProps} = kinpar.Fluids
-	#Fluids::Vector{AbstractFluidProps} = [N2]
+	
 	X0::Vector{Float64} = let
 		x=zeros(Float64, NG)
-		#x[gni[:H2]] = 1.0
-		#x[gni[:CO2]] = 1.0
-		x[gni[:N2]] = 1.0
+		x[gni[:H2]] = 1.0
+		x[gni[:CO2]] = 1.0
+		#x[gni[:CO]] = 1.0
+		#x[gni[:H2O]] = 1.0
+		#x[gni[:N2]] = 1.0
 		x/sum(x)
 	end # inlet composition
 
 	#mcat::Float64=3.3*ufac"g" # total catalyst loading
-	mcat::Float64=200.0*ufac"mg" 
+	mcat::Float64=200.0*ufac"mg"
 	# volume specific cat mass loading, UPV lab scale PC reactor
 	lcats::Float64 =1000.0*ufac"kg/m^3"
 	#mcats::Float64=80.0*ufac"kg/m^3" # 200 mg cat total loading, 250μm CL 
-	#isreactive::Bool = 1
-	isreactive::Bool = 0
+	isreactive::Bool = 1
+	#isreactive::Bool = 0
 		
 	#α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
 	k_nat_conv::Float64=10.0*ufac"W/(m^2*K)" # natural convection heat transfer coefficient	
@@ -934,10 +915,13 @@ begin
 	pn::Float64 = 1.0*ufac"bar"
 	Tn::Float64 = 273.15*ufac"K"
 
+	
 	Qflow::Float64=340.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
 	#Qflow::Float64=1480.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
 	#Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
-	
+	#Qflow::Float64=7400.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
+	#Qflow::Float64=14800.0*ufac"ml/minute" # volumetric feed flow rate (sccm)
+		
 
 	MWin::Float64 = molarweight_mix(Fluids, X0)
 	mdotin::Float64=MWin*Qflow*pn/(ph"R"*Tn)*ufac"kg/s"
@@ -970,8 +954,7 @@ Cutplane at ``z=`` $(d=ModelData{S3P.ng}(); @bind zcut PlutoUI.Slider(range(0.0,
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	gridplot(grid_fun(ModelData{S3P.ng}()),zoom=1.9,resolution=(800,600), zplane=zcut*ufac"mm",)
-	#gridplot(grid_fun(ModelData{S3P.ng}(),nref=1), zplane=zcut*ufac"mm",Plotter=GLMakie)	
+	gridplot(grid_fun(ModelData{S3P.ng}(),nref=0),zoom=1.6,resolution=(800,600), zplane=zcut*ufac"mm",Plotter=PlutoVista)
 end
   ╠═╡ =#
 
@@ -980,28 +963,42 @@ function reaction(f,u,node,data)
 	(;ip,isreactive)=data
 	ng=ngas(data)
 	
-	if node.region == 2 && data.isreactive # catalyst layer
-		(;iT,lcats,kinpar,Fluids)=data
+	if node.region == 2 && isreactive # catalyst layer
+		(;iT,lcats,kinpar,Fluids,gni)=data
 		(;rni,nuij)=kinpar
 		pi = MVector{ngas(data),eltype(u)}(undef)
 		
 
 		for i=1:ng
-			pi[i] = u[i]/ufac"bar"
-		end
-		# negative sign: sign convention of VoronoiFVM: source term < 0 
-		# for Xu/Froment 1989 kinetics, ri returns reaction rate in mol/(h gcat)
-		unitc=one(eltype(u))
-		if kinpar == XuFroment
-			unitc *=ufac"mol/(hr*g)"
+            if kinpar == Hla_WGS
+                pi[i] = u[i]/ufac"kPa"
+			elseif kinpar == Riedel_rWGS
+				pi[i] = u[i]/ufac"MPa"
+			elseif kinpar == Wolf_rWGS
+				pi[i] = u[i]
+			elseif kinpar == XuFroment || kinpar == S3P
+			    pi[i] = u[i]/ufac"bar"
+            end
 		end
 
+		
+		# negative sign: sign convention of VoronoiFVM: source term < 0 
+		# for Xu/Froment 1989 kinetics, ri returns reaction rate in mol/(h gcat)
+		#unitc=one(eltype(u))
+		#if kinpar == XuFroment
+		#	unitc *=ufac"mol/(hr*g)"
+        #elseif kinpar == Hla_WGS
+        #    unitc *=ufac"mol/(s*g)"
+		#end
+
 		#RR = @inline -mcats*ri(data,u[iT],pi)*ufac"mol/(hr*g)"
-		RR = @inline -lcats*ri(data,u[iT],pi)*unitc
+		#RR = @inline -lcats*ri(data,u[iT],pi)*unitc
+		 RR = @views @inline -lcats*ri(data,u[iT],u[1:ng])
 		for i=1:ng
 			f[i] = zero(eltype(u))
 			for j=1:nreac(kinpar)
-				f[i] += nuij[i,j] * RR[j]
+				#f[i] += nuij[i,j] * RR[j]
+				f[i] += nuij[(j-1)*ng+i] * RR[j]
 			end			
 		end
 
@@ -1019,9 +1016,13 @@ let
 	x_ = range(-wi/2,wi/2,length=nx)
 	y_ = range(-wi/2,wi/2,length=ny)
 	
-	#Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm", title="Measured Flux Profile", colorbar_title="Irradiation Flux / kW m-2", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"))
-	p=Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"), size=(300,300))
+	Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm", title="Measured Flux Profile", colorbar_title="Irradiation Flux / kW m-2", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"),size=(400,400))
+	#p=Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"), size=(300,300))
 	Plots.contour!(x_./ufac"cm",y_./ufac"cm",M12 / ufac"kW/m^2", lw=0, aspect_ratio = 1, fill = true)
+	Plots.plot!([-5,5],[-5,-5],label=:none,c=:black,lw=2)
+	Plots.plot!([-5,5],[5,5],label=:none,c=:black,lw=2)
+	Plots.plot!([-5,-5],[-5,5],label=:none,c=:black,lw=2)
+	Plots.plot!([5,5],[-5,5],label=:none,c=:black,lw=2)
 	#Plots.savefig("../img/out/Flux_meas.svg")
 end
 
@@ -1387,7 +1388,7 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 	 				  		handle_exceptions=true,
 							Δp_min=1.0e-4,					  
 	 				  		Δp=0.25,
-	 				  		Δp_grow=2,
+	 				  		Δp_grow=2.0,
 	 				  		Δu_opt=100000.0, # large value, due to unit Pa of pressure?
 	 )
 	
@@ -1397,6 +1398,7 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 
 	
 	sol(sol.t[end]),grid,sys,data
+	#sol,grid,sys,data
 end;
 
 # ╔═╡ aa498412-e970-45f2-8b11-249cc5c2b18d
@@ -1407,19 +1409,21 @@ begin
 
 		function control(sys;kwargs...)
 			SolverControl(
-#			direct_umfpack(),
-			gmres_umfpack(),
+			direct_umfpack(),
+			#gmres_umfpack(),
 #			gmres_eqnblock_umfpack(),
 #			gmres_eqnblock_iluzero(),
 			sys;
 			verbose="na",
 			log=true,
-			reltol=1.0e-8,
-			reltol_linear=1.0e-5,
+			#reltol=1.0e-8,
+			#reltol_linear=1.0e-5,
 			kwargs...)
 		end
+		
 		sol_,grid,sys,data_embed=main(;data=ModelData(),control,
 		assembly=:edgewise);
+		
 		if sol_ isa VoronoiFVM.TransientSolution
 			sol = copy(sol_(sol_.t[end]))
 		else
@@ -1452,7 +1456,7 @@ md"""
 let
 	iT=data_embed.iT
 
-	scalarplot(grid, sol[iT,:].-273.15,levelalpha=0.8,colormap=:inferno,Plotter=PlutoVista)
+	scalarplot(grid, sol[iT,:].-273.15,levelalpha=0.8,colormap=:inferno,zoom=1.6, resolution=(800,600),Plotter=PlutoVista)
 end
   ╠═╡ =#
 
@@ -1599,12 +1603,12 @@ Chemical species flows through porous frit from bottom and top:
 
 |    | Top   | Bottom    |    |
 |----|-------|-------|-------|
-| $(data_embed.gn[1]) | $(abs(round(ndot_top[1]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_bot[1]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
-| $(data_embed.gn[2]) | $(abs(round(ndot_top[2]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_bot[2]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
-| $(data_embed.gn[3]) | $(abs(round(ndot_top[3]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_bot[3]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
-| $(data_embed.gn[4]) | $(abs(round(ndot_top[4]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_bot[4]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
-| $(data_embed.gn[5]) | $(abs(round(ndot_top[5]/ufac"mol/hr",sigdigits=2)))  |   $(round(ndot_bot[5]/ufac"mol/hr",sigdigits=2))   |  mol/hr  |
-| $(data_embed.gn[6]) | $(abs(round(ndot_top[6]/ufac"mol/hr")))  |   $(round(ndot_bot[6]/ufac"mol/hr"))   |  mol/hr  |
+| $(data_embed.gn[1]) | $(abs(round(ndot_top[1]/ufac"mol/hr",digits=2)))  |   $(round(ndot_bot[1]/ufac"mol/hr",digits=2))   |  mol/hr  |
+| $(data_embed.gn[2]) | $(abs(round(ndot_top[2]/ufac"mol/hr",digits=2)))  |   $(round(ndot_bot[2]/ufac"mol/hr",digits=2))   |  mol/hr  |
+| $(data_embed.gn[3]) | $(abs(round(ndot_top[3]/ufac"mol/hr",digits=2)))  |   $(round(ndot_bot[3]/ufac"mol/hr",digits=2))   |  mol/hr  |
+| $(data_embed.gn[4]) | $(abs(round(ndot_top[4]/ufac"mol/hr",digits=2)))  |   $(round(ndot_bot[4]/ufac"mol/hr",digits=2))   |  mol/hr  |
+| $(data_embed.gn[5]) | $(abs(round(ndot_top[5]/ufac"mol/hr",digits=2)))  |   $(round(ndot_bot[5]/ufac"mol/hr",digits=2))   |  mol/hr  |
+| $(data_embed.gn[6]) | $(abs(round(ndot_top[6]/ufac"mol/hr",digits=2)))  |   $(round(ndot_bot[6]/ufac"mol/hr",digits=2))   |  mol/hr  |
 
 
 """
@@ -1658,10 +1662,10 @@ let
 		a[2]=b[2]
 	end
 
-    #bgrid = subgrid(grid, [Γ_top_cat,Γ_top_frit]; boundary = true, transform = _3to2)
-	#bsol=view(sol[iTw, :], bgrid)
-	bgrid = subgrid(grid, [Γ_bottom]; boundary = true, transform = _3to2)
-	bsol=view(sol[iTp, :], bgrid)
+    bgrid = subgrid(grid, [Γ_top_cat,Γ_top_frit]; boundary = true, transform = _3to2)
+	bsol=view(sol[iTw, :], bgrid)
+	#bgrid = subgrid(grid, [Γ_bottom]; boundary = true, transform = _3to2)
+	#bsol=view(sol[iTp, :], bgrid)
 
 	scalarplot(bgrid, bsol.-273.15,colormap=:inferno,Plotter=PlutoVista,show=true)
 end
@@ -1708,7 +1712,7 @@ end
 # ╔═╡ cfa366bc-f8b9-4219-b210-51b9fc5ff3f6
 #=╠═╡
 md"""
-Total irradiated power on aperture (from measurement): __$(Integer(round(sum(M12)*(0.06579*ufac"cm")^2,digits=0))) W__
+Total irradiated power on aperture (from measurement): __$(Integer(round(sum(M12)*(0.031497*ufac"cm")^2,digits=0))) W__
 
 Total irradiated power on aperture (for interpolation on computational grid): __$(Pwr=PowerIn(sol,sys,grid,data_embed);round(sum(Pwr[[Γ_top_cat,Γ_top_frit]]),digits=2)) W__
 """
@@ -1782,9 +1786,13 @@ let
 	(;wi)=data_embed
 	x=@views unique(grid_xy[Coordinates][1,:])
 	y=@views unique(grid_xy[Coordinates][2,:])
-	Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm",title="Interpolated Flux Profile", colorbar_title="Irradiation Flux / kW m-2", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"))
+	Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm",title="Interpolated Flux Profile", colorbar_title="Irradiation Flux / kW m-2", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"),size=(400,400))
 
-	Plots.contour!(x/ufac"cm",y/ufac"cm",itp12(x,y) / ufac"kW/m^2", lw=0, aspect_ratio = 1, fill = true)	
+	Plots.contour!(x/ufac"cm",y/ufac"cm",itp12(x,y) / ufac"kW/m^2", lw=0, aspect_ratio = 1, fill = true)
+		Plots.plot!([-5,5],[-5,-5],label=:none,c=:black,lw=2)
+	Plots.plot!([-5,5],[5,5],label=:none,c=:black,lw=2)
+	Plots.plot!([-5,-5],[-5,5],label=:none,c=:black,lw=2)
+	Plots.plot!([5,5],[-5,5],label=:none,c=:black,lw=2)
 	#Plots.savefig("../img/out/Flux_interpol.svg")
 end
   ╠═╡ =#
@@ -1913,8 +1921,12 @@ let
 	DeltaFlux = @. (flux_tot-Glamp) / Glamp * 100
 	#DeltaFlux = @. (flux_vis-Glamp) / Glamp * 100
 
-	p=Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"), size=(300,300))
+	p=Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"), size=(400,400))
 	Plots.contourf!(p,X/ufac"cm",Y/ufac"cm",DeltaFlux, aspect_ratio=1,clim=(-5,5),lw=0,c=:RdBu)
+		Plots.plot!([-5,5],[-5,-5],label=:none,c=:black,lw=2)
+	Plots.plot!([-5,5],[5,5],label=:none,c=:black,lw=2)
+	Plots.plot!([-5,-5],[-5,5],label=:none,c=:black,lw=2)
+	Plots.plot!([5,5],[-5,5],label=:none,c=:black,lw=2)
 	#Plots.contourf!(p,X/ufac"cm",Y/ufac"cm",flux_tot/ufac"kW/m^2", aspect_ratio=1,clim=(minimum(M12),maximum(M12))./ufac"kW/m^2",lw=0,c=:inferno)
 	
 	#Plots.savefig(p,"../img/out/FluxOnCat.svg")
@@ -1965,7 +1977,7 @@ let
 	data=data_embed
 	(;gni,ip)=data
 	sol_xz, grid_xz = CutPlane(data_embed,sol)
-	scalarplot(grid_xz, sol_xz[gni[:CO]] ./sol_xz[ip], show=true)
+	scalarplot(grid_xz, sol_xz[gni[:CO]] ./sol_xz[ip], show=true, Plotter=PlutoVista)
 end
   ╠═╡ =#
 
@@ -2110,7 +2122,7 @@ function STCefficiency(sol,sys,data,grid)
 	# R2 = RWGS in Xu & Froment kinetic model
 	(;gni,kinpar,Glamp,Ac) = data
 	DHi = 0.0
-	if kinpar == XuFroment1989
+	if kinpar == XuFroment
 		DHi = kinpar.ΔHi[:R2]
 	elseif kinpar == S3P
 		DHi = kinpar.ΔHi[:R1]
@@ -2233,7 +2245,6 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─94ed0f8b-13c1-4460-a391-5057cff401e0
 # ╟─2ed3223e-a604-410e-93d4-016580f49093
 # ╟─390c7839-618d-4ade-b9be-ee9ed09a77aa
-# ╠═ada45d4d-adfa-484d-9d0e-d3e7febeb3ef
 # ╠═37adb8da-3ad5-4b41-8f08-85da19e15a53
 # ╠═e21b9d37-941c-4f2c-9bdf-956964428f90
 # ╠═0a911687-aff4-4c77-8def-084293329f35
@@ -2266,8 +2277,8 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─634d1042-b110-45ef-bfbe-51b827fc922f
 # ╠═29f34e55-91ab-4b6d-adb2-a58412af95f6
 # ╠═f9ba467a-cefd-4d7d-829d-0889fc6d0f5e
-# ╠═e459bbff-e065-49e1-b91b-119add7d4a71
-# ╠═48b99de4-682d-439b-935e-408510c44e37
+# ╟─e459bbff-e065-49e1-b91b-119add7d4a71
+# ╟─48b99de4-682d-439b-935e-408510c44e37
 # ╟─cfa366bc-f8b9-4219-b210-51b9fc5ff3f6
 # ╟─f4ebb596-824a-4124-afb7-c368c1cabb00
 # ╟─3aef8203-ce28-4197-a43e-784840f7bc1e
@@ -2289,8 +2300,8 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─25edaf7b-4051-4934-b4ad-a4655698a6c7
 # ╟─3fe2135d-9866-4367-8faa-56cdb42af7ed
 # ╟─652497ee-d07b-45e2-aeaf-87ad5bcc23ad
-# ╠═6bd59a54-f059-4646-b053-0fa41ead87fd
-# ╠═f5d78670-a98b-46a1-8bf3-3d2599cfdd88
+# ╟─6bd59a54-f059-4646-b053-0fa41ead87fd
+# ╟─f5d78670-a98b-46a1-8bf3-3d2599cfdd88
 # ╟─162122bc-12ae-4a81-8df6-86498041be40
 # ╟─221a1ee4-f7e9-4233-b45c-a715c9edae5f
 # ╟─2228bbd4-bc84-4617-a837-2bf9bba76793
@@ -2306,7 +2317,7 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╠═40906795-a4dd-4e4a-a62e-91b4639a48fa
 # ╟─7a3d5f60-4159-4025-908b-fe804e07eaac
 # ╟─e875be60-1e57-4a87-9348-a930fc591aa9
-# ╠═36b3acab-4ead-4cdf-be0d-3df09b7ec687
+# ╟─36b3acab-4ead-4cdf-be0d-3df09b7ec687
 # ╠═dec81e61-d1eb-4a6c-8648-a07b98a8a7a9
 # ╠═edd9fdd1-a9c4-4f45-8f63-9681717d417f
 # ╠═29d66705-3d9f-40b1-866d-dd3392a1a268
@@ -2337,15 +2348,15 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─b06a7955-6c91-444f-9bf3-72cfb4a011ec
 # ╠═6ae6d894-4923-4408-9b77-1067ba9e2aff
 # ╠═7ab38bc2-9ca4-4206-a4c3-5fed673557f1
-# ╟─84093807-8ea9-4290-8bf7-bd94c5c28691
+# ╠═84093807-8ea9-4290-8bf7-bd94c5c28691
 # ╠═ed0c6737-1237-40d0-81df-32d6a842cbb0
 # ╠═7f2276d5-bb78-487c-868a-0486595d0113
 # ╟─a6e61592-7958-4094-8614-e77446eb2223
 # ╟─2739bcff-3fb0-4169-8a1a-2b0a14998cec
 # ╠═30393c90-298c-412d-86ce-e36106613d35
 # ╠═6737a651-0bd3-44f8-b735-21b8d6c9ed90
-# ╠═06ad2f54-6ae9-4c32-8391-e6cc8c5cfe68
-# ╠═3dfc1ac2-93dc-4b5b-adbc-e66e92bf76b0
+# ╟─06ad2f54-6ae9-4c32-8391-e6cc8c5cfe68
+# ╟─3dfc1ac2-93dc-4b5b-adbc-e66e92bf76b0
 # ╟─9952c815-5459-44ff-b1f8-07ab24ce0c53
 # ╟─b22387c4-cda5-424d-99b7-d7deda24c678
 # ╠═15604034-91fd-4fd4-b09e-e3c5cfe7a265
