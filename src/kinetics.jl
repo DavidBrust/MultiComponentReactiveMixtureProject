@@ -244,7 +244,7 @@ end
 
 function K_rWGS_Twigg(T)
     Z=zero(eltype(T))
-    Z = 1000.0/T
+    Z = 1000.0/T -1
 	1.0/exp(Z*(Z*(0.63508-0.29353*Z)+4.1778)+0.31688)	
 end
 

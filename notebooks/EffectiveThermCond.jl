@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.24
+# v0.19.25
 
 using Markdown
 using InteractiveUtils
@@ -18,16 +18,16 @@ end
 begin
 	using Pkg
 	Pkg.activate(joinpath(@__DIR__,".."))
+	using Revise
 	
 	using LessUnitful
 	using Plots, LaTeXStrings
 	using PlutoUI
 	using Colors
 	using Statistics
-
-	using Revise
-	using FixedBed
+	using CSV, DataFrames
 	
+	using FixedBed
 end;
 
 # ╔═╡ 0fa3775d-4957-4644-8c9f-039a27b895b1
@@ -166,7 +166,7 @@ end
 Base.@kwdef mutable struct ModelData <:AbstractModelData
 	
 	# catalyst / chemistry data
-	kinpar::AbstractKineticsData = XuFroment1989
+	kinpar::AbstractKineticsData = XuFroment
 	
 	# number of gas phase species
 	ng::Int64		 		= kinpar.ng
@@ -240,7 +240,7 @@ end
 
 # ╔═╡ 3b0dd4c8-1a6c-48e0-9864-e3010c6f8a51
 let
-	lp=101
+	lp=21
 	phis=range(1.0e-6,1.0-1.0e-6,length=lp)
 	λbed_VDI=zeros(lp)
 	λbed_VDI_flattening=zeros(lp)
@@ -258,30 +258,34 @@ let
 		#λeff_tight_backfill[i] = lambda_eff_tight_backfill(data,λf)
 		λeff_schuetz[i] = lambda_eff_schuetz(data,λf)
 	end
+
+	#λbed_VDI
+	df=DataFrame([phis*100,λbed_VDI,λbed_VDI_flattening,λeff_AC,λeff_schuetz], ["phi","vdi","vdi_flat","ac","schuetz"])
+
+	CSV.write("..\\data\\out\\eff_therm_cond.csv", df)
 	
 
-	p=plot(xguide="Porosity / %", yguide=L"\lambda_\textrm{eff}~/~\mathrm{W}(\mathrm{m~K})^{-1}", legend=:outertopright)
-	plot!(p,100*phis,λbed_VDI, label="VDI heat atlas", ls=:auto)
-	plot!(p,100*phis,λbed_VDI_flattening, label="VDI heat atlas\nflattening", ls=:auto)
-	plot!(p,100*phis,λeff_AC, label="Cheilytko", ls=:auto)
+	#p=plot(xguide="Porosity / %", yguide=L"\lambda_\textrm{eff}~/~\mathrm{W}(\mathrm{m~K})^{-1}", legend=:outertopright)
+	#plot!(p,100*phis,λbed_VDI, label="VDI heat atlas", ls=:auto)
+	#plot!(p,100*phis,λbed_VDI_flattening, label="VDI heat atlas\nflattening", ls=:auto)
+	#plot!(p,100*phis,λeff_AC, label="Cheilytko", ls=:auto)
 	#plot!(p,100*phis,λeff_tight_backfill, label="Chudnovsky\nTight Backfill", ls=:auto)
-	plot!(p,100*phis,λeff_schuetz, label="Schuetz", ls=:auto)
+	#plot!(p,100*phis,λeff_schuetz, label="Schuetz", ls=:auto)
 
-	plot!(p,[100ϕ_meas],[λeff_meas_mean],yerror=[λeff_meas_std], m=:circle, label="λeff exp")
+	#plot!(p,[100ϕ_meas],[λeff_meas_mean],yerror=[λeff_meas_std], m=:circle, label="λeff exp")
 
-	lens!(p,[33, 39], [0.37, 0.41], inset = (1, bbox(0.3, 0.15, 0.3, 0.3)))
+	#lens!(p,[33, 39], [0.37, 0.41], inset = (1, bbox(0.3, 0.15, 0.3, 0.3)))
 
-	hline!(p,100*phis,[λs,λs],ls=:dash,c=:black,label=:none)
-	annotate!(p,88, 0.95*λs, text(L"\lambda_{\textrm{s}}="*string(λs),plot_font,12))
+	#hline!(p,100*phis,[λs,λs],ls=:dash,c=:black,label=:none)
+	#annotate!(p,88, 0.95*λs, text(L"\lambda_{\textrm{s}}="*string(λs),plot_font,12))
 
-	hline!(p,100*phis,[λf,λf],ls=:dash,c=:black,label=:none)
-	annotate!(p,13, 0.07, text(L"\lambda_{\textrm{f}}="*string(round(λf, sigdigits=2)),plot_font,12) )
+	#hline!(p,100*phis,[λf,λf],ls=:dash,c=:black,label=:none)
+	#annotate!(p,13, 0.07, text(L"\lambda_{\textrm{f}}="*string(round(λf, sigdigits=2)),plot_font,12) )
+
+	
 
 	#savefig(p, "../img/out/lambda_eff_comp.pdf")
 end
-
-# ╔═╡ 2374882b-ef7e-47f3-911e-1d929febc851
-ModelData()
 
 # ╔═╡ Cell order:
 # ╠═21925980-d94a-11ed-0a02-0fb6d3fd6888
@@ -302,5 +306,4 @@ ModelData()
 # ╠═15d388f1-0258-481d-a902-3292f40b11b0
 # ╠═643b3f87-9283-4174-be00-12fcea4e9984
 # ╠═3b0dd4c8-1a6c-48e0-9864-e3010c6f8a51
-# ╠═2374882b-ef7e-47f3-911e-1d929febc851
 # ╠═b8835dc4-a71c-4e50-b090-6ece3bd8cc71

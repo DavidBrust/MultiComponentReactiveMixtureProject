@@ -791,9 +791,9 @@ begin
 	# kinetic parameters, S3P="simple 3 parameter" kinetics fit to UPV lab scale experimental data
 
 	#kinpar::FixedBed.KinData{nreac(S3P)} = S3P
-	kinpar::FixedBed.KinData{nreac(XuFroment)} = XuFroment
+	#kinpar::FixedBed.KinData{nreac(XuFroment)} = XuFroment
 	#kinpar::FixedBed.KinData{nreac(Riedel_rWGS)} = Riedel_rWGS
-	#kinpar::FixedBed.KinData{nreac(Wolf_rWGS)} = Wolf_rWGS
+	kinpar::FixedBed.KinData{nreac(Wolf_rWGS)} = Wolf_rWGS
 		
 	#kinpar::FixedBed.KinData{T} where {T} = XuFroment
 	
@@ -827,7 +827,8 @@ begin
 	end # inlet composition
 
 	#mcat::Float64=3.3*ufac"g" # total catalyst loading
-	mcat::Float64=200.0*ufac"mg"
+	#mcat::Float64=200.0*ufac"mg"
+	mcat::Float64=500.0*ufac"mg"
     
 	# volume specific cat mass loading, UPV lab scale PC reactor
 	lcats::Float64 =1000.0*ufac"kg/m^3"
