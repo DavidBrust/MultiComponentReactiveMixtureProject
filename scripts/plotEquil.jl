@@ -20,6 +20,6 @@ plot!(p, df.T,df.MoleFrac_CH4_out, c=cols[3], label="CH4", lw=2,ls=:auto)
 plot!(p, df.T,df.MoleFrac_H2O_out, c=cols[4], label="H2O", lw=2,ls=:auto)
 plot!(p, df.T,df.MoleFrac_CO2_out, c=cols[5], label="CO2", lw=2,ls=:auto)
 
-lens!([750, 780], [0.2, 0.3], inset = (1, bbox(0.52, 0.05, 0.25, 0.25)))
+lens!([520, 540], [0.06, 0.1], inset = (1, bbox(0.52, 0.05, 0.25, 0.25)))
 
 savefig(p,"./img/out/RWGS_equil.svg")
