@@ -1355,7 +1355,9 @@ function flux(f,u,edge,data)
 		
 	for i=1:ng
 		DK = DK_eff(data,Tm,i)
-		bp,bm=fbernoulli_pm(vh/DK)		
+		# bp,bm=fbernoulli_pm(vh/DK)
+		# !!! without projection of velocity on edge
+		bp,bm=fbernoulli_pm(ud/DK)		
 		F[i] = (bm*u[i,1]-bp*u[i,2])/(ph"R"*Tm)
 	end
 	
@@ -1471,8 +1473,8 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
                             #Δp=0.05,
 	 				  		Δp_grow=2.0,
                             #Δp_grow=1.1,
-	 						Δu_opt=10000.0,
-	 				  		#Δu_opt=100000.0, # large value, due to unit Pa of pressure?
+	 						#Δu_opt=10000.0,
+	 				  		Δu_opt=100000.0, # large value, due to unit Pa of pressure?
 	 )
 	
 	embed=[0.0,1.0]
@@ -1537,9 +1539,9 @@ md"""
 # ╔═╡ 3bd80c19-0b49-43f6-9daa-0c87c2ea8093
 #=╠═╡
 let
-	iT=data_embed.iT
+	(;iT,gni)=data_embed
 
-	scalarplot(grid, sol[iT,:].-273.15,levelalpha=0.8,colormap=:inferno,zoom=1.6, resolution=(800,600),Plotter=PlutoVista)
+	scalarplot(grid, sol[gni[:CO],:],levelalpha=0.8,colormap=:inferno,zoom=1.6, resolution=(800,600),Plotter=PlutoVista)
 end
   ╠═╡ =#
 
@@ -1548,17 +1550,8 @@ end
 #=╠═╡
 let
 	(;gni,ip)=data_embed
-	writeVTK("../data/out/3D_pH2_40suns.vtu", grid; point_data = sol[gni[:H2],:] .-273.15)
+	writeVTK("../data/out/3D_pCO_40suns.vtu", grid; point_data = sol[gni[:CO],:])
 	#writeVTK("../data/out/3D_T_40suns.vtu", grid; point_data = sol[data_embed.iT,:] .-273.15)
-end
-  ╠═╡ =#
-
-# ╔═╡ 6bc6c8a2-1aa9-4ae0-91f7-4626fe66e19f
-#=╠═╡
-let
-	(;ip)=data_embed
-	ps=sol[ip,:]
-	sum(ps)/length(ps)
 end
   ╠═╡ =#
 
@@ -2601,7 +2594,6 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─b2df1087-6628-4889-8cd6-c5ee7629cd93
 # ╠═3bd80c19-0b49-43f6-9daa-0c87c2ea8093
 # ╠═b99610da-ca0c-46e7-b0a7-bc7858a45a35
-# ╠═6bc6c8a2-1aa9-4ae0-91f7-4626fe66e19f
 # ╟─2790b550-3105-4fc0-9070-d142c19678db
 # ╠═bea97fb3-9854-411c-8363-15cbef13d033
 # ╟─31add356-6854-43c5-9ebd-ef10add6cc3d
