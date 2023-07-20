@@ -56,7 +56,7 @@ md"""
 # ╠═╡ skip_as_script = true
 #=╠═╡
 md"""
-The modelling domain covers a prism of square shape, which is 1/4 of the symmetric porous foam that is supporting the catalyst layer in the photo-catalytic reactor.
+The modelling domain covers a prism of square shape, which represents the porous foam that is supporting the catalyst layer in the photo-catalytic reactor.
 $(LocalResource("../img/Domain.png")) 
 
 """
@@ -115,7 +115,7 @@ There are $\nu$ gas phase species in the system, gas phase composition is expres
 md"""
 ```math
 \begin{align}
-- \nabla N_i + R_i &= 0
+- \nabla \cdot N_i + R_i &= 0
 ~,
 i = 1 ... \nu
 \end{align}
@@ -390,8 +390,17 @@ F_3 &=-\epsilon_3\sigma T_3^4 + \alpha_3^{\text{vis}} G_1^{\text{vis}} + \alpha_
 
 # ╔═╡ 80d2b5db-792a-42f9-b9c2-91d0e18cfcfb
 md"""
+For catalyst boundary region (2):
 ```math
-G_1^{\text{vis}} = \frac{\tau_1^{\text{vis}} G_{\text{lamp}}}{1-\rho_1^{\text{vis}} \left( \phi_{12} \rho_2^{\text{vis}} + \phi_{13} \rho_3^{\text{vis}} \right)} \\
+G_1^{\text{vis}} = \frac{\tau_1^{\text{vis}} G_{\text{HFSS}}}{1-\rho_1^{\text{vis}}  \rho_2^{\text{vis}}  } \\
+```
+"""
+
+# ╔═╡ f1a04ae1-7d14-4be4-a4cc-f4bf3670a939
+md"""
+For uncoated frit boundary region (3):
+```math
+G_1^{\text{vis}} = \frac{\tau_1^{\text{vis}} G_{\text{HFSS}}}{1-\rho_1^{\text{vis}}  \rho_3^{\text{vis}}  } \\
 ```
 """
 
@@ -547,7 +556,7 @@ F = -\epsilon_1 \sigma T_1^4 + \frac{\alpha_1^{\text{IR}}}{1-\rho_1^{\text{IR}} 
 
 # ╔═╡ 25edaf7b-4051-4934-b4ad-a4655698a6c7
 md"""
-where the temperature of the bottom Al plate $T_2$ is calculated iteratively outside of the simulation and then set as a parameter in the ModelData structure.
+where the temperature of the bottom Aluminium plate $T_2$ is calculated as a boundary species as part of the equation system.
 """
 
 # ╔═╡ 3fe2135d-9866-4367-8faa-56cdb42af7ed
@@ -662,7 +671,7 @@ where $T_{\text{m}}=(T_{\text{top}}+T_{\text{bot}})/2$.
 
 # ╔═╡ 5c9aad13-914a-4f5e-af32-a9c6403c52d0
 md"""
-#### Side Walls
+## Side Walls
 The heat flux through the side walls of the modelling domain $\dot q_{\text{side}}$ is limited by the convective heat flux on the outside of the reactor shell. In absence of active cooling e.g. via a fan, natural convection prevails with heat transfer coefficient $k^{\text{nat}}_{\text{conv}}$. At the contacting interface between the porous frit and the reactor shell made of Aluminium at the domain boundary a negligable contact resistance is assumed.
 """
 
@@ -705,7 +714,7 @@ md"""
 
 # ╔═╡ 0bc79692-8db4-44a2-9433-5b6ce97b656f
 md"""
-#### Practical problem
+### Practical problem
 A problem regarding the implementation of above irradiation flux boundary conditions in VoronoiFVM.jl arises: in the physics callback functions that define the boundary conditions, only local values of the solution are available. But since irradiation is not acting locally but acts over distances, values from other part of the modeling domain influence the local solution. These interactions cannot be considered in a straight-forward way.
 
 __The following remedy is currently considered: for the IR spectral range, the quartz window is assumed to be non-reflective ($\rho_1^{\text{IR}}=0$). The incoming IR radiation is either transmitted or absorbed, circumventing the problem of ray-tracing.__
@@ -720,81 +729,6 @@ G_1^{\text{IR}} = \frac{\epsilon_1\sigma T_1^4 + \rho_1^{\text{IR}} \left( \phi_
 ```
 This will lead to an error, that should be estimated.
 
-"""
-
-# ╔═╡ f8471857-38b3-4cca-85e6-cba7c0f0c741
-# ╠═╡ skip_as_script = true
-#=╠═╡
-md"""
-$(LocalResource("../img/WindowEB.png")) 
-"""
-  ╠═╡ =#
-
-# ╔═╡ 1447a715-75bb-4a22-b76d-7f809f3686f9
-md"""
-At steady state, the net transfer of energy to/from the balance region around the quartz window must vanish. This leads to:
-
-```math
-0=-\dot q_{\text{conv,top}} - 2 \dot q_{\text{emit}} + \dot q_{\text{conv,bot,2}} + \dot q_{\text{conv,bot,3}} + \dot q_{\text{abs,bot,2}} + \dot q_{\text{abs,bot,3}}
-```
-
-with
-```math
-	\begin{align}
-	\dot q_{\text{conv,top}} &= \alpha_{\text{conv}} (T_1-T_{\text{amb}}) \\
-	\dot q_{\text{emit}} &= \epsilon_1\sigma T_1^4 \quad(\text{once for top \& bottom surfaces}) \\
-	\dot q_{\text{conv,bot,2}} &= \alpha_{\text{inner. conv}}(T_{\text m}-T_1), \quad T_{\text m}=\frac{T_1+T_2}{2} \\
-	\dot q_{\text{conv,bot,3}} &= \alpha_{\text{inner. conv}}(T_{\text m}-T_1), \quad T_{\text m}=\frac{T_1+T_3}{2} \\
-	\dot q_{\text{abs,bot,2}} &= \alpha_1^{\text{IR}} \phi_{12} G_2^{\text{IR}} + \alpha_1^{\text{vis}} \phi_{12} G_2^{\text{vis}} \\
-	\dot q_{\text{abs,bot,3}} &= \alpha_1^{\text{IR}} \phi_{13} G_3^{\text{IR}} + \alpha_1^{\text{vis}} \phi_{13} G_3^{\text{vis}}
-	\end{align}
-```
-
-From this balance, the steady-state window temperature $T_1$ can be obtained.
-"""
-
-# ╔═╡ 7a3d5f60-4159-4025-908b-fe804e07eaac
-# ╠═╡ skip_as_script = true
-#=╠═╡
-md"""
-$(LocalResource("../img/BotChamberEB.png")) 
-"""
-  ╠═╡ =#
-
-# ╔═╡ e875be60-1e57-4a87-9348-a930fc591aa9
-md"""
-At steady state, the net transfer of energy to/from the balance region around the bottom plate must vanish. This leads to:
-
-```math
-0=-\dot q^{\text{nat}}_{\text{conv}} - 2 \dot q_{\text{emit}} + \dot q^{\text{int}}_{\text{conv}} + \dot q_{\text{abs,1}} 
-```
-
-with
-```math
-	\begin{align}
-	\dot q^{\text{nat}}_{\text{conv}} &= k^{\text{nat}}_{\text{conv}} (T_2-T_{\text{amb}}) \\
-
-	\dot q_{\text{emit}} &= \epsilon_2\sigma T_2^4 \quad(\text{once for top \& bottom surfaces}) \\
-	\dot q^{\text{int}}_{\text{conv}} &= k^{\text{int}}_{\text{conv}}(T_2-T_{\text m}), \quad T_{\text m}=\frac{T_1+T_2}{2} \\
-	
-	\dot q_{\text{abs,1}} &= \alpha_2^{\text{IR}} G_1^{\text{IR}} \\
-	
-	\end{align}
-```
-
-The surface brigthness of the frit, that solely lies in the IR spectral range $G_1^{\text{IR}}$ is computed via:
-
-```math
-	G_1^{\text{IR}} = \frac{\epsilon_1 \sigma T_1^4 + \rho_1^{\text{IR}} \epsilon_2 \sigma T_2^4}{1-\rho_1^{\text{IR}} \rho_2^{\text{IR}}}
-
-```
-
-We obtain the mean temperature of the frit $T_1$ from the simulation. From this balance, the steady-state bottom plate temperature $T_2$ can be obtained.
-"""
-
-# ╔═╡ 36b3acab-4ead-4cdf-be0d-3df09b7ec687
-md"""
-__Test boundary flux on plate temperature boundary species__
 """
 
 # ╔═╡ dec81e61-d1eb-4a6c-8648-a07b98a8a7a9
@@ -1095,6 +1029,11 @@ function top(f,u,bnode,data)
 		for i=1:ng
 			# f[i] = data.utop*u[i]/(ph"R"*u[iT])
 			f[i] = -data.u0*data.X0[i]*data.pn/(ph"R"*data.Tn)
+
+			# !!! test effect of change in u_in on pressure
+			#f[i] = -0.8 * data.u0*data.X0[i]*data.pn/(ph"R"*data.Tn)
+
+			
 			# use species enthalpy (incl. Δh_formation) for conv. therm. eng. flux 1/2
 			# reactant gases enter control volume at Tref
 			@inline flux_entahlpy += f[i] * enthalpy_gas(Fluids[i], Tamb)
@@ -1355,7 +1294,7 @@ function flux(f,u,edge,data)
 		
 	for i=1:ng
 		DK = DK_eff(data,Tm,i)
-		# bp,bm=fbernoulli_pm(vh/DK)
+		#bp,bm=fbernoulli_pm(vh/DK)
 		# !!! without projection of velocity on edge
 		bp,bm=fbernoulli_pm(ud/DK)		
 		F[i] = (bm*u[i,1]-bp*u[i,2])/(ph"R"*Tm)
@@ -1444,11 +1383,9 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 	 	ndotbot=data.mdotin/MWavg
 		 
 	 	Tavg=sum(integrate(sys,Intbot,sol; boundary=true)[iT,Γ_bottom])/(data.Ac/4)
-		
 	 	
 		data.ubot = ndotbot*ph"R"*Tavg/(1.0*ufac"bar")/data.Ac
-
-				 
+	 
 				
 	 	# calculate volume specific catalyst loading lcat in kg/ m^3
 		(;catwi,cath,mcat,Flux_target)=data
@@ -1473,11 +1410,11 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
                             #Δp=0.05,
 	 				  		Δp_grow=2.0,
                             #Δp_grow=1.1,
-	 						#Δu_opt=10000.0,
-	 				  		Δu_opt=100000.0, # large value, due to unit Pa of pressure?
+	 						#Δu_opt=1.0e4,
+	 				  		Δu_opt=1.0e5, # large value, due to unit Pa of pressure?
 	 )
 	
-	embed=[0.0,1.0]
+	embed=[0.0,0.5,1.0]
 	
 	sol=solve(sys;control=mycontrol,inival,embed,pre,)
 
@@ -1550,14 +1487,16 @@ end
 #=╠═╡
 let
 	(;gni,ip)=data_embed
-	writeVTK("../data/out/3D_pCO_40suns.vtu", grid; point_data = sol[gni[:CO],:])
+	#writeVTK("../data/out/3D_ptot_40suns.vtu", grid; point_data = sol[ip,:])
+	#writeVTK("../data/out/3D_pCO_40suns_ud.vtu", grid; point_data = sol[gni[:CO],:])
+	#writeVTK("../data/out/3D_pCO_40suns_vh.vtu", grid; point_data = sol[gni[:CO],:])
 	#writeVTK("../data/out/3D_T_40suns.vtu", grid; point_data = sol[data_embed.iT,:] .-273.15)
 end
   ╠═╡ =#
 
 # ╔═╡ 2790b550-3105-4fc0-9070-d142c19678db
 md"""
-## Partial Pressure Plot
+## Partial Pressures
 """
 
 # ╔═╡ 31add356-6854-43c5-9ebd-ef10add6cc3d
@@ -1601,20 +1540,21 @@ let
 	cols = distinguishable_colors(ng+1, [RGB(1,1,1), RGB(0,0,0)], dropseed=true)
 	pcols = map(col -> (red(col), green(col), blue(col)), cols)
 
-	p1=Plots.plot(title="Partial Pressures", size=(450,450), xguide="Height / mm", yguide="Pressure / bar",legend=:outertopright, ylim=(0,1.5))
-	for i in 1:(ng-1)
-		Plots.plot!(p1, grid_./ufac"mm", vec(sol_[i])./ufac"bar", label="$(gn[i])", lw=2, ls=:auto, color=cols[i])
+	#p1=Plots.plot(title="Partial Pressures", size=(450,450), xguide="Height / mm", yguide="Pressure / bar",legend=:outertopright)
+	p1=Plots.plot(title="Molar Fractions", size=(450,450), xguide="Height / mm", yguide="Molar Fraction / -",legend=:outertopright)
+	for i in 1:ng
+		Plots.plot!(p1, grid_./ufac"mm", vec(sol_[i])./vec(sol_[ip]), label="$(gn[i])", lw=2, ls=:auto, color=cols[i])
 	end
-	Plots.plot!(p1, grid_./ufac"mm", vec(sol_[ip])./ufac"bar", color=cols[ip], label="total p", lw=2)
-	lens!(10*[0.45, .525], [0.092, 0.1], inset = (1, bbox(0.1, 0.15, 0.25, 0.25)))
-	lens!(10*[0.45, .525], [0.49, 0.5], inset = (1, bbox(0.5, 0.15, 0.25, 0.25)))
+	#Plots.plot!(p1, grid_./ufac"mm", vec(sol_[ip])./ufac"bar", color=cols[ip], label="total p", lw=2)
+	#lens!(10*[0.45, .525], [0.092, 0.1], inset = (1, bbox(0.1, 0.15, 0.25, 0.25)))
+	#lens!(10*[0.45, .525], [0.49, 0.5], inset = (1, bbox(0.5, 0.15, 0.25, 0.25)))
 
-	#p2 = Plots.plot(xguide="Height / cm", yguide="Pressure / bar",legend=:bottomright)
-	#Plots.plot!(p2, grid_./ufac"cm", vec(sol_[ip])./ufac"bar", color=cols[ip], label="total p", lw=2)
+	lens!(10*[0.45, .525], [0.068, 0.078], inset = (1, bbox(0.15, 0.56, 0.20, 0.15)))
+	lens!(10*[0.45, .525], [0.36, 0.38], inset = (1, bbox(0.55, 0.53, 0.25, 0.15)))
 
 	p=Plots.plot(p1, size=(500,300))
 	#Plots.plot(p1,p2, layout=(1,2), size=(700,450))
-	#Plots.savefig(p, "../img/out/pi_1480sccm_40suns.svg")
+	#Plots.savefig(p, "../img/out/xi_1480sccm_40suns.svg")
 	
 end
   ╠═╡ =#
@@ -2543,6 +2483,7 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─d9dee38e-6036-46b8-bc06-e545baa06789
 # ╟─e58ec04f-023a-4e00-98b8-f9ae85ca506f
 # ╟─80d2b5db-792a-42f9-b9c2-91d0e18cfcfb
+# ╟─f1a04ae1-7d14-4be4-a4cc-f4bf3670a939
 # ╟─6de46bcb-9aff-4a21-b8d6-f14e64aac95c
 # ╟─b1ef2a89-27db-4f21-a2e3-fd6356c394da
 # ╠═79e6cb48-53e2-4655-9d77-51f3deb67b94
@@ -2564,19 +2505,14 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─221a1ee4-f7e9-4233-b45c-a715c9edae5f
 # ╟─2228bbd4-bc84-4617-a837-2bf9bba76793
 # ╟─09d976a7-f6c6-465b-86f4-9bc654ae158c
-# ╟─5c9aad13-914a-4f5e-af32-a9c6403c52d0
+# ╠═5c9aad13-914a-4f5e-af32-a9c6403c52d0
 # ╟─ff764eea-e282-4fed-90b4-5f418ae426f0
 # ╟─dfed01d4-8d88-4ce7-afe5-1fd27e2cc746
 # ╟─373df685-e9c5-4e57-b50c-09bcd093ef7d
 # ╟─4ebbe06f-0993-4c5c-9af3-76b2b645e592
 # ╟─0bc79692-8db4-44a2-9433-5b6ce97b656f
 # ╠═7da59e27-62b9-4b89-b315-d88a4fd34f56
-# ╟─f8471857-38b3-4cca-85e6-cba7c0f0c741
-# ╟─1447a715-75bb-4a22-b76d-7f809f3686f9
 # ╠═40906795-a4dd-4e4a-a62e-91b4639a48fa
-# ╟─7a3d5f60-4159-4025-908b-fe804e07eaac
-# ╟─e875be60-1e57-4a87-9348-a930fc591aa9
-# ╟─36b3acab-4ead-4cdf-be0d-3df09b7ec687
 # ╠═dec81e61-d1eb-4a6c-8648-a07b98a8a7a9
 # ╠═edd9fdd1-a9c4-4f45-8f63-9681717d417f
 # ╠═1a8410fa-caac-4023-8c96-a0042f22d88c
