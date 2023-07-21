@@ -63,15 +63,26 @@ $(LocalResource("../img/Domain.png"))
   ╠═╡ =#
 
 # ╔═╡ 0a911687-aff4-4c77-8def-084293329f35
-begin
-	const Γ_side_front = 1 # symmetry bc
-	const Γ_side_right = 2 # wall bc
-	const Γ_side_back = 3 # wall bc
-	const Γ_side_left = 4 # symmetry bc
-	const Γ_bottom_rim = 5 # outer rim, contacting reactor housing
-	const Γ_top_frit = 6 # inflow bc, uncoated porous frit 
-	const Γ_top_cat = 7 # inflow bc, catalyst coated porous frit 
-	const Γ_bottom = 8 # outflow bc
+begin 
+	# for prismatic geometry
+	#const Γ_side_front = 1 # wall bc
+	#const Γ_side_right = 2 # wall bc
+	#const Γ_side_back = 3 # wall bc
+	#const Γ_side_left = 4 # wall bc
+	#const Γ_bottom_rim = 5 # outer rim, contacting reactor housing
+	#const Γ_top_frit = 6 # inflow bc, uncoated porous frit 
+	#const Γ_top_cat = 7 # inflow bc, catalyst coated porous frit 
+	#const Γ_bottom = 8 # outflow bc
+
+	# for cylindric, symmetric geometry
+	
+	const Γ_bottom = 1 # outflow bc
+	const Γ_side_right = 2 # wall bc	
+	const Γ_top_frit = 3 # inflow bc, uncoated porous frit 
+	const Γ_top_cat = 4 # inflow bc, catalyst coated porous frit
+	const Γ_symmetry_axis = 5 # symmetry
+	const Γ_bottom_rim = 6 # outer rim, contacting reactor housing
+	#const Γ_bottom = 6 # outflow bc
 end;
 
 # ╔═╡ 37adb8da-3ad5-4b41-8f08-85da19e15a53
@@ -97,8 +108,35 @@ function prism_sq_full(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=
 	bfacemask!(grid,[-(w/2-1.0*ufac"cm"),-(w/2-1.0*ufac"cm"),0],[w/2-1.0*ufac"cm",w/2-1.0*ufac"cm",0],Γ_bottom)	
 end
 
+# ╔═╡ b1ec9532-4489-4777-a50c-35d1f0749d74
+function cyl_sym(data; nref=0, w=data.wi, h=data.h, cath=data.cath, catwi=data.catwi)
+	
+	hw=(w/2.0)/8.0*2.0^(-nref) # width of ~16 cm, divide into 8 segments
+	
+	hhfrit=h/5.0
+	Hfrit=collect(0:hhfrit:h)
+	
+	hhCL=cath/5.0
+	HCL=collect(h:hhCL:h+cath)
+	
+    R = collect(0:hw:(w/2.0))
+    Z = glue(Hfrit,HCL)
+    grid = VoronoiFVM.Grid(R, Z)
+    circular_symmetric!(grid)
+	
+	# catalyst layer region
+	cellmask!(grid,[0,h],[catwi/2,h+cath],2)
+	# catalyst layer boundary
+	bfacemask!(grid,[0,h+cath],[catwi/2,h+cath],Γ_top_cat)
+	# symmetry boundary
+	bfacemask!(grid,[0,0],[0,h+cath],Γ_symmetry_axis)
+	# outer rim boundary
+	#bfacemask!(grid,[w/2-1.0*ufac"cm",0],[w/2*ufac"cm",0],Γ_bottom_rim)	
+end
+
 # ╔═╡ e21b9d37-941c-4f2c-9bdf-956964428f90
-const grid_fun = prism_sq_full
+#const grid_fun = prism_sq_full
+const grid_fun = cyl_sym
 
 # ╔═╡ 2554b2fc-bf5c-4b8f-b5e9-8bc261fe597b
 md"""
@@ -243,8 +281,7 @@ Irradiation flux coming from the solar simulator enters the aperture of the reac
 """
 
 # ╔═╡ d0993435-ed0b-4a43-b848-26f5266017a1
-begin
-	
+begin	
 	FluxMap = let
 		ff = "FlowPhotoChem_Messdaten_20230523_110038.csv" # 40 suns
 		#file = "FlowPhotoChem_Messdaten_20230523_104820.csv" # 100 suns
@@ -321,27 +358,6 @@ end
 begin
 	M12, itp12 = sel12by12(FluxMap)
 end;
-
-# ╔═╡ ecb8df4c-fb61-472b-ad0b-e55b49905442
-let
-	Dx = 0.031497*ufac"cm"
-	Dy = 0.031497*ufac"cm"
-
-	nx = Integer(ceil(12*ufac"cm" / Dx))
-	ny = Integer(ceil(12*ufac"cm" / Dy))
-	
-	xs=range(-0.06, 0.06, length=nx)
-	ys=range(-0.06, 0.06, length=ny)
-
-	int=0.0
-	for x in xs
-		for y in ys
-			int += itp12(x,y)*(0.031497*ufac"cm")^2
-		end
-	end
-	int
-	int/(12.0*ufac"cm")^2/ufac"kW" # kW/m^2
-end
 
 # ╔═╡ f4ebb596-824a-4124-afb7-c368c1cabb00
 md"""
@@ -427,12 +443,16 @@ function radiosity_window(f,u,bnode,data)
     rho1_IR=uc_window.rho_IR
     eps1=uc_window.eps
 
+	# !!! constant rad. flux for cyl geom
     # obtain local irradiation flux value from interpolation + embedding	
-    @views y,x,_ = bnode.coord[:,bnode.index] 
-    Glamp =FluxEmbed*FluxIntp(x,y)
+    #@views y,x,_ = bnode.coord[:,bnode.index] 
+    #Glamp =FluxEmbed*FluxIntp(x,y)
+	Glamp =FluxEmbed*40.0*ufac"kW/m^2"
 
 	# local tempererature of quartz window
-    Tglass = u[iTw]
+    # !!! only T equation
+	# Tglass = u[iTw]
+	Tglass = (160+273.15)*ufac"K"
     G1_bot_IR = eps1*ph"σ"*Tglass^4
     if bnode.region==Γ_top_cat
         # catalyst layer (2)
@@ -739,9 +759,30 @@ function bflux(f, u, bedge, data)
 		f[iTw] = λ_window * (u[iTw, 1] - u[iTw, 2])
 	end
 	
-	if bedge.region == Γ_bottom
+	if bedge.region == Γ_bottom || bedge.region == Γ_bottom_rim
 		(;iTp,λ_Al) = data
 		f[iTp] = λ_Al * (u[iTp, 1] - u[iTp, 2])
+	end
+end
+
+# ╔═╡ edd9fdd1-a9c4-4f45-8f63-9681717d417f
+function side(f,u,bnode,data)
+	(;iT,h,cath,shellh,k_nat_conv,delta_gap,Tamb,X0)=data
+	
+	#if bnode.region==Γ_side_front || bnode.region==Γ_side_right || bnode.region==Γ_side_back || bnode.region==Γ_side_left
+
+	# !!! cylindrical geometry
+	if bnode.region==Γ_side_right
+		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
+
+		# !!! only T equation
+		#X=MVector{ngas(data),eltype(u)}(undef)
+		#@inline mole_frac!(bnode,data,X,u)
+		#@inline _,λf=dynvisc_thermcond_mix(data, u[iT], X)
+		@inline _,λf=dynvisc_thermcond_mix(data, u[iT], X0)
+		
+		# w/o shell height
+		f[iT] = (u[iT]-Tamb)/(delta_gap/λf+1/k_nat_conv)
 	end
 end
 
@@ -794,9 +835,12 @@ begin
 	kinpar::FixedBed.KinData{nreac(XuFroment)} = XuFroment
 	#kinpar::FixedBed.KinData{nreac(Wolf_rWGS)} = Wolf_rWGS
 		
-	#ng::Int64		 		= kinpar.ng # number of gas phase species
 	ip::Int64=NG+1 # index of total pressure variable
+
+	# !!! only T equation
 	iT::Int64=ip+1 # index of Temperature variable
+	#iT::Int64=1 # index of Temperature variable
+		
 	# register window & plate temperatures as boundary species
 	iTw::Int64=iT+1 # index of window Temperature (upper chamber)
 	iTp::Int64=iTw+1 # index of plate Temperature (lower chamber)
@@ -855,7 +899,10 @@ begin
 	#shellh::Float64=h+cath # height of reactor shell contacting domain
 	delta_gap::Float64=1.5*ufac"mm" # gas gap between frit and reactor wall
 		
-	Ac::Float64=wi*le*ufac"m^2" # cross-sectional area, square
+	#Ac::Float64=wi*le*ufac"m^2" # cross-sectional area, square
+	
+	# !!! for cylindrical geometry
+	Ac::Float64=pi*wi^2/4*ufac"m^2" # cross-sectional area, square
 
 	## irradiation data
 	#Glamp_target::Float64=100.0*ufac"kW/m^2" # solar simulator irradiation flux
@@ -953,7 +1000,8 @@ Cutplane at ``z=`` $(d=ModelData{S3P.ng}(); @bind zcut PlutoUI.Slider(range(0.0,
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	gridplot(grid_fun(ModelData{S3P.ng}(),nref=0),zoom=1.6,resolution=(800,600), zplane=zcut*ufac"mm",Plotter=PlutoVista)
+	#gridplot(grid_fun(ModelData{S3P.ng}(),nref=0),zoom=1.6,resolution=(800,600), zplane=zcut*ufac"mm",Plotter=PlutoVista)
+	gridplot(cyl_sym(ModelData()),resolution=(800,600), zplane=zcut*ufac"mm",Plotter=PlutoVista)
 end
   ╠═╡ =#
 
@@ -967,26 +1015,16 @@ function reaction(f,u,node,data)
 		(;rni,nuij)=kinpar
 		pi = MVector{ngas(data),eltype(u)}(undef)
 		
-
 		for i=1:ng
 			# pi[i] = u[i]/ufac"bar"
             pi[i] = u[i]
 		end
 		# negative sign: sign convention of VoronoiFVM: source term < 0 
-		# for Xu/Froment 1989 kinetics, ri returns reaction rate in mol/(h gcat)
-		# unitc=one(eltype(u))
-		# if kinpar == XuFroment
-		# 	unitc *=ufac"mol/(hr*g)"
-		# end
-
-		#RR = @inline -mcats*ri(data,u[iT],pi)*ufac"mol/(hr*g)"
-		# RR = @inline -lcats*ri(data,u[iT],pi)*unitc
-        # RR = @inline -lcats*ri(data,u[iT],pi)
+		
         RR = @inline -lcats*ri(data,u[iT],pi)
 		for i=1:ng
 			f[i] = zero(eltype(u))
 			for j=1:nreac(kinpar)
-				#f[i] += nuij[i,j] * RR[j]
                 f[i] += nuij[(j-1)*ng+i] * RR[j]
 			end			
 		end
@@ -994,8 +1032,8 @@ function reaction(f,u,node,data)
 	end
 	
 	# ∑xi = 1
-	@views f[ip]=u[ip]-sum(u[1:ng])
-	
+	# !!! only T equation
+	@views f[ip]=u[ip]-sum(u[1:ng])	
 end
 
 # ╔═╡ e459bbff-e065-49e1-b91b-119add7d4a71
@@ -1026,17 +1064,16 @@ function top(f,u,bnode,data)
 		
 		# flow velocity is normal to top boundary
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
+
+		# !!! only T equation
 		for i=1:ng
 			# f[i] = data.utop*u[i]/(ph"R"*u[iT])
 			f[i] = -data.u0*data.X0[i]*data.pn/(ph"R"*data.Tn)
 
-			# !!! test effect of change in u_in on pressure
-			#f[i] = -0.8 * data.u0*data.X0[i]*data.pn/(ph"R"*data.Tn)
-
-			
+						
 			# use species enthalpy (incl. Δh_formation) for conv. therm. eng. flux 1/2
 			# reactant gases enter control volume at Tref
-			@inline flux_entahlpy += f[i] * enthalpy_gas(Fluids[i], Tamb)
+			#@inline flux_entahlpy += f[i] * enthalpy_gas(Fluids[i], Tamb)
 			#f[i] = -data.u0*data.X0[i]*data.p/(ph"R"*data.Tamb)
 
 		end
@@ -1078,7 +1115,9 @@ function top(f,u,bnode,data)
 			flux_abs_w = alpha1_vis*G3_vis + alpha1_IR*G3_IR
 		end
 
+		# !!! only T equation
 		Tglass = u[iTw]
+		#Tglass = (160+273.15)*ufac"K"
 		# mean temperature
         Tm=0.5*(u[iT] + Tglass)
         # thermal conductivity at Tm and inlet composition X0 (H2/CO2 = 1/1)
@@ -1095,10 +1134,88 @@ function top(f,u,bnode,data)
 		f[iT] = -flux_irrad + flux_conv + flux_entahlpy
 
 		# calculate local window temperature from (local) flux balance
+		# !!! only T equation
+		#Twindow = (130+273.15)*ufac"K"
 		flux_conv_top_w = k_nat_conv*(u[iTw]-Tamb)
 		flux_emit_w = uc_window.eps*ph"σ"*u[iTw]^4
+		#flux_conv_top_w = k_nat_conv*(Twindow-Tamb)
+		#flux_emit_w = uc_window.eps*ph"σ"*Twindow^4
 		f[iTw] = -flux_conv -flux_abs_w +flux_conv_top_w +2*flux_emit_w
 	end
+end
+
+# ╔═╡ 40906795-a4dd-4e4a-a62e-91b4639a48fa
+function bottom(f,u,bnode,data)
+	if bnode.region==Γ_bottom # bottom boundary
+		(;iT,ip,iTp,Fluids,ubot,Tamb,k_nat_conv,lc_frit,lc_plate,lc_h,Nu,X0) = data
+		ng=ngas(data)
+
+		# !!! only T equation
+		#X=MVector{ngas(data),eltype(u)}(undef)
+		#@inline mole_frac!(bnode,data,X,u)
+		# use species enthalpy (incl. Δh_formation) for conv. therm. eng. flux 1/2
+		#@inline hmix=enthalpy_mix(Fluids, u[iT], X)
+		#flux_entahlpy=ubot*u[ip]/(ph"R"*u[iT])*hmix
+
+		# irradiation exchange between porous frit (1) and Al bottom plate (2)
+		# porous frit properties (1)
+		rho1_IR=lc_frit.rho_IR
+		alpha1_IR=lc_frit.alpha_IR
+		eps1=lc_frit.eps
+		# Al bottom plate properties (2)
+		rho2_IR=lc_plate.rho_IR
+		alpha2_IR=lc_plate.alpha_IR
+		eps2=lc_plate.eps
+		#(;eps1,alpha1_IR,rho1_IR,rho2_IR,eps2,rho2_IR) = lower_chamber
+		σ=ph"σ"
+
+		# !!! only T equation
+		Tplate = u[iTp]
+		#Tplate = (130+273.15)*ufac"K"
+		flux_irrad = -eps1*σ*u[iT]^4 + alpha1_IR/(1-rho1_IR*rho2_IR)*(eps2*σ*Tplate^4+rho2_IR*eps1*σ*u[iT]^4)
+
+		# conductive heat flux through top chamber
+		# mean temperature
+        Tm=0.5*(u[iT] + Tplate)
+        # thermal conductivity at Tm and outlet composition X
+		# !!! only T equation
+        #@inline _,λf=dynvisc_thermcond_mix(data, Tm, X)
+		@inline _,λf=dynvisc_thermcond_mix(data, Tm, X0)
+
+        # flux_cond = -λf*(u[iT]-Tplate)/lc_h # positive flux in positive z coord.
+		dh=2*lc_h
+		kconv=Nu*λf/dh*ufac"W/(m^2*K)"
+		flux_conv = kconv*(u[iT]-Tm) # positive flux in negative z coord. (towards plate)
+		
+		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
+		# f[iT] = -flux_irrad + flux_entahlpy - flux_cond
+		# !!! only T equation
+		#f[iT] = -flux_irrad + flux_entahlpy + flux_conv		
+		f[iT] = -flux_irrad + flux_conv		
+
+		# !!! only T equation
+		for i=1:ng
+			# specify flux at boundary: flow velocity is normal to bot boundary
+			f[i] = ubot*u[i]/(ph"R"*u[iT])			
+		end
+
+		# !!! only T equation
+		# calculate (local) plate temperature from (local) flux balance
+		flux_conv_bot_p = k_nat_conv*(u[iTp]-Tamb)
+		flux_emit_p = lc_plate.eps*ph"σ"*u[iTp]^4
+		G1_IR = (eps1*ph"σ"*u[iT]^4 + rho1_IR*eps2*ph"σ"*u[iTp]^4)/(1-rho1_IR*rho2_IR)
+		flux_abs_p = alpha2_IR*G1_IR
+		f[iTp] =  -flux_conv -flux_abs_p +flux_conv_bot_p +2*flux_emit_p
+	end
+end
+
+# ╔═╡ 29d66705-3d9f-40b1-866d-dd3392a1a268
+function bcond(f,u,bnode,data)
+	top(f,u,bnode,data)
+	bottom(f,u,bnode,data)
+	side(f,u,bnode,data)
+	#bottom_rim(f,u,bnode,data)
+	
 end
 
 # ╔═╡ c0de2aff-8f7f-439c-b931-8eb8fbfcd45d
@@ -1129,98 +1246,6 @@ function mole_frac!(node,data,X,u::VoronoiFVM.BNodeUnknowns)
 		X[i] = X[i] / sump
 	end
 	nothing
-end
-
-# ╔═╡ 40906795-a4dd-4e4a-a62e-91b4639a48fa
-function bottom(f,u,bnode,data)
-	if bnode.region==Γ_bottom # bottom boundary
-		(;iT,ip,iTp,Fluids,ubot,Tamb,k_nat_conv,lc_frit,lc_plate,lc_h,Nu) = data
-		ng=ngas(data)
-
-		X=MVector{ngas(data),eltype(u)}(undef)
-		@inline mole_frac!(bnode,data,X,u)
-		
-
-		# use species enthalpy (incl. Δh_formation) for conv. therm. eng. flux 1/2
-		@inline hmix=enthalpy_mix(Fluids, u[iT], X)
-		flux_entahlpy=ubot*u[ip]/(ph"R"*u[iT])*hmix
-
-		# irradiation exchange between porous frit (1) and Al bottom plate (2)
-		# porous frit properties (1)
-		rho1_IR=lc_frit.rho_IR
-		alpha1_IR=lc_frit.alpha_IR
-		eps1=lc_frit.eps
-		# Al bottom plate properties (2)
-		rho2_IR=lc_plate.rho_IR
-		alpha2_IR=lc_plate.alpha_IR
-		eps2=lc_plate.eps
-		#(;eps1,alpha1_IR,rho1_IR,rho2_IR,eps2,rho2_IR) = lower_chamber
-		σ=ph"σ"
-
-		Tplate = u[iTp]
-		flux_irrad = -eps1*σ*u[iT]^4 + alpha1_IR/(1-rho1_IR*rho2_IR)*(eps2*σ*Tplate^4+rho2_IR*eps1*σ*u[iT]^4)
-
-		# conductive heat flux through top chamber
-		# mean temperature
-        Tm=0.5*(u[iT] + Tplate)
-        # thermal conductivity at Tm and outlet composition X
-        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X)
-
-        # flux_cond = -λf*(u[iT]-Tplate)/lc_h # positive flux in positive z coord.
-		dh=2*lc_h
-		kconv=Nu*λf/dh*ufac"W/(m^2*K)"
-		flux_conv = kconv*(u[iT]-Tm) # positive flux in negative z coord. (towards plate)
-		
-		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
-		# f[iT] = -flux_irrad + flux_entahlpy - flux_cond
-		f[iT] = -flux_irrad + flux_entahlpy + flux_conv		
-		
-		for i=1:ng
-			# specify flux at boundary: flow velocity is normal to bot boundary
-			f[i] = ubot*u[i]/(ph"R"*u[iT])			
-		end
-
-		# calculate (local) plate temperature from (local) flux balance
-		flux_conv_bot_p = k_nat_conv*(u[iTp]-Tamb)
-		flux_emit_p = lc_plate.eps*ph"σ"*u[iTp]^4
-		G1_IR = (eps1*ph"σ"*u[iT]^4 + rho1_IR*eps2*ph"σ"*u[iTp]^4)/(1-rho1_IR*rho2_IR)
-		flux_abs_p = alpha2_IR*G1_IR
-		f[iTp] =  -flux_conv -flux_abs_p +flux_conv_bot_p +2*flux_emit_p
-	end
-end
-
-# ╔═╡ edd9fdd1-a9c4-4f45-8f63-9681717d417f
-function side(f,u,bnode,data)
-	# side wall boundary condition
-	(;iT,h,cath,shellh,k_nat_conv,delta_gap,Tamb)=data
-	# outer side wall boundaries
-	#if bnode.region==Γ_side_back || bnode.region==Γ_side_right
-	# all sides for complete domain
-	if bnode.region==Γ_side_front || bnode.region==Γ_side_right || bnode.region==Γ_side_back || bnode.region==Γ_side_left
-
-		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
-		#f[iT] = α_w*(u[iT]-Tamb)
-		#f[iT] = shellh/(h+cath)*k_nat_conv*(u[iT]-Tamb)
-		X=MVector{ngas(data),eltype(u)}(undef)
-		@inline mole_frac!(bnode,data,X,u)
-		@inline _,λf=dynvisc_thermcond_mix(data, u[iT], X)
-		# include shell height
-		#f[iT] = (u[iT]-Tamb)/(delta_gap/λf+(h+cath)/(shellh*k_nat_conv))
-		# w/o shell height
-		f[iT] = (u[iT]-Tamb)/(delta_gap/λf+1/k_nat_conv)
-		
-	end
-end
-
-# ╔═╡ 29d66705-3d9f-40b1-866d-dd3392a1a268
-function bcond(f,u,bnode,data)
-	top(f,u,bnode,data)
-	bottom(f,u,bnode,data)
-	side(f,u,bnode,data)
-	bottom_rim(f,u,bnode,data)
-	# bottom rim
-	#(;iT)=data
- 	#boundary_dirichlet!(f,u,bnode,iT,Γ_bottom_rim,50+273.15)
 end
 
 # ╔═╡ 2191bece-e186-4d8e-8a21-3830441baf11
@@ -1257,7 +1282,7 @@ end
 
 # ╔═╡ ed7941c4-0485-4d84-ad5b-383eb5cae70a
 function flux(f,u,edge,data)
-	(;ip, iT, k, Fluids) = data
+	(;ip, iT, k, X0, Fluids) = data
 
 	ng=ngas(data)
 	# !!!ALLOC Use MVector with static size information instead of Vector
@@ -1272,29 +1297,31 @@ function flux(f,u,edge,data)
 	# !!!ALLOC All functions which take MVectors to be stack allocated
 	# as argument must be inlined. Here, we use the new "callsite inline"
 	# wich is new with Julia 1.8.
-        
+
+	# !!! only T equation
 	@inline mole_frac!(edge,data,X,u)
-	@inline cf=heatcap_mix(Fluids, Tm, X)
-	@inline μ,λf=dynvisc_thermcond_mix(data, Tm, X)
+	#@inline cf=heatcap_mix(Fluids, Tm, X)
+	#@inline μ,λf=dynvisc_thermcond_mix(data, Tm, X)
+	@inline cf=heatcap_mix(Fluids, Tm, X0)
+	@inline μ,λf=dynvisc_thermcond_mix(data, Tm, X0)
+	
  	λbed=kbed(data,λf)*λf
 	#λbed=lambda_eff_AC(data,λf)
 
+	# !!! only T equation
 	# Darcy flow
 	ud=-k/μ * δp
 	
-	# vh=project(edge,(0,ud)) # 2D
-	#vh=project(edge,(0,0,ud)) # 3D
-	vh=project(edge,(zero(eltype(u)),zero(eltype(u)),ud)) # 3D
 
 	# !!!ALLOC Use MMatriy with static size information instef of Matrix
 	M = MMatrix{ngas(data),ngas(data),eltype(u)}(undef)
 	D = MMatrix{ngas(data),ngas(data),eltype(u)}(undef)
+	# !!! only T equation		
 	@inline M_matrix!(M,D,Tm,pm,X,data)
    	
-		
+	# !!! only T equation		
 	for i=1:ng
 		DK = DK_eff(data,Tm,i)
-		#bp,bm=fbernoulli_pm(vh/DK)
 		# !!! without projection of velocity on edge
 		bp,bm=fbernoulli_pm(ud/DK)		
 		F[i] = (bm*u[i,1]-bp*u[i,2])/(ph"R"*Tm)
@@ -1306,23 +1333,24 @@ function flux(f,u,edge,data)
 	# as argument must be inlined. Here, we use the new "callsite inline"
 	# wich is new with Julia 1.8
 	# inplace_linsolve  is made available from VoronoiFVM 1.3.2
+	# !!! only T equation		
 	@inline inplace_linsolve!(M,F)
 	
 	@views f[1:ng] .= F	
 
-	#f[iT]= λbed*(Bm*(u[iT,1]-Tamb)-Bp*(u[iT,2]-Tamb))		
-
 	# use species molar fluxes for thermal drift contribution
-	conv=zero(eltype(u))
-	for i=1:ng
-		# use species enthalpy (incl. Δh_formation) for conv. therm. eng. flux 1/3
-		#conv += J[i] * enthalpy_gas(Fluids[i], T)
-		conv += F[i] * enthalpy_gas(Fluids[i], Tm)
-	end
+	# !!! only T equation		
+	#conv=zero(eltype(u))
+	#for i=1:ng
+	#	# use species enthalpy (incl. Δh_formation) for conv. therm. eng. flux 1/3
+	#	conv += F[i] * enthalpy_gas(Fluids[i], Tm)
+	#end
 	# use species enthalpy (incl. Δh_formation) for conv. therm. eng. flux 2/3
-	Bp,Bm = fbernoulli_pm(conv/λbed/Tm)
-		# thermal energy flux
-	f[iT]= λbed*(Bm*u[iT,1]-Bp*u[iT,2])		
+	
+	# !!! only T equation		
+	#Bp,Bm = fbernoulli_pm(conv/λbed/Tm)
+	#f[iT]= λbed*(Bm*u[iT,1]-Bp*u[iT,2])
+	f[iT]= λbed*(u[iT,1]-u[iT,2])
 		
 	#f[ip] via reaction: ∑pi = p
 end
@@ -1330,7 +1358,6 @@ end
 # ╔═╡ 333b5c80-259d-47aa-a441-ee7894d6c407
 function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:cellwise )
 
-	
 	grid=grid_fun(data)
 	(;iT,iTw,iTp,p,X0,Tamb)=data
 	ng=ngas(data)
@@ -1341,22 +1368,26 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 							reaction=reaction,
 							bcondition=bcond,
 							bflux=bflux,
-		                    assembly
+		                    #assembly
 							)
-	enable_species!(sys; species=collect(1:(ng+2))) # gas phase species + p + T
-	enable_boundary_species!(sys, iTw, [Γ_top_cat,Γ_top_frit]) # window temperature as boundary species in upper chamber
-	enable_boundary_species!(sys, iTp, [Γ_bottom]) # plate temperature as boundary species in lower chamber
 	
+	# !!! only T equation
+	enable_species!(sys; species=collect(1:(ng+2))) # gas phase species + p + T)
 
-	# this is not  good...
-	#precon_linear=BlockPreconditioner(partitioning=partitioning(sys),factorization=UMFPACKFactorization())
 	
+	#enable_species!(sys; species=collect(1:(ng+2))) # gas phase species + p + T
+	enable_boundary_species!(sys, iTw, [Γ_top_cat,Γ_top_frit]) # window temperature as boundary species in upper chamber
+	#enable_boundary_species!(sys, iTp, [Γ_bottom, Γ_bottom_rim]) # plate temperature as boundary species in lower chamber
+	enable_boundary_species!(sys, iTp, [Γ_bottom])
+	
+	# !!! only T equation
 	inival=unknowns(sys)
 	inival[:,:].=1.0*p
 	for i=1:ng
 		inival[i,:] .*= X0[i]
 	end
 	inival[[iT,iTw,iTp],:] .= Tamb
+	#inival[iT,:] .= Tamb
 
 
 	sol=solve(sys;inival,control=control(sys))
@@ -1370,7 +1401,6 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 	 	function Intbot(f,u,bnode,data)			
 	 		X=zeros(eltype(u), ng)
 	 		mole_frac!(bnode,data,X,u)
-	 		# top boundary(cat/frit)
 	 		if bnode.region==Γ_bottom
 	 			for i=1:ng
 	 				f[i] = data.Fluids[i].MW*X[i]
@@ -1379,10 +1409,10 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 	 		end
 	 	end
 		
-	 	MWavg=sum(integrate(sys,Intbot,sol; boundary=true)[1:ng,Γ_bottom])/(data.Ac/4)
+	 	MWavg=sum(integrate(sys,Intbot,sol; boundary=true)[1:ng,Γ_bottom])/data.Ac
 	 	ndotbot=data.mdotin/MWavg
 		 
-	 	Tavg=sum(integrate(sys,Intbot,sol; boundary=true)[iT,Γ_bottom])/(data.Ac/4)
+	 	Tavg=sum(integrate(sys,Intbot,sol; boundary=true)[iT,Γ_bottom])/data.Ac
 	 	
 		data.ubot = ndotbot*ph"R"*Tavg/(1.0*ufac"bar")/data.Ac
 	 
@@ -1414,7 +1444,7 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 	 				  		Δu_opt=1.0e5, # large value, due to unit Pa of pressure?
 	 )
 	
-	embed=[0.0,0.5,1.0]
+	embed=[0.0,1.0]
 	
 	sol=solve(sys;control=mycontrol,inival,embed,pre,)
 
@@ -1478,7 +1508,7 @@ md"""
 let
 	(;iT,gni)=data_embed
 
-	scalarplot(grid, sol[gni[:CO],:],levelalpha=0.8,colormap=:inferno,zoom=1.6, resolution=(800,600),Plotter=PlutoVista)
+	scalarplot(grid, sol[gni[:H2],:],levelalpha=0.8,colormap=:inferno,resolution=(800,600),Plotter=PlutoVista)
 end
   ╠═╡ =#
 
@@ -1540,17 +1570,18 @@ let
 	cols = distinguishable_colors(ng+1, [RGB(1,1,1), RGB(0,0,0)], dropseed=true)
 	pcols = map(col -> (red(col), green(col), blue(col)), cols)
 
-	#p1=Plots.plot(title="Partial Pressures", size=(450,450), xguide="Height / mm", yguide="Pressure / bar",legend=:outertopright)
-	p1=Plots.plot(title="Molar Fractions", size=(450,450), xguide="Height / mm", yguide="Molar Fraction / -",legend=:outertopright)
+	p1=Plots.plot(title="Partial Pressures", size=(450,450), xguide="Height / mm", yguide="Pressure / bar",legend=:outertopright)
+	#p1=Plots.plot(title="Molar Fractions", size=(450,450), xguide="Height / mm", yguide="Molar Fraction / -",legend=:outertopright)
 	for i in 1:ng
-		Plots.plot!(p1, grid_./ufac"mm", vec(sol_[i])./vec(sol_[ip]), label="$(gn[i])", lw=2, ls=:auto, color=cols[i])
+		#Plots.plot!(p1, grid_./ufac"mm", vec(sol_[i])./vec(sol_[ip]), label="$(gn[i])", lw=2, ls=:auto, color=cols[i])
+		Plots.plot!(p1, grid_./ufac"mm", vec(sol_[i])./ufac"bar", label="$(gn[i])", lw=2, ls=:auto, color=cols[i])
 	end
-	#Plots.plot!(p1, grid_./ufac"mm", vec(sol_[ip])./ufac"bar", color=cols[ip], label="total p", lw=2)
-	#lens!(10*[0.45, .525], [0.092, 0.1], inset = (1, bbox(0.1, 0.15, 0.25, 0.25)))
-	#lens!(10*[0.45, .525], [0.49, 0.5], inset = (1, bbox(0.5, 0.15, 0.25, 0.25)))
+	Plots.plot!(p1, grid_./ufac"mm", vec(sol_[ip])./ufac"bar", color=cols[ip], label="total p", lw=2)
+	lens!(10*[0.45, .525], [0.092, 0.1], inset = (1, bbox(0.1, 0.15, 0.25, 0.25)))
+	lens!(10*[0.45, .525], [0.49, 0.5], inset = (1, bbox(0.5, 0.15, 0.25, 0.25)))
 
-	lens!(10*[0.45, .525], [0.068, 0.078], inset = (1, bbox(0.15, 0.56, 0.20, 0.15)))
-	lens!(10*[0.45, .525], [0.36, 0.38], inset = (1, bbox(0.55, 0.53, 0.25, 0.15)))
+	#lens!(10*[0.45, .525], [0.068, 0.078], inset = (1, bbox(0.15, 0.56, 0.20, 0.15)))
+	#lens!(10*[0.45, .525], [0.36, 0.38], inset = (1, bbox(0.55, 0.53, 0.25, 0.15)))
 
 	p=Plots.plot(p1, size=(500,300))
 	#Plots.plot(p1,p2, layout=(1,2), size=(700,450))
@@ -2443,6 +2474,7 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─2ed3223e-a604-410e-93d4-016580f49093
 # ╟─390c7839-618d-4ade-b9be-ee9ed09a77aa
 # ╠═37adb8da-3ad5-4b41-8f08-85da19e15a53
+# ╠═b1ec9532-4489-4777-a50c-35d1f0749d74
 # ╠═e21b9d37-941c-4f2c-9bdf-956964428f90
 # ╠═0a911687-aff4-4c77-8def-084293329f35
 # ╠═ff58b0b8-2519-430e-8343-af9a5adcb135
@@ -2474,7 +2506,6 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─634d1042-b110-45ef-bfbe-51b827fc922f
 # ╠═29f34e55-91ab-4b6d-adb2-a58412af95f6
 # ╠═f9ba467a-cefd-4d7d-829d-0889fc6d0f5e
-# ╠═ecb8df4c-fb61-472b-ad0b-e55b49905442
 # ╠═e459bbff-e065-49e1-b91b-119add7d4a71
 # ╠═48b99de4-682d-439b-935e-408510c44e37
 # ╟─cfa366bc-f8b9-4219-b210-51b9fc5ff3f6
