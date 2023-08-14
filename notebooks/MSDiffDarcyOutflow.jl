@@ -87,23 +87,6 @@ i = 1 ... \nu \\
 where $\rho$ is the mixture density, $\vec v$ is the mass-averaged superficial mixture velocity $\vec N_i$ is the molar flux ($\frac{\text{mol}}{\text{m}^2 \text{s}}$) and $R_i$ is the molar volumetric source/sink ($\frac{\text{mol}}{\text{m}^3 \text{s}}$) of gas phase species $i$.
 """
 
-# ╔═╡ 44d91c2e-8082-4a90-89cc-81aba783d5ac
-md"""
-Boundary conditions for the transport of gas phase species cover in and outflow boundary conditions at the bottom and top surfaces of the modelling domain with no-flux conditins applied elsewhere. In the catalyst layer, volumetric catalytic reactions take place.
-"""
-
-# ╔═╡ 2f9e2a8c-3db0-45e0-8633-36027b62b5b2
-md"""
-```math
-\begin{aligned}
-    \nabla \cdot \vec v &=0\\
-	\vec v&=-k\nabla p\\
-    \nabla \cdot \vec j &=0\\
-   \vec j&= - D\nabla c - c\vec v 	
-\end{aligned}
-```
-"""
-
 # ╔═╡ e8b49b2e-d19e-4d46-a399-9972919cd680
 md"""
 This function describes the outflow boundary condition.
@@ -578,8 +561,6 @@ R=integrate(sys,reaction,sol)
 # ╠═ed7941c4-0485-4d84-ad5b-383eb5cae70a
 # ╠═78cf4646-c373-4688-b1ac-92ed5f922e3c
 # ╠═6779db7a-3823-4a41-8b2d-5558dcd73943
-# ╠═44d91c2e-8082-4a90-89cc-81aba783d5ac
-# ╟─2f9e2a8c-3db0-45e0-8633-36027b62b5b2
 # ╠═a8d57d4c-f3a8-42b6-9681-29a1f0724f15
 # ╟─e8b49b2e-d19e-4d46-a399-9972919cd680
 # ╠═d4bc847b-052f-4d40-9211-12dbe7e06ee1
@@ -607,5 +588,5 @@ R=integrate(sys,reaction,sol)
 # ╠═fc20eee6-5cc6-4ae4-849e-91cf8989316d
 # ╠═2a4c8d15-168f-4908-b24b-8b65ec3ea494
 # ╠═e1602429-74fa-4949-bb0f-ecd681f52e42
-# ╠═071a0ebb-d563-402b-a3ca-af110f1b37ee
+# ╟─071a0ebb-d563-402b-a3ca-af110f1b37ee
 # ╠═87d34a89-d53f-4f27-b8c4-113a6facaad5
