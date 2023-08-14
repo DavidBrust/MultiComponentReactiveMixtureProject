@@ -4,6 +4,16 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+end
+
 # ╔═╡ 11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 begin
 	using Pkg
@@ -129,7 +139,6 @@ begin
 	# kinetic constants for simple reactions
 	kp::Float64=1.0
 	km::Float64=0.1
-	lcat::Float64=0.0
 		
 	ip::Int64=NG+1 # index of total pressure variable
 	
@@ -172,7 +181,8 @@ begin
 	pn::Float64 = 1.0*ufac"bar"
 	Tn::Float64 = 273.15*ufac"K"
 
-	Qflow::Float64=1480.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
+	#Qflow::Float64=1480.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
+	Qflow::Float64=14800.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
 
 	MWin::Float64 = molarweight_mix(Fluids, X0)
 	mdotin::Float64=MWin*Qflow*pn/(ph"R"*Tn)*ufac"kg/s"
@@ -196,35 +206,30 @@ end;
 
 # ╔═╡ 78cf4646-c373-4688-b1ac-92ed5f922e3c
 function reaction(f,u,node,data)
-	(;ip,kp,km,gni,lcat,Tamb)=data
+	(;ip,kp,km,gni,Tamb)=data
 
-	#if node.region == 2 # catalyst layer
-	#	r=lcat * (kp*u[gni[:H2]]/ufac"bar"*u[gni[:CO2]]/ufac"bar"-km*u[gni[:H2O]]/ufac"bar"*u[gni[:CO]]/ufac"bar")/(ph"R"*Tamb)
-	#	
-	#	
-	#	f[gni[:H2]]=r
-	#	f[gni[:CO2]]=r
-	#	f[gni[:H2O]]=-r
-	#	f[gni[:CO]]=-r
-	#end
+	if node.region == 2 # catalyst layer
+
+		# H2 + CO2 <-> H2O + CO
+		#r = kp*u[gni[:H2]]/ufac"bar"*u[gni[:CO2]]/ufac"bar"-km*u[gni[:H2O]]/ufac"bar"*u[gni[:CO]]/ufac"bar"		
+		
+		#f[gni[:H2]]=r
+		#f[gni[:CO2]]=r
+		#f[gni[:H2O]]=-r
+		#f[gni[:CO]]=-r
+
+		# 4 H2 + CO2 <-> 2 H2O + CH4
+		r = kp *(u[gni[:H2]]/ufac"bar")^4 *u[gni[:CO2]]/ufac"bar" -km *(u[gni[:H2O]]/ufac"bar")^2	*u[gni[:CH4]]/ufac"bar"		
+		
+		f[gni[:H2]]=4*r
+		f[gni[:CO2]]=r
+		f[gni[:H2O]]=-2*r
+		f[gni[:CH4]]=-r
+	end
 	
 	ng=ngas(data)
 	# last species i=ng via ∑pi = p
 	@views f[ng]=u[ip]-sum(u[1:ng])
-end
-
-# ╔═╡ 6779db7a-3823-4a41-8b2d-5558dcd73943
-function storage(f,u,node,data)
-	(;Tamb)=data
-	ng=ngas(data)
-	#for i=1:(ng+1)
-	for i=1:ng
-		#f[i]=u[i]/(ph"R"*Tamb)
-		f[i]=u[i]
-	end
-	# total pressure
-	#f[ng+1] = rho_mix_storage(u,data)
-	f[ng+1] = u[ng+1]
 end
 
 # ╔═╡ a8d57d4c-f3a8-42b6-9681-29a1f0724f15
@@ -410,8 +415,30 @@ function rho_mix_storage(u,data)
 	rho /= ph"R"*Tamb	
 end
 
+# ╔═╡ 6779db7a-3823-4a41-8b2d-5558dcd73943
+function storage(f,u,node,data)
+	(;Tamb)=data
+	ng=ngas(data)
+	#for i=1:(ng+1)
+	for i=1:ng
+		f[i]=u[i]/(ph"R"*Tamb)
+		#f[i]=u[i]
+	end
+	# total pressure
+	f[ng+1] = rho_mix_storage(u,data)
+	#f[ng+1] = u[ng+1]
+end
+
+# ╔═╡ 2790b550-3105-4fc0-9070-d142c19678db
+md"""
+## (Partial) Pressure Profiles
+"""
+
+# ╔═╡ dcd68d6a-5661-4efd-bbce-f7de99c99d79
+times=[0,100_000]
+
 # ╔═╡ 333b5c80-259d-47aa-a441-ee7894d6c407
-function main(;data=ModelData(),nref=0,control = sys->SolverControl())
+function main(;data=ModelData(),nref=0)
 
 	grid=grid1D()
 	(;p,X0,Tamb)=data
@@ -421,7 +448,7 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl())
 							data=data,
 							flux=flux,
 							reaction=reaction,
-							#storage=storage,
+							storage=storage,
 							bcondition=bcond,					
 							boutflow=boutflow,
 							outflowboundaries=[Γ_right]
@@ -435,40 +462,18 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl())
 		inival[i,:] .*= X0[i]
 	end
 
-	sol=solve(sys;inival=inival,verbose="en")
 	
-	#times=[0.0, 10.0]
-
-	#control=SolverControl(nothing,sys)
-	#control.damp_initial=1
-	#control.damp_growth=1.2
-	#control.force_first_step=true
-	#control.Δt=1.0e-2
-	#control.Δu_opt=0.1
-	
-	#control.Δt_min=1.0e-6
-	
-	#sol=solve(sys;inival=inival,times,control,verbose="en")
-
-	#function pre(sol,par)
-	#	lcats=[0.001, 1.0]
-	#	data.lcat = minimum(lcats) + par*(maximum(lcats)-minimum(lcats))	
-	#end
-
-	#mycontrol=control(sys ;
-	# 				  		handle_exceptions=true,
-	#						Δp_min=1.0e-4,					  
-	# 				  		Δp=0.25,
-    #                        #Δp=0.05,
-	 #				  		Δp_grow=2.0,
-    #                        #Δp_grow=1.1,
-	 #						#Δu_opt=1.0e4,
-	 #				  		Δu_opt=1.0e5, # large value, due to unit Pa of pressure?
-	 #')
-	
-	#embed=[0.0,1.0]
-	
-	#sol=solve(sys;inival,embed)
+	control = SolverControl(nothing, sys;)
+		control.handle_exceptions=true
+		control.damp_initial=1
+		control.damp_growth=1.2
+		control.force_first_step=true
+		control.Δt=1.0e-4
+		control.Δu_opt=1.0e5		
+		control.Δt_min=1.0e-6
+		control.Δt_max=1.0e3
+	sol=solve(sys;inival=inival,times,control,verbose="en")
+		
 
 	sol,grid,sys,data
 end;
@@ -486,20 +491,23 @@ begin
 		kwargs...)
 	end
 	
-	sol_,grid,sys,data_embed=main(;data=ModelData(),control=mycontrol);
+	solt,grid,sys,data_embed=main(;data=ModelData());
 	
-	if sol_ isa VoronoiFVM.TransientSolution
-		sol = copy(sol_(sol_.t[end]))
-	else
-		sol = copy(sol_)
-	end
+	#if sol_ isa VoronoiFVM.TransientSolution
+	#	sol = copy(sol_(sol_.t[end]))
+	#else
+	#	sol = copy(sol_)
+	#end
 end;
   ╠═╡ =#
 
-# ╔═╡ 2790b550-3105-4fc0-9070-d142c19678db
-md"""
-## (Partial) Pressure Profiles
-"""
+# ╔═╡ 36d02d06-6d0d-4b98-8d60-f2df0afaeaad
+@bind t Slider(range(times...,length=201),show_value=true,default=times[end])
+
+# ╔═╡ 20e29b19-9f23-4a1c-8743-06ec524c0385
+#=╠═╡
+sol=solt(t);
+  ╠═╡ =#
 
 # ╔═╡ 8fcf636c-2330-4eda-9bb3-298e6a53dfd1
 #=╠═╡
@@ -510,6 +518,8 @@ let
 	scalarplot!(vis, grid, sol[gni[:N2],:], label="N2", color=:green, clear=false)
 	scalarplot!(vis, grid, sol[gni[:H2],:], label="H2", color=:red, clear=false)	
 	scalarplot!(vis, grid, sol[gni[:CO2],:], label="CO2", color=:blue, clear=false)
+	scalarplot!(vis, grid, sol[gni[:CH4],:], label="CO", color=:purple, clear=false)
+	scalarplot!(vis, grid, sol[gni[:H2O],:], label="H2O", color=:cyan, clear=false)
 	reveal(vis)
 end
   ╠═╡ =#
@@ -536,14 +546,24 @@ end
 function checkinout(sys,sol)
 	
 	tfact=TestFunctionFactory(sys)
-	tf_in=testfunction(tfact,[Γ_left],[Γ_right])
-	tf_out=testfunction(tfact,[Γ_right],[Γ_left])
+	tf_in=testfunction(tfact,[Γ_right],[Γ_left])
+	tf_out=testfunction(tfact,[Γ_left],[Γ_right])
 	(;in=integrate(sys,tf_in,sol),out=integrate(sys,tf_out,sol) )
 end
 
 # ╔═╡ eb44075f-fbd3-4717-a440-41cb4eda8de1
 #=╠═╡
-checkinout(sys,sol).in
+checkinout(sys,sol)
+  ╠═╡ =#
+
+# ╔═╡ 071a0ebb-d563-402b-a3ca-af110f1b37ee
+md"""
+## Outflow == Reaction?
+"""
+
+# ╔═╡ 87d34a89-d53f-4f27-b8c4-113a6facaad5
+#=╠═╡
+R=integrate(sys,reaction,sol)
   ╠═╡ =#
 
 # ╔═╡ Cell order:
@@ -578,9 +598,14 @@ checkinout(sys,sol).in
 # ╟─e25e7b7b-47b3-457c-995b-b2ee4a87710a
 # ╠═3a35ac76-e1b7-458d-90b7-d59ba4f43367
 # ╟─2790b550-3105-4fc0-9070-d142c19678db
+# ╠═dcd68d6a-5661-4efd-bbce-f7de99c99d79
+# ╠═20e29b19-9f23-4a1c-8743-06ec524c0385
+# ╠═36d02d06-6d0d-4b98-8d60-f2df0afaeaad
 # ╠═8fcf636c-2330-4eda-9bb3-298e6a53dfd1
 # ╟─8e0fdbc7-8e2b-4ae9-8a31-6f38baf36ef3
 # ╠═eb44075f-fbd3-4717-a440-41cb4eda8de1
 # ╠═fc20eee6-5cc6-4ae4-849e-91cf8989316d
 # ╠═2a4c8d15-168f-4908-b24b-8b65ec3ea494
 # ╠═e1602429-74fa-4949-bb0f-ecd681f52e42
+# ╠═071a0ebb-d563-402b-a3ca-af110f1b37ee
+# ╠═87d34a89-d53f-4f27-b8c4-113a6facaad5
