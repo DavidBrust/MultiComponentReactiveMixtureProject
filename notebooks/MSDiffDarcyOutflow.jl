@@ -4,16 +4,6 @@
 using Markdown
 using InteractiveUtils
 
-# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
-macro bind(def, element)
-    quote
-        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
-        local el = $(esc(element))
-        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
-        el
-    end
-end
-
 # ╔═╡ 11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 begin
 	using Pkg
@@ -40,7 +30,7 @@ PlutoUI.TableOfContents(title="M-S Transport + Darcy")
 
 # ╔═╡ 57117131-8c83-4788-9f8e-f0b1b9404f0a
 function grid1D()
-	X=0:0.01:1
+	X=0:0.005:1
 	grid=simplexgrid(X)
 
 	# catalyst region
@@ -137,7 +127,7 @@ begin
 		#x[gni[:CH4]] = 1.0
 		#x[gni[:H2O]] = 1.0
 		#x[gni[:N2]] = 1.0
-		x[gni[:N2]] = 0.1
+		x[gni[:N2]] = 1.0
 		x/sum(x)
 	end # inlet composition	
 	
@@ -164,8 +154,11 @@ begin
 	pn::Float64 = 1.0*ufac"bar"
 	Tn::Float64 = 273.15*ufac"K"
 
+
+	#Qflow::Float64=0.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
+	Qflow::Float64=148.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
 	#Qflow::Float64=1480.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
-	Qflow::Float64=14800.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
+	#Qflow::Float64=14800.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
 
 	MWin::Float64 = molarweight_mix(Fluids, X0)
 	mdotin::Float64=MWin*Qflow*pn/(ph"R"*Tn)*ufac"kg/s"
@@ -202,7 +195,8 @@ function reaction(f,u,node,data)
 		#f[gni[:CO]]=-r
 
 		# 4 H2 + CO2 <-> 2 H2O + CH4
-		r = kp *(u[gni[:H2]]/ufac"bar")^4 *u[gni[:CO2]]/ufac"bar" -km *(u[gni[:H2O]]/ufac"bar")^2	*u[gni[:CH4]]/ufac"bar"		
+		#r = kp *(u[gni[:H2]]/ufac"bar")^4 *u[gni[:CO2]]/ufac"bar" -km *(u[gni[:H2O]]/ufac"bar")^2	*u[gni[:CH4]]/ufac"bar"		
+		r=zero(eltype(u))
 		
 		f[gni[:H2]]=4*r
 		f[gni[:CO2]]=r
@@ -212,7 +206,11 @@ function reaction(f,u,node,data)
 	
 	ng=ngas(data)
 	# last species i=ng via ∑pi = p
-	@views f[ng]=u[ip]-sum(u[1:ng])
+	#@views f[ng]=u[ip]-sum(u[1:ng])
+	#for i=1:ng
+		#f[ng] += u[i]
+	#end
+	#f[ng] = log(f[ng]/u[ip])
 end
 
 # ╔═╡ a8d57d4c-f3a8-42b6-9681-29a1f0724f15
@@ -231,7 +229,8 @@ function boutflow(f,u,edge,data)
 	for i=1:ng
 		# specify flux at boundary
 		k=outflownode(edge)		
-		f[i] = -darcyvelo(u,data)*u[i,k]/(ph"R"*Tamb)
+		#f[i] = -darcyvelo(u,data)*u[i,k]/(ph"R"*Tamb)
+		f[i] = -darcyvelo(u,data)*u[i,k]/(ph"R"*Tamb)*embedparam(edge)
 	end
 	
 end
@@ -249,26 +248,44 @@ function inlet(f,u,bnode,data)
 
 		for i=1:ng
 			# specify flux at inlet
-			f[i] = -X0[i]*u0*pn/(ph"R"*Tn)
+			f[i] = -X0[i]*u0*pn/(ph"R"*Tn)*embedparam(bnode)
 		
 		end
 
 		# inlet flow velocity
 		#f[ip] = -u0
 		# specify inlet mass fluxs
-		f[ip] = -mfluxin
+		#f[ip] = -mfluxin
 		
 	end
 end
 
 # ╔═╡ 29d66705-3d9f-40b1-866d-dd3392a1a268
 function bcond(f,u,bnode,data)
-	(;ip,p,u0,X0,Tamb)=data
+	(;ip,p,pn,Tn,u0,X0,Tamb,mfluxin)=data
 	ng=ngas(data)
 	
-	inlet(f,u,bnode,data)
+	#inlet(f,u,bnode,data)
+	for i=1:ng
+		#boundary_dirichlet!(f,u,bnode, species=i,region=Γ_left,value=u[ip]*X0[i])
+
+		boundary_robin!(f,u,bnode, species=i,region=Γ_left,factor=1.0e4,value=1.0e4*u[ip]*X0[i])
+
+		# interpolate between dirichlet and neumann b.c. (specify influx) via embedding
+		ϵ = embedparam(bnode) == 0.0 ? 1.0e-5 : embedparam(bnode)
+
+		val_dbc = p*X0[i]
+		#val_nbc = -X0[i]*u0*pn/(ph"R"*Tn)
+		val_nbc = X0[i]*u0*pn/(ph"R"*Tn)
+		
+		
+		#boundary_robin!(f,u,bnode,i,Γ_left, factor=(1.0-ϵ)/ϵ, value=(1.0-ϵ)/ϵ*( (1.0-ϵ)*val_dbc + ϵ*val_nbc ))
+	end
 	
 	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
+	#boundary_neumann!(f,u,bnode, species=ip, region=Γ_left,value=mfluxin)
+	
+	boundary_neumann!(f,u,bnode, species=ip, region=Γ_left,value=mfluxin*embedparam(bnode))
 end
 
 # ╔═╡ c0de2aff-8f7f-439c-b931-8eb8fbfcd45d
@@ -352,7 +369,7 @@ end
 
 # ╔═╡ ed7941c4-0485-4d84-ad5b-383eb5cae70a
 function flux(f,u,edge,data)
-	(;ip, X0, Tamb) = data
+	(;ip,gni,X0,Tamb,k,Fluids) = data
 
 	ng=ngas(data)
 
@@ -365,25 +382,65 @@ function flux(f,u,edge,data)
 
 	#@inline M_matrix!(M,D,Tm,pm,X,data)
 	#@inline M_matrix!(M,D,Tamb,0.5*(u[ip,1]+u[ip,2]),X,data)
-	@inline M_matrix!(M,D,X,data)
-	
+	#@inline M_matrix!(M,D,X,data)
+
+	rho = rho_mix_flux(u,data)
 	vh=darcyvelo(u,data)
+
+	f[ip]=rho*vh
+	
+	mu = 2.0e-5*ufac"Pa*s"
+	
+	@inline D_matrix!(data, D)
+	for i=1:ng
+		#M[i,i] = 1/DK_eff(data,Tamb,i)
+		#M[i,i] = 1/(DK_eff(data,Tamb,i) + ph"R"*Tamb*rho*k/Fluids[i].MW/mu)
+		M[i,i] = 1/(ph"R"*Tamb*rho*k/Fluids[i].MW/mu)
+	
+		for j=1:ng
+			if j != i
+				M[i,i] += (u[j,1]+u[j,2])/(u[ip,1]+u[ip,2])/(data.γ_τ*D[i,j])
+				M[i,j] = -(u[i,1]+u[i,2])/(u[ip,1]+u[ip,2])/(data.γ_τ*D[i,j])
+			end
+		end
+		
+	end
+	#M .*= (ph"R"*Tamb)
+	
+	
 	
 	for i=1:ng	
 		F[i] = (u[i,1]-u[i,2])/(ph"R"*Tamb)
+		#F[i] = (u[i,1]-u[i,2])
 	end
 	
 		
 	# computation of fluxes J
 	# inplace_linsolve  is made available from VoronoiFVM 1.3.2
 	@inline inplace_linsolve!(M,F)
+
+
+	# index of last species present in mixture
+	# apply closing relation for flux calc for this species
+	idls = gni[:N2]
+	for i=1:ng
+		# total flux = diffusive + convective
+		#f[i] = F[i] + vh*(u[i,1]+u[i,2])/2/(ph"R"*Tamb)
+		f[i] = F[i]
+		
+		f[idls] += f[i]
+	end
+	f[idls] = (f[ip] - f[idls])/Fluids[idls].MW
+
+	#f[ng] = (rho*vh - f[ng])/Fluids[ng].MW
 	
+		
+	#@views f[1:ng] .= F
+	#f[ng] = zero(eltype(u))
 	
-	@views f[1:ng] .= F
-	f[ng] = zero(eltype(u))
+	#@views f[ng] = -sum(f[1:(ng-1)])
 	#@views f[1:(ng-1)] .= F[1:(ng-1)]	
 	
-	f[ip]=rho_mix_flux(u,data)*vh
 end
 
 # ╔═╡ dd5e0a30-80ef-4eac-a014-b5a0f6a3c5fe
@@ -412,19 +469,11 @@ function storage(f,u,node,data)
 	#f[ng+1] = u[ng+1]
 end
 
-# ╔═╡ 2790b550-3105-4fc0-9070-d142c19678db
-md"""
-## (Partial) Pressure Profiles
-"""
-
-# ╔═╡ dcd68d6a-5661-4efd-bbce-f7de99c99d79
-times=[0,100_000]
-
 # ╔═╡ 333b5c80-259d-47aa-a441-ee7894d6c407
 function main(;data=ModelData(),nref=0)
 
 	grid=grid1D()
-	(;p,X0,Tamb)=data
+	(;ip,p,X0,Tamb)=data
 	ng=ngas(data)
 	
 	sys=VoronoiFVM.System( 	grid;
@@ -438,24 +487,42 @@ function main(;data=ModelData(),nref=0)
 							)
 	
 	enable_species!(sys; species=collect(1:(ng+1))) # gas phase species + p)	
+
+	lg=length(grid1D()[Coordinates])
 	
 	inival=unknowns(sys)
 	inival[:,:].=1.0*p
+	#inival[:,:].=1.5*p	
+	#inival[ip,:].=linspace(1.1,1.0,lg)
+	
 	for i=1:ng
+		#inival[i,:] .= inival[ip,:]*X0[i]
 		inival[i,:] .*= X0[i]
 	end
 
-	
+	# transient solver
+	#control = SolverControl(nothing, sys;)
+	#	control.handle_exceptions=true
+	#	control.damp_initial=1
+	#	control.damp_growth=1.2
+	#	control.force_first_step=true
+	#	control.Δt=1.0e-4
+	#	control.Δu_opt=1.0e5		
+	#	control.Δt_min=1.0e-6
+	#	control.Δt_max=1.0e3
+	#sol=solve(sys;inival=inival,times,control,verbose="en")
+
+	# steady-state solver
 	control = SolverControl(nothing, sys;)
 		control.handle_exceptions=true
-		control.damp_initial=1
-		control.damp_growth=1.2
-		control.force_first_step=true
-		control.Δt=1.0e-4
-		control.Δu_opt=1.0e5		
-		control.Δt_min=1.0e-6
-		control.Δt_max=1.0e3
-	sol=solve(sys;inival=inival,times,control,verbose="en")
+		control.Δp=1.0e-3
+		control.Δp_min=1.0e-6
+		control.Δp_grow=1.2
+		control.Δu_opt=1.0e5
+	
+	#sol=solve(sys;inival=inival,control,verbose="en")
+	embed=[0.0,1.0]
+	sol=solve(sys;inival=inival,control,embed,verbose="en")
 		
 
 	sol,grid,sys,data
@@ -465,31 +532,40 @@ end;
 # ╠═╡ skip_as_script = true
 #=╠═╡
 begin
-	function mycontrol(sys;kwargs...)
-		SolverControl(
-		gmres_umfpack(),
-		sys;
-		verbose="na",
-		log=true,
-		kwargs...)
-	end
 	
-	solt,grid,sys,data_embed=main(;data=ModelData());
+	sol_,grid,sys,data_embed=main(;data=ModelData());
 	
 	#if sol_ isa VoronoiFVM.TransientSolution
-	#	sol = copy(sol_(sol_.t[end]))
+	#	#sol = copy(sol_(sol_.t[end]))
+	#	sol = sol_(t)
 	#else
 	#	sol = copy(sol_)
 	#end
 end;
   ╠═╡ =#
 
-# ╔═╡ 36d02d06-6d0d-4b98-8d60-f2df0afaeaad
-@bind t Slider(range(times...,length=201),show_value=true,default=times[end])
+# ╔═╡ 2790b550-3105-4fc0-9070-d142c19678db
+md"""
+## (Partial) Pressure Profiles
+"""
 
-# ╔═╡ 20e29b19-9f23-4a1c-8743-06ec524c0385
+# ╔═╡ dcd68d6a-5661-4efd-bbce-f7de99c99d79
+times=[0,100_000]
+
+# ╔═╡ 37cd3558-15cc-4133-a0e0-e501a9b73889
 #=╠═╡
-sol=solt(t);
+sol_.t
+  ╠═╡ =#
+
+# ╔═╡ 36d02d06-6d0d-4b98-8d60-f2df0afaeaad
+#=╠═╡
+@bind t Slider(sol_.t,show_value=true)
+  ╠═╡ =#
+
+# ╔═╡ 55f305b8-47a2-4fdf-b1cb-39f95f3dfa36
+#=╠═╡
+sol=sol_(t)
+#sol=sol_[1]
   ╠═╡ =#
 
 # ╔═╡ 8fcf636c-2330-4eda-9bb3-298e6a53dfd1
@@ -507,15 +583,15 @@ let
 end
   ╠═╡ =#
 
+# ╔═╡ 87d34a89-d53f-4f27-b8c4-113a6facaad5
+#=╠═╡
+R=integrate(sys,reaction,sol)
+  ╠═╡ =#
+
 # ╔═╡ 8e0fdbc7-8e2b-4ae9-8a31-6f38baf36ef3
 md"""
 ## Flows Over Boundaries
 """
-
-# ╔═╡ fc20eee6-5cc6-4ae4-849e-91cf8989316d
-#=╠═╡
-integrate(sys,inlet,sol; boundary=true)[:,[Γ_left]] 
-  ╠═╡ =#
 
 # ╔═╡ 2a4c8d15-168f-4908-b24b-8b65ec3ea494
 #=╠═╡
@@ -537,16 +613,6 @@ end
 # ╔═╡ eb44075f-fbd3-4717-a440-41cb4eda8de1
 #=╠═╡
 checkinout(sys,sol)
-  ╠═╡ =#
-
-# ╔═╡ 071a0ebb-d563-402b-a3ca-af110f1b37ee
-md"""
-## Outflow == Reaction?
-"""
-
-# ╔═╡ 87d34a89-d53f-4f27-b8c4-113a6facaad5
-#=╠═╡
-R=integrate(sys,reaction,sol)
   ╠═╡ =#
 
 # ╔═╡ Cell order:
@@ -580,13 +646,12 @@ R=integrate(sys,reaction,sol)
 # ╠═3a35ac76-e1b7-458d-90b7-d59ba4f43367
 # ╟─2790b550-3105-4fc0-9070-d142c19678db
 # ╠═dcd68d6a-5661-4efd-bbce-f7de99c99d79
-# ╠═20e29b19-9f23-4a1c-8743-06ec524c0385
-# ╠═36d02d06-6d0d-4b98-8d60-f2df0afaeaad
+# ╠═37cd3558-15cc-4133-a0e0-e501a9b73889
+# ╠═55f305b8-47a2-4fdf-b1cb-39f95f3dfa36
 # ╠═8fcf636c-2330-4eda-9bb3-298e6a53dfd1
+# ╠═36d02d06-6d0d-4b98-8d60-f2df0afaeaad
+# ╠═87d34a89-d53f-4f27-b8c4-113a6facaad5
 # ╟─8e0fdbc7-8e2b-4ae9-8a31-6f38baf36ef3
 # ╠═eb44075f-fbd3-4717-a440-41cb4eda8de1
-# ╠═fc20eee6-5cc6-4ae4-849e-91cf8989316d
 # ╠═2a4c8d15-168f-4908-b24b-8b65ec3ea494
 # ╠═e1602429-74fa-4949-bb0f-ecd681f52e42
-# ╟─071a0ebb-d563-402b-a3ca-af110f1b37ee
-# ╠═87d34a89-d53f-4f27-b8c4-113a6facaad5
