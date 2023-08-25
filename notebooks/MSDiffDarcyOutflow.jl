@@ -30,11 +30,11 @@ PlutoUI.TableOfContents(title="M-S Transport + Darcy")
 
 # ╔═╡ 57117131-8c83-4788-9f8e-f0b1b9404f0a
 function grid1D()
-	X=0:0.002:1
+	X=0:0.005:1
 	grid=simplexgrid(X)
 
 	# catalyst region
-	cellmask!(grid,[0.4],[0.6],2)
+	cellmask!(grid,[.7],[0.9],2)
 	#cellmask!(grid,[0.0],[0.2],2)
 	grid
 end
@@ -75,17 +75,17 @@ i = 1 ... \nu \\
 \end{align}
 ```
 
-where $\rho$ is the mixture density, $\vec v$ is the mass-averaged superficial mixture velocity $\vec N_i$ is the molar flux ($\frac{\text{mol}}{\text{m}^2 \text{s}}$) and $R_i$ is the molar volumetric source/sink ($\frac{\text{mol}}{\text{m}^3 \text{s}}$) of gas phase species $i$.
+where $\rho$ is the mixture density, $\vec v$ is the (mass-averaged ?) superficial mixture velocity $\vec N_i$ is the molar flux ($\frac{\text{mol}}{\text{m}^2 \text{s}}$) and $R_i$ is the molar volumetric source/sink ($\frac{\text{mol}}{\text{m}^3 \text{s}}$) of gas phase species $i$.
 """
 
 # ╔═╡ c0f65543-a64c-486a-a936-7dc55d75d5f1
 md"""
-# Alternative System
+## Implementation
 """
 
 # ╔═╡ 9b2e8232-c4c2-4c69-acf5-49ce9f6e9270
 md"""
-Attempt to implement system to describe N gas phase species transport through porous media that inherently conserves total mass by explicitly replacing the species mass flux of last species via difference of total mass flux and sum of N-1 species mass fluxes.
+Implement the equation system described above in a way that inherently conserves total mass by replacing the species mass flux of the last species of index $N$ via the sum of the remaining $N-1$ species mass fluxes and their difference to total mass flux.
 """
 
 # ╔═╡ b28f3573-751b-4154-8249-d140baa65d0b
@@ -95,7 +95,7 @@ md"""
 ```
 Here $\vec N_i$ are molar species fluxes, $\vec m$ is total mass flux and $M_i$ are species molar masses.
 
-Substituting above expression for $\vec N_N$ into the M-S equations with Knudsen addition and writing out the resulting system as an example for N=4 for the first species $i=1$:
+Substituting above expression for $\vec N_N$ into the M-S equations with Knudsen addition and writing out the resulting linear equation for $N=4$ for the first species $i=1$:
 ```math
 \begin{align}
 	-\frac{\nabla p_1}{RT} &= \frac{x_2 \vec N_1 - x_1 \vec N_2}{D_{12}} + \frac{x_3 \vec N_1 - x_1 \vec N_3}{D_{13}} \\
@@ -104,17 +104,17 @@ Substituting above expression for $\vec N_N$ into the M-S equations with Knudsen
 ```
 """
 
+# ╔═╡ e9d0be5a-acbe-44fc-88d8-e1b40c0a46bd
+md"""
+and right hand side vector ``f = (f_i)``
+```math
+	f_i= -  \frac{\nabla p_i}{RT} + \frac{x_i \vec m}{M_N D^B_{iN}}
+```
+"""
+
 # ╔═╡ 0f455649-cd10-41b4-896d-29b85cdbdb89
 md"""
-``u_i`` are the species partial pressures, ``\vec N_i`` are the species fluxes.
-``D_i^K`` are the Knudsen diffusion coefficients, and ``D^B_{ij}`` are the binary diffusion coefficients.
-```math
-\begin{align}
-  -\nabla \cdot \vec N_i &=0 \quad (i=1\dots n)\\
-  \frac{\vec N_i}{D^K_i} + \sum_{j\neq i}\frac{x_j \vec N_i - x_i \vec N_j}{D^B_{ij}} &= -\vec \nabla u_i \quad (i=1\dots n)
-\end{align}
-```
-From this representation, we can derive the matrix ``M=(m_{ij})`` with
+To represent the system of equations in matrix form, we can derive the matrix ``M=(m_{ij})`` with
 ```math
 \begin{align}
 	m_{ii} &= \frac{1}{D^K_i} + \frac{x_i M_i}{M_N D^B_{iN}} + \sum_{j\neq i} \frac{x_j}{D^B_{ij}} \quad (i=1\dots N-1) \\ 
@@ -134,14 +134,10 @@ md"""
 	M\begin{pmatrix}
 \vec N_1\\
 \vdots\\
-\vec N_n
+\vec N_N
 \end{pmatrix}
 =
-\begin{pmatrix}
-\vec \nabla u_1\\
-\vdots\\
-\vec \nabla u_n
-\end{pmatrix}
+f
 ```
 """
 
@@ -193,11 +189,11 @@ begin
 		x=zeros(Float64, NG)
 		x[gni[:H2]] = 1.0
 		x[gni[:CO2]] = 1.0
-		#x[gni[:CO]] = 0.1
-		#x[gni[:CH4]] = 0.2
+		#x[gni[:CO]] = 1.0
+		#x[gni[:CH4]] = 1.0
 		#x[gni[:H2O]] = 1.0
 		#x[gni[:N2]] = 1.0
-		#x[gni[:N2]] = 0.5
+		#x[gni[:N2]] = 4.0
 		x/sum(x)
 	end # inlet composition	
 	
@@ -215,8 +211,8 @@ begin
 	# approximation from Wesselingh, J. A., & Krishna, R. (2006). Mass Transfer in Multicomponent Mixtures
 	γ_τ::Float64=ϕ^1.5 # constriction/tourtuosity factor
 
-	k::Float64=1.23e-10*ufac"m^2" # permeability , por class 0
-	#k::Float64=1.23e-12*ufac"m^2" # permeability , por class 0
+	#k::Float64=1.23e-10*ufac"m^2" # permeability , por class 0
+	k::Float64=1.23e-12*ufac"m^2" # permeability , por class 0
 	#k::Float64=1.23e-13*ufac"m^2" # permeability , por class 0
 
 
@@ -254,17 +250,9 @@ end;
 
 # ╔═╡ 78cf4646-c373-4688-b1ac-92ed5f922e3c
 function reaction(f,u,node,data)
-	(;ip,kp,km,gni,Tamb,isreactive)=data
+	(;ip,kp,km,gni,isreactive)=data
 
 	if node.region == 2 && isreactive # catalyst layer
-
-		# H2 + CO2 <-> H2O + CO
-		#r = kp*u[gni[:H2]]/ufac"bar"*u[gni[:CO2]]/ufac"bar"-km*u[gni[:H2O]]/ufac"bar"*u[gni[:CO]]/ufac"bar"		
-		
-		#f[gni[:H2]]=r
-		#f[gni[:CO2]]=r
-		#f[gni[:H2O]]=-r
-		#f[gni[:CO]]=-r
 
 		# 4 H2 + CO2 <-> 2 H2O + CH4
 		r = kp *(u[gni[:H2]]/ufac"bar")^4 *u[gni[:CO2]]/ufac"bar" -km *(u[gni[:H2O]]/ufac"bar")^2	*u[gni[:CH4]]/ufac"bar"		
@@ -275,7 +263,6 @@ function reaction(f,u,node,data)
 		f[gni[:H2O]]=-2*r
 		f[gni[:CH4]]=-r
 	end
-
 		
 	ng=ngas(data)
 	# last species i=ng via ∑pi = p
@@ -300,13 +287,12 @@ end
 function boutflow(f,u,edge,data)
 	(;Tamb)=data
 	ng=ngas(data)
+		
 	for i=1:ng
 		# specify flux at boundary
 		k=outflownode(edge)		
-		#f[i] = -darcyvelo(u,data)*u[i,k]/(ph"R"*Tamb)
-		f[i] = -darcyvelo(u,data)*u[i,k]/(ph"R"*Tamb)*embedparam(edge)
-	end
-	
+		f[i] = -darcyvelo(u,data)*u[i,k]/(ph"R"*Tamb)		
+	end	
 end
 
 # ╔═╡ 7da59e27-62b9-4b89-b315-d88a4fd34f56
@@ -320,19 +306,13 @@ function inlet(f,u,bnode,data)
 		# flow velocity is normal to top boundary
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
 
-		#for i=1:ng
 		for i=1:(ng-1)
 			# specify flux at inlet
-			#f[i] = -X0[i]*u0*pn/(ph"R"*Tn)*embedparam(bnode)
-			f[i] = -X0[i]*nfluxin*embedparam(bnode)
-		
+			f[i] = -X0[i]*u0*pn/(ph"R"*Tn)*embedparam(bnode)		
 		end
 
-		# inlet flow velocity
-		#f[ip] = -u0
 		# specify inlet mass fluxs
-		#f[ip] = -mfluxin
-		
+		f[ip] = -mfluxin*embedparam(bnode)
 	end
 end
 
@@ -340,53 +320,19 @@ end
 function bcond(f,u,bnode,data)
 	(;ip,p,pn,Tn,u0,X0,Tamb,mfluxin,nfluxin)=data
 	ng=ngas(data)
-	
+
+	# specifying (N-1) species molar fluxes and total mass flux does not converge...
 	#inlet(f,u,bnode,data)
 
-	#for i=1:(ng-1)
+	# specifying the inlet partial pressures converges
 	for i=1:ng
-
-
 		boundary_dirichlet!(f,u,bnode, species=i,region=Γ_left,value=u[ip]*X0[i])
-
-
 	end
 	
 	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
-	#boundary_neumann!(f,u,bnode, species=ip, region=Γ_left,value=mfluxin)
 	
 	boundary_neumann!(f,u,bnode, species=ip, region=Γ_left,value=mfluxin*embedparam(bnode))
 
-end
-
-# ╔═╡ c0de2aff-8f7f-439c-b931-8eb8fbfcd45d
-function mole_frac!(data,X,u::VoronoiFVM.EdgeUnknowns)
-	ng=ngas(data)
-	sump=zero(eltype(u))
-	#X=zeros(eltype(u), ng)
-	for i=1:ng
-		X[i] = 0.5*(u[i,1]+u[i,2])
-		sump += X[i]
-	end
-	for i=1:ng
-		X[i] = X[i] / sump
-	end
-	nothing
-end
-
-# ╔═╡ 51b03d3b-3c7c-4019-8ed8-bf1aaa0b1ddb
-function mole_frac!(data,X,u::VoronoiFVM.BNodeUnknowns)
-	ng=ngas(data)
-	sump=zero(eltype(u))
-	#X=zeros(eltype(u), ng)
-	for i=1:ng
-		X[i] = u[i]
-		sump += X[i]
-	end
-	for i=1:ng
-		X[i] = X[i] / sump
-	end
-	nothing
 end
 
 # ╔═╡ 2191bece-e186-4d8e-8a21-3830441baf11
@@ -405,75 +351,33 @@ function D_matrix!(data, D)
 	nothing
 end
 
-# ╔═╡ b6381008-0280-404c-a86c-9c9c3c9f82eb
-#function M_matrix!(M,D,T,p,x,data)
-function M_matrix!(M,D,x,data)
-	(;Tamb)=data
-	ng=ngas(data)
-	# !!!ALLOC all methods to be called with arrays to be stack allocated
-	# have to  be inlined - here we use callsite inline from Julia 1.8
-	#@inline D_matrix!(data, D, T, p)
-	@inline D_matrix!(data, D)
-	for i=1:ng
-		M[i,i] = 1/DK_eff(data,Tamb,i)
-		for j=1:ng
-			if j != i
-				M[i,i] += x[j]/(data.γ_τ*D[i,j])
-				M[i,j] = -x[i]/(data.γ_τ*D[i,j])
-			end
-		end	
-	end
-	nothing
-end
-
-# ╔═╡ 22447e9e-df5f-4773-a83e-8645ad0c7873
-function rho_mix_flux(u,data)
-	ng=ngas(data)
-
-	(;Tamb,Fluids)=data
-	rho=zero(eltype(u))
-	for i=1:ng
-		rho += Fluids[i].MW*0.5*(u[i,1]+u[i,2])
-	end
-	rho /= ph"R"*Tamb	
-end
-
 # ╔═╡ ed7941c4-0485-4d84-ad5b-383eb5cae70a
 function flux(f,u,edge,data)
 	(;ip,gni,X0,Tamb,k,Fluids,γ_τ) = data
 
 	ng=ngas(data)
 
-	#F = MVector{ng,eltype(u)}(undef)
 	F = MVector{ng-1,eltype(u)}(undef)
-	X = MVector{ng,eltype(u)}(undef)
 
-
-	#M = MMatrix{ng,ng,eltype(u)}(undef)
 	M = MMatrix{ng-1,ng-1,eltype(u)}(undef)
 	D = MMatrix{ng,ng,eltype(u)}(undef)
 
-	#@inline M_matrix!(M,D,Tm,pm,X,data)
-	#@inline M_matrix!(M,D,Tamb,0.5*(u[ip,1]+u[ip,2]),X,data)
-	#@inline M_matrix!(M,D,X,data)
-
-	rho = rho_mix_flux(u,data)
-	vh=darcyvelo(u,data)
-
-	f[ip]=rho*vh
-	
-	mu = 2.0e-5*ufac"Pa*s"
-	
+	# compute total mass flux
+	for i=1:ng
+		f[ip] += Fluids[i].MW*0.5*(u[i,1]+u[i,2])/(ph"R"*Tamb)
+	end
+	f[ip] *=darcyvelo(u,data)
+		
 	@inline D_matrix!(data, D)
 
 	xi=zero(eltype(u))
 	xj=zero(eltype(u))
-	#for i=1:ng
+	
+	# assemble matrix M and right hand side vector f
 	for i=1:(ng-1)
 		xi=(u[i,1]+u[i,2])/(u[ip,1]+u[ip,2])
+		# Matrix M
 		M[i,i] = 1/DK_eff(data,Tamb,i)		
-		#M[i,i] = 1/(DK_eff(data,Tamb,i) + ph"R"*Tamb*rho*k/Fluids[i].MW/mu)
-		#M[i,i] = 1/(ph"R"*Tamb*rho*k/Fluids[i].MW/mu)
 		M[i,i] += xi*Fluids[i].MW/Fluids[ng].MW/D[i,ng]
 	
 		for j=1:ng
@@ -487,36 +391,29 @@ function flux(f,u,edge,data)
 				end
 			end
 		end
-
+		# right hand side vector f
 		F[i] = (u[i,1]-u[i,2])/(ph"R"*Tamb) + xi*f[ip]/Fluids[ng].MW/D[i,ng]
 		
 	end
-	#M .*= (ph"R"*Tamb)
-	
-
-	
-		
-	# computation of fluxes J
-	# inplace_linsolve  is made available from VoronoiFVM 1.3.2
+			
+	# computation of fluxes N
 	@inline inplace_linsolve!(M,F)
 
-
-	# index of last species present in mixture
-	# apply closing relation for flux calc for this species
-	idls = gni[:N2]
-	#for i=1:ng
 	for i=1:(ng-1)
-		# total flux = diffusive + convective
-		#f[i] = F[i] + vh*(u[i,1]+u[i,2])/2/(ph"R"*Tamb)
-		# total flux computed from M-S
-		f[i] = F[i]
-		
-		#f[idls] += f[i]*Fluids[i].MW
-	end
+		f[i] = F[i]		
+	end	
+end
 
-		
-	
-	
+# ╔═╡ 22447e9e-df5f-4773-a83e-8645ad0c7873
+function rho_mix_flux(u,data)
+	ng=ngas(data)
+
+	(;Tamb,Fluids)=data
+	rho=zero(eltype(u))
+	for i=1:ng
+		rho += Fluids[i].MW*0.5*(u[i,1]+u[i,2])
+	end
+	rho /= ph"R"*Tamb	
 end
 
 # ╔═╡ dd5e0a30-80ef-4eac-a014-b5a0f6a3c5fe
@@ -535,14 +432,13 @@ end
 function storage(f,u,node,data)
 	(;Tamb)=data
 	ng=ngas(data)
-	#for i=1:(ng+1)
+
 	for i=1:ng
 		f[i]=u[i]/(ph"R"*Tamb)
-		#f[i]=u[i]
 	end
+	
 	# total pressure
 	f[ng+1] = rho_mix_storage(u,data)
-	#f[ng+1] = u[ng+1]
 end
 
 # ╔═╡ 333b5c80-259d-47aa-a441-ee7894d6c407
@@ -572,10 +468,11 @@ function main(;data=ModelData(),nref=0)
 	for i=1:ng
 		inival[i,:] .*= X0[i]
 	end
-
 	
 	# solve problem with parameter embedding (homotopy)
 	control = SolverControl(nothing, sys;)
+		control.Δp=1.0e-1
+		control.Δp_grow=2.0
 		control.handle_exceptions=true
 		control.Δu_opt=1.0e5
 
@@ -608,8 +505,6 @@ md"""
 # ╔═╡ 55f305b8-47a2-4fdf-b1cb-39f95f3dfa36
 #=╠═╡
 sol=sol_(t)
-#sol=sol_[1]
-#sol=sol_
   ╠═╡ =#
 
 # ╔═╡ 8fcf636c-2330-4eda-9bb3-298e6a53dfd1
@@ -632,6 +527,11 @@ end
 md"""
 ## Flows Over Boundaries
 """
+
+# ╔═╡ 6aec25e2-9211-47d0-ba1b-542935660d91
+#=╠═╡
+data_embed.kinpar.gni
+  ╠═╡ =#
 
 # ╔═╡ 2a4c8d15-168f-4908-b24b-8b65ec3ea494
 #=╠═╡
@@ -672,6 +572,7 @@ R=integrate(sys,reaction,sol)
 # ╟─c0f65543-a64c-486a-a936-7dc55d75d5f1
 # ╟─9b2e8232-c4c2-4c69-acf5-49ce9f6e9270
 # ╟─b28f3573-751b-4154-8249-d140baa65d0b
+# ╟─e9d0be5a-acbe-44fc-88d8-e1b40c0a46bd
 # ╟─0f455649-cd10-41b4-896d-29b85cdbdb89
 # ╟─45b34b7b-f816-41ca-9f47-bd05f862db59
 # ╟─8490e4f0-04f9-4cfa-a547-0cb4e4fffc59
@@ -684,10 +585,7 @@ R=integrate(sys,reaction,sol)
 # ╠═7da59e27-62b9-4b89-b315-d88a4fd34f56
 # ╠═29d66705-3d9f-40b1-866d-dd3392a1a268
 # ╟─02b76cda-ffae-4243-ab40-8d0fe1325776
-# ╠═c0de2aff-8f7f-439c-b931-8eb8fbfcd45d
-# ╠═51b03d3b-3c7c-4019-8ed8-bf1aaa0b1ddb
 # ╠═2191bece-e186-4d8e-8a21-3830441baf11
-# ╠═b6381008-0280-404c-a86c-9c9c3c9f82eb
 # ╠═22447e9e-df5f-4773-a83e-8645ad0c7873
 # ╠═dd5e0a30-80ef-4eac-a014-b5a0f6a3c5fe
 # ╟─44aa5b49-d595-4982-bbc8-100d2f199415
@@ -700,6 +598,7 @@ R=integrate(sys,reaction,sol)
 # ╠═8fcf636c-2330-4eda-9bb3-298e6a53dfd1
 # ╠═36d02d06-6d0d-4b98-8d60-f2df0afaeaad
 # ╟─8e0fdbc7-8e2b-4ae9-8a31-6f38baf36ef3
+# ╠═6aec25e2-9211-47d0-ba1b-542935660d91
 # ╠═eb44075f-fbd3-4717-a440-41cb4eda8de1
 # ╠═2a4c8d15-168f-4908-b24b-8b65ec3ea494
 # ╠═e1602429-74fa-4949-bb0f-ecd681f52e42
