@@ -7,7 +7,7 @@ using InteractiveUtils
 # ╔═╡ 4fc7fda6-423b-48ea-8f86-6718a9050ee0
 begin
 	using Pkg
-	Pkg.activate(joinpath(@__DIR__,".."))
+	Pkg.activate(joinpath(@__DIR__,"../.."))
 	using Revise
 	using VoronoiFVM, VoronoiFVM.SolverStrategies
 	using ExtendableGrids, GridVisualize,ExtendableSparse,SparseArrays
@@ -245,19 +245,13 @@ t3=checkinout(sys3,sol3)
   ╠═╡ =#
 
 # ╔═╡ 765bf153-5cc8-4ac6-885c-bb044b033969
-#=╠═╡
 @test t3.in ≈ -t3.out
-  ╠═╡ =#
 
 # ╔═╡ e535aeca-f735-4dcf-88f3-9953221dcd01
-#=╠═╡
 @test maximum(sol3[2,:]) ≈ 0.5
-  ╠═╡ =#
 
 # ╔═╡ 0a13160e-de6e-4625-931f-c61a8c8aa132
-#=╠═╡
 @test minimum(sol3[2,:]) ≈ 0.5
-  ╠═╡ =#
 
 # ╔═╡ 60941eaa-1aea-11eb-1277-97b991548781
 

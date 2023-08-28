@@ -15,7 +15,7 @@ export ngas
 include("modelprops.jl")
 #export AbstractModelData, ModelData, RePrPe, kbed, hsf, DK_eff
 export AbstractModelData, RePrPe, kbed, kbed_VDI_flattening, lambda_eff_AC, hsf, DK_eff
-
+export sel12by12
 
 include("kinetics.jl")
 export AbstractKineticsData, ri, S3P, XuFroment, Riedel_rWGS, Wolf_rWGS

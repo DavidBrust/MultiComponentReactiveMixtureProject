@@ -26,49 +26,48 @@ begin
 end;
 
 # ╔═╡ 863c9da7-ef45-49ad-80d0-3594eca4a189
-PlutoUI.TableOfContents(title="M-S Transport + Darcy")
-
-# ╔═╡ 57117131-8c83-4788-9f8e-f0b1b9404f0a
-function grid1D()
-	X=0:0.05:1
-	grid=simplexgrid(X)
-
-	# catalyst region
-	cellmask!(grid,[.7],[0.9],2)
-	#cellmask!(grid,[0.0],[0.2],2)
-	grid
-end
-
-# ╔═╡ 173364be-0b52-445c-817d-f90b2a77e6e9
-function grid2D()
-	X=0:0.05:1
-	Y=0:0.2:1
-	grid=simplexgrid(X,Y)
-
-	# catalyst region
-	cellmask!(grid,[0.7,0.0],[0.9,1.0],2)
-	bfacemask!(grid, [1,0.2],[1,0.8],5)
-	
-	grid
-end
-
-# ╔═╡ 87630484-de43-46bc-a179-3e00b6e63c2a
-gridplot(grid2D())
+PlutoUI.TableOfContents(title="PC Reactor 2D")
 
 # ╔═╡ 0a911687-aff4-4c77-8def-084293329f35
 begin
-	# for 1D domain
-	#const Γ_left = 1
-	#const Γ_right = 2
-
-	# for 2D domain
-	const Γ_bottom = 1
-	#const Γ_right = 2
-	const Γ_right = 5
-	const Γ_top = 3
-	const Γ_left = 4
-	
+	# cylindrical geometry, symmetry
+	const Γ_bottom = 1 # outflow bc
+	const Γ_outer = 2 # wall bc	
+	const Γ_top = 3 # inflow bc, catalyst coated porous frit
+	const Γ_axis = 4 # symmetry	
 end;
+
+# ╔═╡ d95873cc-ad5a-4581-b8d7-b0147eb2491c
+function cyl_sym(data; nref=0)
+	(;wi,h,cath)=data
+	hw=(wi/2.0)/8.0*2.0^(-nref) # width of ~16 cm, divide into 8 segments	
+
+	Hfrit=linspace(0.0,(h-cath),21)	
+
+	HCL=linspace((h-cath), h, 11)
+	
+    R = collect(0:hw:(wi/2.0))
+    Z = glue(Hfrit,HCL)
+
+	# inert inlet region to approach flux through inlet via Dirichlet B.C.
+	Hfrit2=linspace(h,6*h,141)
+	Z = glue(Z,Hfrit2)
+	
+    grid = VoronoiFVM.Grid(R, Z)
+    circular_symmetric!(grid)
+	
+	# catalyst layer region
+	cellmask!(grid,[0,h-cath],[wi/2,h],2)
+
+	# inert inlet region
+	cellmask!(grid,[0,h],[wi/2,6*h],3)
+	
+	# catalyst layer boundary
+	#bfacemask!(grid,[0,h],[wi/2,h],Γ_top)
+	bfacemask!(grid,[0,6*h],[wi/2,3*h],Γ_top)
+	
+	grid
+end
 
 # ╔═╡ 2554b2fc-bf5c-4b8f-b5e9-8bc261fe597b
 md"""
@@ -219,11 +218,15 @@ begin
 	
 	## porous filter data
 	dp::Float64=200.0*ufac"μm" # average pore size, por class 0
+
+		
+	# domain geometry: cylinder
+	wi::Float64=16.0*ufac"cm" # corresponds to Diameter
+	h::Float64=5.0*ufac"mm"
+	#cath::Float64 = 250.0*ufac"μm"
+	cath::Float64 = 500.0*ufac"μm"
+	Ac::Float64=pi*wi^2.0/4.0*ufac"m^2" # cross-sectional area
 	
-	# for cylindrical geometry
-	#Ac::Float64=pi*wi^2/4*ufac"m^2" # cross-sectional area
-	# 1D grid
-	Ac::Float64=1.0*ufac"m^2" # cross-sectional area
 	
 	#ϕ::Float64=0.36 # porosity, exp determined
 	ϕ::Float64=0.33 # porosity, VitraPor sintetered filter class 0
@@ -268,6 +271,9 @@ end;
 
 end;
 
+# ╔═╡ 87630484-de43-46bc-a179-3e00b6e63c2a
+gridplot(cyl_sym(ModelData()))
+
 # ╔═╡ 78cf4646-c373-4688-b1ac-92ed5f922e3c
 function reaction(f,u,node,data)
 	(;ip,kp,km,gni,isreactive)=data
@@ -276,7 +282,7 @@ function reaction(f,u,node,data)
 
 		# 4 H2 + CO2 <-> 2 H2O + CH4
 		r = kp *(u[gni[:H2]]/ufac"bar")^4 *u[gni[:CO2]]/ufac"bar" -km *(u[gni[:H2O]]/ufac"bar")^2	*u[gni[:CH4]]/ufac"bar"		
-		r *=embedparam(node)
+		r *=1.0e5*embedparam(node)
 		
 		f[gni[:H2]]=4*r
 		f[gni[:CO2]]=r
@@ -314,43 +320,19 @@ function boutflow(f,u,edge,data)
 	end	
 end
 
-# ╔═╡ 7da59e27-62b9-4b89-b315-d88a4fd34f56
-function inlet(f,u,bnode,data)
-	# left boundary 1D
-	if bnode.region==Γ_left 
-		(;ip,X0,u0,pn,Tn,mfluxin,nfluxin)=data
-		ng=ngas(data)
-		
-				
-		# flow velocity is normal to top boundary
-		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
-
-		for i=1:(ng-1)
-			# specify flux at inlet
-			f[i] = -X0[i]*u0*pn/(ph"R"*Tn)*embedparam(bnode)		
-		end
-
-		# specify inlet mass fluxs
-		f[ip] = -mfluxin*embedparam(bnode)
-	end
-end
-
 # ╔═╡ 29d66705-3d9f-40b1-866d-dd3392a1a268
 function bcond(f,u,bnode,data)
 	(;ip,p,pn,Tn,u0,X0,Tamb,mfluxin,nfluxin)=data
 	ng=ngas(data)
 
-	# specifying (N-1) species molar fluxes and total mass flux does not converge...
-	#inlet(f,u,bnode,data)
-
-	# specifying the inlet partial pressures converges
+	# specifying the inlet partial pressures 
 	for i=1:ng	
-		boundary_dirichlet!(f,u,bnode, species=i,region=Γ_left,value=u[ip]*X0[i])
+		boundary_dirichlet!(f,u,bnode, species=i,region=Γ_top,value=u[ip]*X0[i])
 	end
 	
-	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
+	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_bottom,value=p)
 	
-	boundary_neumann!(f,u,bnode, species=ip, region=Γ_left,value=mfluxin*embedparam(bnode))
+	boundary_neumann!(f,u,bnode, species=ip, region=Γ_top,value=mfluxin*embedparam(bnode))
 
 end
 
@@ -463,7 +445,8 @@ end
 function main(;data=ModelData(),nref=0)
 
 	#grid=grid1D()
-	grid=grid2D()
+	#grid=grid2D()
+	grid=cyl_sym(data)
 	
 	(;ip,p,X0,)=data
 	ng=ngas(data)
@@ -475,7 +458,7 @@ function main(;data=ModelData(),nref=0)
 							storage=storage,
 							bcondition=bcond,					
 							boutflow=boutflow,
-							outflowboundaries=[Γ_right]
+							outflowboundaries=[Γ_bottom]
 							)
 	
 	enable_species!(sys; species=collect(1:(ng+1))) # gas phase species pi & ptotal	
@@ -490,8 +473,8 @@ function main(;data=ModelData(),nref=0)
 	# solve problem with parameter embedding (homotopy)
 	control = SolverControl(nothing, sys;)
 		control.Δp=1.0e-2
-		control.Δp_min=1.0e-6
-		control.Δp_grow=1.1
+		#control.Δp_min=1.0e-6
+		control.Δp_grow=2.0
 		control.handle_exceptions=true
 		control.Δu_opt=1.0e5
 
@@ -504,16 +487,17 @@ end;
 # ╔═╡ aa498412-e970-45f2-8b11-249cc5c2b18d
 # ╠═╡ skip_as_script = true
 #=╠═╡
-begin
-	
-	sol_,grid,sys,data_embed=main(;data=ModelData());
-	
-end;
+sol_,grid,sys,data_embed=main(;data=ModelData());
   ╠═╡ =#
 
 # ╔═╡ 2790b550-3105-4fc0-9070-d142c19678db
 md"""
 ## (Partial) Pressure Profiles
+"""
+
+# ╔═╡ b9a9b575-4a26-4c79-a8c8-fc3741ae8ec7
+md"""
+### Including Inert Inlet
 """
 
 # ╔═╡ 36d02d06-6d0d-4b98-8d60-f2df0afaeaad
@@ -524,7 +508,6 @@ md"""
 # ╔═╡ 55f305b8-47a2-4fdf-b1cb-39f95f3dfa36
 #=╠═╡
 sol=sol_(t)
-#sol=sol_[1]
   ╠═╡ =#
 
 # ╔═╡ 8fcf636c-2330-4eda-9bb3-298e6a53dfd1
@@ -532,13 +515,37 @@ sol=sol_(t)
 let
 	(;gni,ip,p)=data_embed
 	vis = GridVisualizer(legend = :rt, ylabel="Pressure / Pa")
-	scalarplot!(vis, grid, sol[ip,:], label="total")
+	#scalarplot!(vis, grid, sol[ip,:], label="total")
 	#scalarplot!(vis, grid, sol[gni[:N2],:], label="N2", color=:green, clear=false)
-	#scalarplot!(vis, grid, sol[gni[:H2],:], label="H2", color=:red, clear=false)	
+	scalarplot!(vis, grid, sol[gni[:H2],:], label="H2", color=:red, clear=false)	
 	#scalarplot!(vis, grid, sol[gni[:CO2],:], label="CO2", color=:blue, clear=false)
 	#scalarplot!(vis, grid, sol[gni[:CH4],:], label="CH4", color=:purple, clear=false)
 	#scalarplot!(vis, grid, sol[gni[:CO],:], label="CO", color=:orange, clear=false)
 	#scalarplot!(vis, grid, sol[gni[:H2O],:], label="H2O", color=:cyan, clear=false)
+	reveal(vis)
+end
+  ╠═╡ =#
+
+# ╔═╡ 4566f461-bd70-41be-b21c-1ba5d70ef94e
+md"""
+### Excluding Inert Inlet
+"""
+
+# ╔═╡ 076ad744-30bd-41de-bd78-2d5b9682b91c
+#=╠═╡
+let
+  	sgrid = subgrid(grid, [1,2])
+	ssol=view(sol[1, :], sgrid)
+
+	(;gni,ip,p)=data_embed
+	vis = GridVisualizer(legend = :rt, ylabel="Pressure / Pa")
+	#scalarplot!(vis, sgrid, view(sol[ip,:],sgrid), label="total")
+	#scalarplot!(vis, sgrid, view(sol[gni[:N2],:],sgrid), label="N2", color=:green, clear=false)
+	scalarplot!(vis, sgrid, view(sol[gni[:H2],:],sgrid), label="H2", color=:red, clear=false)	
+	#scalarplot!(vis, sgrid, view(sol[gni[:CO2],:],sgrid), label="CO2", color=:blue, clear=false)
+	#scalarplot!(vis, sgrid, view(sol[gni[:CH4],:],sgrid), label="CH4", color=:purple, clear=false)
+	#scalarplot!(vis, sgrid, view(sol[gni[:CO],:],sgrid), label="CO", color=:orange, clear=false)
+	#scalarplot!(vis, sgrid, view(sol[gni[:H2O],:],sgrid), label="H2O", color=:cyan, clear=false)
 	reveal(vis)
 end
   ╠═╡ =#
@@ -561,8 +568,8 @@ md"""
 # ╔═╡ 2a4c8d15-168f-4908-b24b-8b65ec3ea494
 #=╠═╡
 let
-	(;pn,Tn,Qflow,X0,mfluxin,nfluxin,Fluids)=data_embed
-	nfluxin.* X0, mfluxin
+	(;Ac,X0,mfluxin,nfluxin,)=data_embed
+	nfluxin.* X0 * Ac, mfluxin * Ac
 end
   ╠═╡ =#
 
@@ -570,26 +577,20 @@ end
 function checkinout(sys,sol)
 	
 	tfact=TestFunctionFactory(sys)
-	tf_in=testfunction(tfact,[Γ_right],[Γ_left])
-	tf_out=testfunction(tfact,[Γ_left],[Γ_right])
+	tf_in=testfunction(tfact,[Γ_bottom],[Γ_top])
+	tf_out=testfunction(tfact,[Γ_top],[Γ_bottom])	
 	(;in=integrate(sys,tf_in,sol),out=integrate(sys,tf_out,sol) )
 end
 
-# ╔═╡ eb44075f-fbd3-4717-a440-41cb4eda8de1
+# ╔═╡ 0738a2cc-516d-4a5f-b594-6105bea488ff
 #=╠═╡
 checkinout(sys,sol)
-  ╠═╡ =#
-
-# ╔═╡ f0e48377-2be4-48de-bb94-24ad01158484
-#=╠═╡
-R=integrate(sys,reaction,sol)
   ╠═╡ =#
 
 # ╔═╡ Cell order:
 # ╠═11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 # ╠═863c9da7-ef45-49ad-80d0-3594eca4a189
-# ╠═57117131-8c83-4788-9f8e-f0b1b9404f0a
-# ╠═173364be-0b52-445c-817d-f90b2a77e6e9
+# ╠═d95873cc-ad5a-4581-b8d7-b0147eb2491c
 # ╠═87630484-de43-46bc-a179-3e00b6e63c2a
 # ╠═0a911687-aff4-4c77-8def-084293329f35
 # ╟─2554b2fc-bf5c-4b8f-b5e9-8bc261fe597b
@@ -608,7 +609,6 @@ R=integrate(sys,reaction,sol)
 # ╠═a8d57d4c-f3a8-42b6-9681-29a1f0724f15
 # ╟─e8b49b2e-d19e-4d46-a399-9972919cd680
 # ╠═d4bc847b-052f-4d40-9211-12dbe7e06ee1
-# ╠═7da59e27-62b9-4b89-b315-d88a4fd34f56
 # ╠═29d66705-3d9f-40b1-866d-dd3392a1a268
 # ╟─02b76cda-ffae-4243-ab40-8d0fe1325776
 # ╠═2191bece-e186-4d8e-8a21-3830441baf11
@@ -621,11 +621,13 @@ R=integrate(sys,reaction,sol)
 # ╠═3a35ac76-e1b7-458d-90b7-d59ba4f43367
 # ╟─2790b550-3105-4fc0-9070-d142c19678db
 # ╠═55f305b8-47a2-4fdf-b1cb-39f95f3dfa36
-# ╠═8fcf636c-2330-4eda-9bb3-298e6a53dfd1
+# ╟─b9a9b575-4a26-4c79-a8c8-fc3741ae8ec7
+# ╟─8fcf636c-2330-4eda-9bb3-298e6a53dfd1
 # ╠═36d02d06-6d0d-4b98-8d60-f2df0afaeaad
+# ╟─4566f461-bd70-41be-b21c-1ba5d70ef94e
+# ╟─076ad744-30bd-41de-bd78-2d5b9682b91c
 # ╟─8e0fdbc7-8e2b-4ae9-8a31-6f38baf36ef3
 # ╟─3c4b22b9-4f55-45b9-98d8-6cd929c737c2
-# ╠═eb44075f-fbd3-4717-a440-41cb4eda8de1
+# ╠═0738a2cc-516d-4a5f-b594-6105bea488ff
 # ╠═2a4c8d15-168f-4908-b24b-8b65ec3ea494
 # ╠═e1602429-74fa-4949-bb0f-ecd681f52e42
-# ╠═f0e48377-2be4-48de-bb94-24ad01158484

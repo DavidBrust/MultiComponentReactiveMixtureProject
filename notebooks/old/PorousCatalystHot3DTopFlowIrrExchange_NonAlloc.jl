@@ -17,7 +17,7 @@ end
 # ╔═╡ 11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 begin
 	using Pkg
-	Pkg.activate(joinpath(@__DIR__,".."))
+	Pkg.activate(joinpath(@__DIR__,"..\\.."))
 	using Revise
 	using VoronoiFVM, VoronoiFVM.SolverStrategies
 	using ExtendableGrids, GridVisualize,ExtendableSparse,SparseArrays
@@ -57,7 +57,7 @@ md"""
 #=╠═╡
 md"""
 The modelling domain covers a prism of square shape, which represents the porous foam that is supporting the catalyst layer in the photo-catalytic reactor.
-$(LocalResource("../img/Domain.png")) 
+$(LocalResource("../../img/Domain.png")) 
 
 """
   ╠═╡ =#
@@ -270,7 +270,7 @@ The thermal boundary conditions consist of heat transport processes over the mod
 # ╠═╡ skip_as_script = true
 #=╠═╡
 md"""
-$(LocalResource("../img/ThermalBC_new.png")) 
+$(LocalResource("../../img/ThermalBC_new.png")) 
 """
   ╠═╡ =#
 
@@ -286,9 +286,9 @@ begin
 		ff = "FlowPhotoChem_Messdaten_20230523_110038.csv" # 40 suns
 		#file = "FlowPhotoChem_Messdaten_20230523_104820.csv" # 100 suns
 			if splitdir(pwd())[2]=="FixedBed"
-				filepath="data/IrradiationFluxProfiles/"*ff
-			else
 				filepath="../data/IrradiationFluxProfiles/"*ff
+			else
+				filepath="../../data/IrradiationFluxProfiles/"*ff
 			end
 		CSV.read(filepath, DataFrame, delim=";",header=false)
 	end
@@ -907,8 +907,8 @@ begin
 	## irradiation data
 	#Glamp_target::Float64=100.0*ufac"kW/m^2" # solar simulator irradiation flux
 	#Glamp::Float64=1.0*ufac"kW/m^2" # solar simulator irradiation flux
-	FluxIntp::typeof(itp12)=itp12 # interpolator for irradiation flux
-	FluxEmbed::Float64=0.0 # "persistent" embedding parameter avail. outside of solve call w/ embedding
+	#FluxIntp::typeof(itp12)=itp12 # interpolator for irradiation flux
+	#FluxEmbed::Float64=0.0 # "persistent" embedding parameter avail. outside of solve call w/ embedding
 		
     Flux_target::Float64=1.0
 	
@@ -2501,7 +2501,7 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─39e74955-aab6-4bba-a1b8-b2307b45e673
 # ╟─6798d5e2-b8c7-4f54-aa71-6ea1ccab78fb
 # ╟─ed3609cb-8483-4184-a385-dca307d13f17
-# ╟─58d0610b-1739-4260-8d16-5a31ba362d69
+# ╠═58d0610b-1739-4260-8d16-5a31ba362d69
 # ╠═d0993435-ed0b-4a43-b848-26f5266017a1
 # ╟─634d1042-b110-45ef-bfbe-51b827fc922f
 # ╠═29f34e55-91ab-4b6d-adb2-a58412af95f6

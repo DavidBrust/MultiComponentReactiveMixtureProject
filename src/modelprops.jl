@@ -1,59 +1,5 @@
 abstract type AbstractModelData end
 
-# Base.@kwdef mutable struct ModelData <:AbstractModelData
-# 	iT::Int64=1 # index of Temperature variable
-#     ng::Int64=2 # number of gas phase species
-	
-	
-	
-# 	Tamb::Float64=298.15*ufac"K" # ambient temperature
-# 	α_w::Float64=20.0*ufac"W/(m^2*K)" # wall heat transfer coefficient
-# 	α_nc::Float64=15.0*ufac"W/(m^2*K)" # natural convection heat transfer coefficient
-
-# 	## irradiation data
-# 	G_lamp::Float64=1.0*ufac"kW/m^2" # solar simulator irradiation flux
-# 	Abs_lamp::Float64=0.7 # avg absorptivity of cat. of irradiation coming from lamp
-# 	Eps_ir::Float64=0.7 # avg absorptivity/emissivity of cat. of IR irradiation coming from surroundings / emitted
-		
-	
-# 	## porous filter data
-# 	d::Float64=100.0*ufac"μm" # average pore size
-# 	# cylindrical disc / 2D
-#     D::Float64=12.0*ufac"cm" # disc diameter
-	
-
-# 	# prism / 3D
-# 	wi::Float64=12.0*ufac"cm" # prism width/side lenght
-# 	le::Float64=wi # prism width/side lenght
-# 	h::Float64=0.5*ufac"cm" # frit thickness (applies to 2D & 3D)
-
-# 	#Ac::Float64=pi*D^2.0/4.0*ufac"m^2" # cross-sectional area, circular
-# 	Ac::Float64=wi^2*ufac"m^2" # cross-sectional area, square
-	
-# 	ρs::Float64=2.23e3*ufac"kg/m^3" # density of non-porous Boro-Solikatglas 3.3
-# 	λs::Float64=1.4*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2 	
-# 	cs::Float64=0.8e3*ufac"J/(kg*K)" # heat capacity of non-porous SiO2
-	
-# 	ϕ::Float64=0.36 # porosity, class 2
-# 	k::Float64=2.9e-11*ufac"m^2" # permeability
-# 	a_s::Float64=0.13*ufac"m^2/g" # specific surface area
-# 	ρfrit::Float64=(1.0-ϕ)*ρs*ufac"kg/m^3" # density of porous frit
-# 	a_v::Float64=a_s*ρfrit # volume specific interface area
-# 	## END porous filter data
-
-# 	## fluid data
-	
-# 	Qflow::Float64=3400.0*ufac"ml/minute" # volumetric feed flow rate
-# 	Tin::Float64=298.15*ufac"K" # inlet temperature
-# 	p::Float64=1.0*ufac"atm" # reactor pressure		
-# 	# u0::Float64=Qflow/(Ac*ϕ)*ufac"m/s" # mean superficial velocity
-# 	u0::Float64=Qflow/(Ac)*ufac"m/s" # mean superficial velocity
-# 	# fluid properties: Air
-# 	# values taken from VDI heat atlas 2010 chapter D3.1
-# 	Fluid::FluidProps=Air
-# 	## END fluid data
-	
-# end;
 
 # calculate non-dimensional numbers: Reynolds, Prandtl, Peclet
 function RePrPe(data::AbstractModelData,T,p,x)
@@ -163,3 +109,64 @@ function DK_eff(data,T,i)
 	DK=dp*ϕ^1.5/(1.0-ϕ)*sqrt(8.0*ph"R"*T/(9.0*π*data.Fluids[i].MW))
 	#Bern(DK)
 end
+
+#
+# ## Irradiation
+# Irradiation flux coming from the solar simulator enters the aperture of the reactor with the specified flux profile as determined via photo-metric measurement. The measured profile is imported from a csv-datafile, handled by DataFrames.jl and interpolated by methodes provided by Interpolations.jl to be used as boundary condition in the simulation.
+#
+
+# domain width (porous frit = 15.7 cm, ~ 16.0)
+function sel12by12(M;wi=16.0*ufac"cm",wi_apt=12.0*ufac"cm")
+	
+	
+	
+	# starting coordinates for optimum 10 cm x 10 cm selection
+	sr=33
+	sc=33
+
+	# (inverse) resolution of flux measurements, distance between data points
+	Dx = 0.031497*ufac"cm"
+	Dy = 0.031497*ufac"cm"
+	
+	
+	# calculate coordinate offsets, when deviating (expanding/shrinking from the center) from 10cm x 10cm selection 	
+	Dsr=Integer(round((wi_apt-10.0*ufac"cm")/(2*Dy)))
+	Dsc=Integer(round((wi_apt-10.0*ufac"cm")/(2*Dx)))
+
+	sr-=Dsr
+	sc-=Dsc
+
+	nx=Integer(round(wi_apt/Dx))
+	ny=Integer(round(wi_apt/Dy))
+	
+	M=Matrix(FluxMap)
+	# coordinate system of measurement data matrix has its origin at bottom left corner, the excel data matrix (and its coordiinates) start in top left corner
+	reverse!(M; dims=1) 
+	@views M_ = M[sr:(sr+ny-1),sc:(sc+nx-1)]*ufac"kW/m^2"
+
+	# pad Flux Map with zeros outside of aperture area
+	nx_dom = Integer(round(wi/Dx))
+	ny_dom = Integer(round(wi/Dy))
+	M__ = zeros(nx_dom,ny_dom)
+		
+	Dsr_dom_apt=Integer(round((wi - wi_apt)/(2*Dy)))
+	Dsc_dom_apt=Integer(round((wi - wi_apt)/(2*Dx)))
+
+	M__[(Dsr_dom_apt+1):(Dsr_dom_apt+ny), (Dsc_dom_apt+1):(Dsc_dom_apt+nx)] = M[sr:(sr+ny-1),sc:(sc+nx-1)]*ufac"kW/m^2"
+	#Dsc=Integer(round((wi_apt-10.0*ufac"cm")/(2*Dy)))
+	
+	# origin of coordinate system in the center of the plane
+	#x = range(-wi/2,wi/2,length=nx)
+	#y = range(-wi/2,wi/2,length=ny)
+
+	#itp = Interpolations.interpolate((x,y), M_, Gridded(Linear()))
+	x = range(-wi/2,wi/2,length=nx_dom)
+	y = range(-wi/2,wi/2,length=ny_dom)
+
+	itp = Interpolations.interpolate((x,y), M__, Gridded(Linear()))
+
+	#M_,itp	
+	M__,itp	
+end
+
+
