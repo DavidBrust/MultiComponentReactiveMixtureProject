@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.22
+# v0.19.27
 
 using Markdown
 using InteractiveUtils
@@ -17,7 +17,7 @@ end
 # ╔═╡ 11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 begin
 	using Pkg
-	Pkg.activate(joinpath(@__DIR__,".."))
+	Pkg.activate(joinpath(@__DIR__,"..\\.."))
 	
 	using VoronoiFVM
 	using ExtendableGrids, GridVisualize
@@ -25,9 +25,7 @@ begin
 	using LessUnitful
 	using PlutoVista	
 	using PlutoUI
-	#using Plots
-	using Colors
-	#using CSV, DataFrames
+
 	using Revise
 	using FixedBed
 	
