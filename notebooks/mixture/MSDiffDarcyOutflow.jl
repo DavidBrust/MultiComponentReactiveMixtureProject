@@ -119,8 +119,19 @@ Here $\vec N_i$ are molar species fluxes, $\vec m$ is total mass flux and $M_i$ 
 Substituting above expression for $\vec N_N$ into the M-S equations with Knudsen addition and writing out the resulting linear equation for $N=4$ for the first species $i=1$:
 ```math
 \begin{align}
-	-\frac{\nabla p_1}{RT} &= \frac{x_2 \vec N_1 - x_1 \vec N_2}{D_{12}} + \frac{x_3 \vec N_1 - x_1 \vec N_3}{D_{13}} \\
-	&+ \frac{x_4 \vec N_1 - x_1 \left( \vec m - M_1 \vec N_1 - M_2 \vec N_2 - M_3 \vec N_3 \right)/M_4} {D_{14}}
+	-\frac{\nabla p_1}{RT} &= \frac{\vec N_1}{D_1^K} + \frac{x_2 \vec N_1 - x_1 \vec N_2}{D_{12}^B} + \frac{x_3 \vec N_1 - x_1 \vec N_3}{D_{13}^B} \\
+	&+ \frac{x_4 \vec N_1 - x_1 \left( \vec m - M_1 \vec N_1 - M_2 \vec N_2 - M_3 \vec N_3 \right)/M_4} {D_{14}^B}
+\end{align}
+```
+"""
+
+# ╔═╡ 0f455649-cd10-41b4-896d-29b85cdbdb89
+md"""
+To represent the system of equations in matrix form, we can derive the (N-1) x (N-1) matrix ``M=(m_{ij})`` with
+```math
+\begin{align}
+	m_{ii} &= \frac{1}{D^K_i} + \frac{x_i M_i}{M_N D^B_{iN}} + \sum_{j\neq i}^N \frac{x_j}{D^B_{ij}} \quad (i=1\dots N-1) \\ 
+	m_{ij} &= -x_i \sum_{j\neq i \atop j \neq N } \left( \frac{1}{D^B_{ij}} - \frac{M_j}{M_N D^B_{iN}} \right)
 \end{align}
 ```
 """
@@ -130,17 +141,6 @@ md"""
 and right hand side vector ``f = (f_i)``
 ```math
 	f_i= -  \frac{\nabla p_i}{RT} + \frac{x_i \vec m}{M_N D^B_{iN}}
-```
-"""
-
-# ╔═╡ 0f455649-cd10-41b4-896d-29b85cdbdb89
-md"""
-To represent the system of equations in matrix form, we can derive the matrix ``M=(m_{ij})`` with
-```math
-\begin{align}
-	m_{ii} &= \frac{1}{D^K_i} + \frac{x_i M_i}{M_N D^B_{iN}} + \sum_{j\neq i} \frac{x_j}{D^B_{ij}} \quad (i=1\dots N-1) \\ 
-	m_{ij} &= -x_i \sum_{j\neq i \atop j \neq N } \frac{1}{D^B_{ij}} - \frac{M_j}{M_N D^B_{iN}}
-\end{align}
 ```
 """
 
@@ -155,7 +155,7 @@ md"""
 	M\begin{pmatrix}
 \vec N_1\\
 \vdots\\
-\vec N_N
+\vec N_{N-1}
 \end{pmatrix}
 =
 f
@@ -231,8 +231,8 @@ begin
 	# approximation from Wesselingh, J. A., & Krishna, R. (2006). Mass Transfer in Multicomponent Mixtures
 	γ_τ::Float64=ϕ^1.5 # constriction/tourtuosity factor
 
-	k::Float64=1.23e-10*ufac"m^2" # permeability , por class 0
-	#k::Float64=1.23e-12*ufac"m^2" # permeability , por class 0
+	#k::Float64=1.23e-10*ufac"m^2" # permeability , por class 0
+	k::Float64=1.23e-12*ufac"m^2" # permeability , por class 0
 	#k::Float64=1.23e-13*ufac"m^2" # permeability , por class 0
 
 
@@ -489,9 +489,9 @@ function main(;data=ModelData(),nref=0)
 	
 	# solve problem with parameter embedding (homotopy)
 	control = SolverControl(nothing, sys;)
-		control.Δp=1.0e-2
-		control.Δp_min=1.0e-6
-		control.Δp_grow=1.1
+		control.Δp=1.0e-1
+		#control.Δp_min=1.0e-6
+		control.Δp_grow=2.0
 		control.handle_exceptions=true
 		control.Δu_opt=1.0e5
 
@@ -504,11 +504,7 @@ end;
 # ╔═╡ aa498412-e970-45f2-8b11-249cc5c2b18d
 # ╠═╡ skip_as_script = true
 #=╠═╡
-begin
-	
-	sol_,grid,sys,data_embed=main(;data=ModelData());
-	
-end;
+sol_,grid,sys,data_embed=main(;data=ModelData());
   ╠═╡ =#
 
 # ╔═╡ 2790b550-3105-4fc0-9070-d142c19678db
@@ -524,7 +520,6 @@ md"""
 # ╔═╡ 55f305b8-47a2-4fdf-b1cb-39f95f3dfa36
 #=╠═╡
 sol=sol_(t)
-#sol=sol_[1]
   ╠═╡ =#
 
 # ╔═╡ 8fcf636c-2330-4eda-9bb3-298e6a53dfd1
@@ -532,13 +527,13 @@ sol=sol_(t)
 let
 	(;gni,ip,p)=data_embed
 	vis = GridVisualizer(legend = :rt, ylabel="Pressure / Pa")
-	scalarplot!(vis, grid, sol[ip,:], label="total")
-	#scalarplot!(vis, grid, sol[gni[:N2],:], label="N2", color=:green, clear=false)
-	#scalarplot!(vis, grid, sol[gni[:H2],:], label="H2", color=:red, clear=false)	
-	#scalarplot!(vis, grid, sol[gni[:CO2],:], label="CO2", color=:blue, clear=false)
-	#scalarplot!(vis, grid, sol[gni[:CH4],:], label="CH4", color=:purple, clear=false)
-	#scalarplot!(vis, grid, sol[gni[:CO],:], label="CO", color=:orange, clear=false)
-	#scalarplot!(vis, grid, sol[gni[:H2O],:], label="H2O", color=:cyan, clear=false)
+	#scalarplot!(vis, grid, sol[ip,:], label="total")
+	#scalarplot!(vis, grid, sol[gni[:N2],:], label="N2")
+	#scalarplot!(vis, grid, sol[gni[:H2],:], label="H2")	
+	#scalarplot!(vis, grid, sol[gni[:CO2],:], label="CO2")
+	#scalarplot!(vis, grid, sol[gni[:CH4],:], label="CH4")
+	#scalarplot!(vis, grid, sol[gni[:CO],:], label="CO")
+	scalarplot!(vis, grid, sol[gni[:H2O],:], label="H2O")
 	reveal(vis)
 end
   ╠═╡ =#
@@ -580,11 +575,6 @@ end
 checkinout(sys,sol)
   ╠═╡ =#
 
-# ╔═╡ f0e48377-2be4-48de-bb94-24ad01158484
-#=╠═╡
-R=integrate(sys,reaction,sol)
-  ╠═╡ =#
-
 # ╔═╡ Cell order:
 # ╠═11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 # ╠═863c9da7-ef45-49ad-80d0-3594eca4a189
@@ -598,8 +588,8 @@ R=integrate(sys,reaction,sol)
 # ╟─c0f65543-a64c-486a-a936-7dc55d75d5f1
 # ╟─9b2e8232-c4c2-4c69-acf5-49ce9f6e9270
 # ╟─b28f3573-751b-4154-8249-d140baa65d0b
-# ╟─e9d0be5a-acbe-44fc-88d8-e1b40c0a46bd
 # ╟─0f455649-cd10-41b4-896d-29b85cdbdb89
+# ╟─e9d0be5a-acbe-44fc-88d8-e1b40c0a46bd
 # ╟─45b34b7b-f816-41ca-9f47-bd05f862db59
 # ╟─8490e4f0-04f9-4cfa-a547-0cb4e4fffc59
 # ╠═ed7941c4-0485-4d84-ad5b-383eb5cae70a
@@ -628,4 +618,3 @@ R=integrate(sys,reaction,sol)
 # ╠═eb44075f-fbd3-4717-a440-41cb4eda8de1
 # ╠═2a4c8d15-168f-4908-b24b-8b65ec3ea494
 # ╠═e1602429-74fa-4949-bb0f-ecd681f52e42
-# ╠═f0e48377-2be4-48de-bb94-24ad01158484
