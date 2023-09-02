@@ -65,21 +65,6 @@ function cyl_sym(data; nref=0)
 	grid
 end
 
-# ╔═╡ ad8fa203-af36-46d1-a337-3c09f93dee0f
-function grid2D()
-	X=0:0.05:1
-	Y=0:0.2:1
-	grid=simplexgrid(X,Y)
-
-	# catalyst region
-	#cellmask!(grid,[0.0,0.1],[1.0,0.3],2)
-	#bfacemask!(grid, [0.2,0],[0.8,0],5)
-	bfacemask!(grid, [1,0.2],[1,0.8],5)
-
-	#circular_symmetric!(grid)
-	grid
-end
-
 # ╔═╡ 0a911687-aff4-4c77-8def-084293329f35
 begin
 	# cylindrical geometry, symmetry
@@ -236,7 +221,7 @@ begin
 	X0::Vector{Float64} = let
 		x=zeros(Float64, NG)
 		x[gni[:H2]] = 1.0
-		x[gni[:CO2]] = 1.0
+		#x[gni[:CO2]] = 1.0
 		#x[gni[:CO]] = 1.0
 		#x[gni[:CH4]] = 1.0
 		#x[gni[:H2O]] = 1.0
@@ -575,8 +560,8 @@ let
 	vis = GridVisualizer(legend = :rt, ylabel="Pressure / Pa")
 	#scalarplot!(vis, grid, sol[ip,:], label="total")
 	#scalarplot!(vis, grid, sol[gni[:N2],:], label="N2", color=:green, clear=false)
-	scalarplot!(vis, grid, sol[gni[:H2],:], label="H2", color=:red, clear=false)	
-	#scalarplot!(vis, grid, sol[gni[:CO2],:], label="CO2", color=:blue, clear=false)
+	#scalarplot!(vis, grid, sol[gni[:H2],:], label="H2", color=:red, clear=false)	
+	scalarplot!(vis, grid, sol[gni[:CO2],:], label="CO2", color=:blue, clear=false)
 	#scalarplot!(vis, grid, sol[gni[:CH4],:], label="CH4", color=:purple, clear=false)
 	#scalarplot!(vis, grid, sol[gni[:CO],:], label="CO", color=:orange, clear=false)
 	#scalarplot!(vis, grid, sol[gni[:H2O],:], label="H2O", color=:cyan, clear=false)
@@ -651,7 +636,6 @@ checkinout(sys,sol)
 # ╠═11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 # ╠═863c9da7-ef45-49ad-80d0-3594eca4a189
 # ╠═d95873cc-ad5a-4581-b8d7-b0147eb2491c
-# ╠═ad8fa203-af36-46d1-a337-3c09f93dee0f
 # ╠═87630484-de43-46bc-a179-3e00b6e63c2a
 # ╠═0a911687-aff4-4c77-8def-084293329f35
 # ╟─2554b2fc-bf5c-4b8f-b5e9-8bc261fe597b
