@@ -552,31 +552,31 @@ let
 	vis = GridVisualizer(legend = :rt, ylabel="Pressure / Pa")
 	cs=colormap("Blues", 6)
 
-	sol_,grid,_,data_embed=main(;data=ModelData(Qflow=0.0*ufac"l/minute"),verbose=false);
-	(;gni)=data_embed
+	sol_,grid,_,data_embed=main(;data=ModelData(Qflow=0.0*ufac"l/minute"));
+	(;gni,gn)=data_embed
 
 	idx=gni[:CO2]
 	
 	sol = sol_(sol_.t[end])
-	scalarplot!(vis, grid, sol[idx,:], label="CH4 0 L/min", color=cs[2])
+	scalarplot!(vis, grid, sol[idx,:], label=string(gn[idx])*" 0 L/min", color=cs[2])
 	
-	sol_,_,_,_=main(;data=ModelData(Qflow=0.15*ufac"l/minute"),verbose=false);
+	sol_,_,_,_=main(;data=ModelData(Qflow=0.15*ufac"l/minute"));
 	sol = sol_(sol_.t[end])
-	scalarplot!(vis, grid, sol[idx,:], clear=false, label="CH4 0.15 L/min", color=cs[3])
+	scalarplot!(vis, grid, sol[idx,:], clear=false, label=string(gn[idx])*" 0.15 L/min", color=cs[3])
 
-	sol_,_,_,_=main(;data=ModelData(Qflow=1.5*ufac"l/minute"),verbose=false);
+	sol_,_,_,_=main(;data=ModelData(Qflow=1.5*ufac"l/minute"));
 	sol = sol_(sol_.t[end])
-	scalarplot!(vis, grid, sol[idx,:], clear=false, label="CH4 1.5 L/min", 
+	scalarplot!(vis, grid, sol[idx,:], clear=false, label=string(gn[idx])*" 1.5 L/min", 
 	color=cs[4])
 
-	sol_,_,_,_=main(;data=ModelData(Qflow=15*ufac"l/minute"),verbose=false);
+	sol_,_,_,_=main(;data=ModelData(Qflow=15*ufac"l/minute"));
 	sol = sol_(sol_.t[end])
-	scalarplot!(vis, grid, sol[idx,:], clear=false, label="CH4 15 L/min", 
+	scalarplot!(vis, grid, sol[idx,:], clear=false, label=string(gn[idx])*" 15 L/min", 
 	color=cs[5])
 
-	sol_,_,_,_=main(;data=ModelData(Qflow=50*ufac"l/minute"),verbose=false);
+	sol_,_,_,_=main(;data=ModelData(Qflow=50*ufac"l/minute"));
 	sol = sol_(sol_.t[end])
-	scalarplot!(vis, grid, sol[idx,:], clear=false, label="CH4 50 L/min", 
+	scalarplot!(vis, grid, sol[idx,:], clear=false, label=string(gn[idx])*" 50 L/min", 
 	color=cs[6])
 	
 	reveal(vis)
