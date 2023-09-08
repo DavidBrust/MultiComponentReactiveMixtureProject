@@ -19,6 +19,7 @@ begin
 	
 	using PlutoVista, Plots
 	using PlutoUI, HypertextLiteral
+	using Colors
 
 	using FixedBed
 	
@@ -30,11 +31,11 @@ PlutoUI.TableOfContents(title="M-S Transport + Darcy")
 
 # ╔═╡ 57117131-8c83-4788-9f8e-f0b1b9404f0a
 function grid1D()
-	X=0:0.05:1
+	X=0:0.01:1
 	grid=simplexgrid(X)
 
 	# catalyst region
-	cellmask!(grid,[.7],[0.9],2)
+	cellmask!(grid,[.46],[0.54],2)
 	#cellmask!(grid,[0.0],[0.2],2)
 	grid
 end
@@ -53,20 +54,21 @@ function grid2D()
 end
 
 # ╔═╡ 87630484-de43-46bc-a179-3e00b6e63c2a
-gridplot(grid2D())
+gridplot(grid1D())
+#gridplot(grid2D())
 
 # ╔═╡ 0a911687-aff4-4c77-8def-084293329f35
 begin
 	# for 1D domain
-	#const Γ_left = 1
-	#const Γ_right = 2
+	const Γ_left = 1
+	const Γ_right = 2
 
 	# for 2D domain
-	const Γ_bottom = 1
+	#const Γ_bottom = 1
 	#const Γ_right = 2
-	const Γ_right = 5
-	const Γ_top = 3
-	const Γ_left = 4
+	#const Γ_right = 5
+	#const Γ_top = 3
+	#const Γ_left = 4
 	
 end;
 
@@ -245,7 +247,8 @@ begin
 	#Qflow::Float64=0.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
 	#Qflow::Float64=148.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
 	#Qflow::Float64=1480.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
-	Qflow::Float64=14800.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
+	#Qflow::Float64=14800.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
+	Qflow::Float64=50000.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
 
 	MWin::Float64 = molarweight_mix(Fluids, X0)
 	mdotin::Float64=MWin*Qflow*pn/(ph"R"*Tn)*ufac"kg/s"
@@ -343,14 +346,14 @@ function bcond(f,u,bnode,data)
 	# specifying (N-1) species molar fluxes and total mass flux does not converge...
 	#inlet(f,u,bnode,data)
 
+	boundary_neumann!(f,u,bnode, species=ip, region=Γ_left,value=mfluxin*embedparam(bnode))
+
 	# specifying the inlet partial pressures converges
 	for i=1:ng	
 		boundary_dirichlet!(f,u,bnode, species=i,region=Γ_left,value=u[ip]*X0[i])
 	end
 	
 	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
-	
-	boundary_neumann!(f,u,bnode, species=ip, region=Γ_left,value=mfluxin*embedparam(bnode))
 
 end
 
@@ -460,10 +463,10 @@ function storage(f,u,node,data)
 end
 
 # ╔═╡ 333b5c80-259d-47aa-a441-ee7894d6c407
-function main(;data=ModelData(),nref=0)
+function main(;data=ModelData(),nref=0,verbose="aen")
 
-	#grid=grid1D()
-	grid=grid2D()
+	grid=grid1D()
+	#grid=grid2D()
 	
 	(;ip,p,X0,)=data
 	ng=ngas(data)
@@ -496,7 +499,7 @@ function main(;data=ModelData(),nref=0)
 		control.Δu_opt=1.0e5
 
 	embed=[0.0,1.0]
-	sol=solve(sys;inival=inival,control,embed,verbose="aen")
+	sol=solve(sys;inival=inival,control,embed,verbose=verbose)
 
 	sol,grid,sys,data
 end;
@@ -527,16 +530,58 @@ sol=sol_(t)
 let
 	(;gni,ip,p)=data_embed
 	vis = GridVisualizer(legend = :rt, ylabel="Pressure / Pa")
-	#scalarplot!(vis, grid, sol[ip,:], label="total")
+	scalarplot!(vis, grid, sol[ip,:], label="total")
 	#scalarplot!(vis, grid, sol[gni[:N2],:], label="N2")
 	#scalarplot!(vis, grid, sol[gni[:H2],:], label="H2")	
 	#scalarplot!(vis, grid, sol[gni[:CO2],:], label="CO2")
 	#scalarplot!(vis, grid, sol[gni[:CH4],:], label="CH4")
 	#scalarplot!(vis, grid, sol[gni[:CO],:], label="CO")
-	scalarplot!(vis, grid, sol[gni[:H2O],:], label="H2O")
+	#scalarplot!(vis, grid, sol[gni[:H2O],:], label="H2O")
 	reveal(vis)
 end
   ╠═╡ =#
+
+# ╔═╡ 9e02a838-2c26-453e-97d2-1de46b4d66ea
+md"""
+# Flow Variation
+"""
+
+# ╔═╡ bfa85ada-9ccb-48e7-b1bf-f3c6562a2cb3
+let
+	
+	vis = GridVisualizer(legend = :rt, ylabel="Pressure / Pa")
+	cs=colormap("Blues", 6)
+
+	sol_,grid,_,data_embed=main(;data=ModelData(Qflow=0.0*ufac"l/minute"),verbose=false);
+	(;gni)=data_embed
+
+	idx=gni[:CO2]
+	
+	sol = sol_(sol_.t[end])
+	scalarplot!(vis, grid, sol[idx,:], label="CH4 0 L/min", color=cs[2])
+	
+	sol_,_,_,_=main(;data=ModelData(Qflow=0.15*ufac"l/minute"),verbose=false);
+	sol = sol_(sol_.t[end])
+	scalarplot!(vis, grid, sol[idx,:], clear=false, label="CH4 0.15 L/min", color=cs[3])
+
+	sol_,_,_,_=main(;data=ModelData(Qflow=1.5*ufac"l/minute"),verbose=false);
+	sol = sol_(sol_.t[end])
+	scalarplot!(vis, grid, sol[idx,:], clear=false, label="CH4 1.5 L/min", 
+	color=cs[4])
+
+	sol_,_,_,_=main(;data=ModelData(Qflow=15*ufac"l/minute"),verbose=false);
+	sol = sol_(sol_.t[end])
+	scalarplot!(vis, grid, sol[idx,:], clear=false, label="CH4 15 L/min", 
+	color=cs[5])
+
+	sol_,_,_,_=main(;data=ModelData(Qflow=50*ufac"l/minute"),verbose=false);
+	sol = sol_(sol_.t[end])
+	scalarplot!(vis, grid, sol[idx,:], clear=false, label="CH4 50 L/min", 
+	color=cs[6])
+	
+	reveal(vis)
+
+end
 
 # ╔═╡ 8e0fdbc7-8e2b-4ae9-8a31-6f38baf36ef3
 md"""
@@ -613,6 +658,8 @@ checkinout(sys,sol)
 # ╠═55f305b8-47a2-4fdf-b1cb-39f95f3dfa36
 # ╠═8fcf636c-2330-4eda-9bb3-298e6a53dfd1
 # ╠═36d02d06-6d0d-4b98-8d60-f2df0afaeaad
+# ╟─9e02a838-2c26-453e-97d2-1de46b4d66ea
+# ╠═bfa85ada-9ccb-48e7-b1bf-f3c6562a2cb3
 # ╟─8e0fdbc7-8e2b-4ae9-8a31-6f38baf36ef3
 # ╟─3c4b22b9-4f55-45b9-98d8-6cd929c737c2
 # ╠═eb44075f-fbd3-4717-a440-41cb4eda8de1

@@ -28,28 +28,33 @@ end;
 # ╔═╡ 863c9da7-ef45-49ad-80d0-3594eca4a189
 PlutoUI.TableOfContents(title="PC Reactor 2D")
 
+# ╔═╡ 0a911687-aff4-4c77-8def-084293329f35
+begin
+	# cylindrical geometry, symmetry
+	#const Γ_bottom = 1 # outflow bc	
+	const Γ_bottom = 5 # outflow bc	
+	const Γ_outer = 2 # wall bc	
+	const Γ_top = 3 # inflow bc
+	const Γ_axis = 4 # symmetry
+	#const Γ_cat = 5 # symmetry
+end;
+
 # ╔═╡ d95873cc-ad5a-4581-b8d7-b0147eb2491c
 function cyl_sym(data; nref=0)
 	(;wi,h,cath)=data
 	
-	R = linspace(0,wi/2.0,9)
- 	Z = linspace(0,h,51)
+	#R = linspace(0.0,wi/2.0,9)
+	R = linspace(0.0,wi/2.0,30)
+ 	Z = linspace(0.0,2*h,50)
 
 	grid = simplexgrid(R, Z)
     circular_symmetric!(grid)
+
+	#bfacemask!(grid,[0,h],[wi/2,h],Γ_cat)
+	bfacemask!(grid,[wi/2*0,0],[wi/2*0.5,0],Γ_bottom)
 	
 	grid
 end
-
-# ╔═╡ 0a911687-aff4-4c77-8def-084293329f35
-begin
-	# cylindrical geometry, symmetry
-	const Γ_bottom = 1 # outflow bc
-	const Γ_outer = 2 # wall bc	
-	const Γ_top = 3 # inflow bc
-	const Γ_axis = 4 # symmetry
-
-end;
 
 # ╔═╡ 2554b2fc-bf5c-4b8f-b5e9-8bc261fe597b
 md"""
@@ -68,7 +73,7 @@ md"""
 ```math
 \begin{align}
 	\frac{\partial \rho}{\partial t} - \nabla \cdot \left ( \rho \vec v \right)  &= 0\\
-	\vec v  &= -\frac{\kappa}{\mu} \vec \nabla p\\
+	\vec v  &= -\frac{\kappa}{\mu} \nabla p\\
 \frac{1}{RT} \frac{\partial p_i}{\partial t} - \nabla \cdot \vec N_i + R_i &= 0
 ~,
 i = 1 ... \nu \\
@@ -169,6 +174,9 @@ md"""
 # System Setup and Solution
 """
 
+# ╔═╡ dfc9b34b-f85f-46b5-910e-4b2c76a0aa96
+SolverControl()
+
 # ╔═╡ 778326a2-4ad6-4b8b-b39a-a93a354c5ec8
 md"""
 # Peclet Number
@@ -208,10 +216,10 @@ begin
 		x=zeros(Float64, NG)
 		x[gni[:H2]] = 1.0
 		x[gni[:CO2]] = 1.0
-		#x[gni[:CO]] = 1.0
-		#x[gni[:CH4]] = 1.0
-		#x[gni[:H2O]] = 1.0
-		#x[gni[:N2]] = 1.0		
+		x[gni[:CO]] = 1.0
+		x[gni[:CH4]] = 1.0
+		x[gni[:H2O]] = 1.0
+		x[gni[:N2]] = 1.0		
 		x/sum(x)
 	end # inlet composition	
 	
@@ -278,7 +286,7 @@ end;
 end;
 
 # ╔═╡ 87630484-de43-46bc-a179-3e00b6e63c2a
-gridplot(cyl_sym(ModelData()))
+gridplot(cyl_sym(ModelData()), aspect=5, resolution=(650,600),zoom=1.2)
 
 # ╔═╡ 78cf4646-c373-4688-b1ac-92ed5f922e3c
 function reaction(f,u,node,data)
@@ -302,6 +310,7 @@ function reaction(f,u,node,data)
 		f[ng] += u[i]
 	end
 	#f[ng] = log(f[ng]/u[ip])
+	
 	f[ng] = f[ng]-u[ip]
 end
 
@@ -319,19 +328,27 @@ function bcond(f,u,bnode,data)
 	(;ip,iT,p,pn,Tn,u0,X0,Tamb,mfluxin,nfluxin)=data
 	ng=ngas(data)
 
+	## Top boundary ##
+	
+	boundary_neumann!(f,u,bnode, species=ip, region=Γ_top, value=mfluxin*embedparam(bnode))
+	
 	# specifying the inlet partial pressures 
 	for i=1:ng	
 		boundary_dirichlet!(f,u,bnode, species=i,region=Γ_top,value=u[ip]*X0[i])
 	end
+	#if bnode.region == Γ_cat
+	#	f[iT] = -10.0*ufac"kW/m^2"*embedparam(bnode)
+	#end
 	boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_top,value=Tamb)
-	#boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_bottom,value=Tamb)
-
 	
+	boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_bottom,value=Tamb)
+
+
+
+	## Bottom boundary ##
 	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_bottom,value=p)
 	
-	boundary_neumann!(f,u,bnode, species=ip, region=Γ_top,value=mfluxin*embedparam(bnode))
-
-
+	
 	# apply ∑pi = p for last species (N2) at outflow boundary
     if bnode.region == Γ_bottom
 		for i=1:ng
@@ -344,30 +361,34 @@ end
 
 # ╔═╡ 202aefe3-1086-4fd3-8f22-8b8e2cee6cec
 function mole_frac!(data,X,u::VoronoiFVM.EdgeUnknowns)
+	(;ip)=data
 	ng=ngas(data)
-	sump=zero(eltype(u))
+	#sump=zero(eltype(u))
 	
+	#for i=1:ng
+	#	X[i] = u[i,1]+u[i,2] > 0 ? 0.5*(u[i,1]+u[i,2]) : zero(eltype(u))
+	#	sump += X[i]
+	#end
 	for i=1:ng
-		X[i] = u[i,1]+u[i,2] > 0 ? 0.5*(u[i,1]+u[i,2]) : zero(eltype(u))
-		sump += X[i]
-	end
-	for i=1:ng
-		X[i] = X[i] / sump
+		#X[i] = X[i] / sump
+		X[i] = u[i,1]+u[i,2] > 0 ? (u[i,1]+u[i,2])/(u[ip,1]+u[ip,2]) : zero(eltype(u))
 	end
 	nothing
 end
 
 # ╔═╡ 6220ceec-5c29-45c0-8bde-0444c916e820
 function mole_frac!(data,X,u::VoronoiFVM.BNodeUnknowns)
+	(;ip)=data
 	ng=ngas(data)
-	sump=zero(eltype(u))
+	#sump=zero(eltype(u))
 	#X=zeros(eltype(u), ng)
-	for i=1:ng
+	#for i=1:ng
 		#X[i] = u[i]
-		sump += u[i]
-	end
+		#sump += u[i]
+	#end
 	for i=1:ng
-		X[i] = u[i] / sump 
+		#X[i] = u[i] / sump 
+		X[i] = u[i] > 0 ? u[i]/u[ip] : zero(eltype(u))
 	end
 	nothing
 end
@@ -381,6 +402,7 @@ function boutflow(f,u,edge,data)
 
 	Tm = 0.5*(u[iT,1]+u[iT,2])
 	X = MVector{ngas(data),eltype(u)}(undef)
+	#@inline mole_frac!(data,X,u)	
 	@inline mole_frac!(data,X,u)	
 	@inline μ,_=dynvisc_thermcond_mix(data, Tm, X)
 
@@ -392,7 +414,7 @@ function boutflow(f,u,edge,data)
 		f[i] = -darcyvelo(u,μ,data)*u[i,k]/(ph"R"*u[iT,k])
 		hconv += f[i] * enthalpy_gas(data.Fluids[i], u[iT,k])
 	end
-	f[iT] = hconv
+	#f[iT] = hconv
 end
 
 # ╔═╡ 28d0e651-2969-482f-8da5-8bac1c037d38
@@ -415,20 +437,8 @@ function D_matrix!(data, u, D)
 	nothing
 end
 
-# ╔═╡ 22447e9e-df5f-4773-a83e-8645ad0c7873
-function rho_mix_flux(u,data)
-	ng=ngas(data)
-
-	(;Tamb,Fluids)=data
-	rho=zero(eltype(u))
-	for i=1:ng
-		rho += Fluids[i].MW*0.5*(u[i,1]+u[i,2])
-	end
-	rho /= ph"R"*Tamb	
-end
-
 # ╔═╡ 7b856860-5eb9-44ea-8244-d8166e8fdc5f
-function rho_mix_flux_(u,data)
+function rho_mix_flux(u,data)
 	(;iT)=data
 	ng=ngas(data)
 
@@ -457,11 +467,9 @@ function flux(f,u,edge,data)
 	@inline mole_frac!(data,X,u)
 	@inline μ,λf=dynvisc_thermcond_mix(data, Tm, X)
 
-	# compute total mass flux
-	#@inline f[ip] =rho_mix_flux(u,data)*darcyvelo(u,data)		
-	@inline f[ip] =rho_mix_flux_(u,data)*darcyvelo(u,μ,data)
-	#@inline D_matrix!(data, D)
-	#@inline D_matrix!(data, D, Tm, pm)
+	# mass continuity
+	@inline f[ip] =rho_mix_flux(u,data)*darcyvelo(u,μ,data)
+	
 	@inline D_matrix!(data, u, D)
 
 	xi=zero(eltype(u))
@@ -508,8 +516,8 @@ function flux(f,u,edge,data)
 	
 	λbed=kbed(data,λf)*λf
 	Bp,Bm = fbernoulli_pm(hconv/λbed/Tm)
-	f[iT]= λbed*(Bm*u[iT,1]-Bp*u[iT,2])
-	#f[iT]=λbed*(u[iT,1]-u[iT,2])
+	#f[iT]= λbed*(Bm*u[iT,1]-Bp*u[iT,2])
+	f[iT]=λbed*(u[iT,1]-u[iT,2])
 end
 
 # ╔═╡ dd5e0a30-80ef-4eac-a014-b5a0f6a3c5fe
@@ -526,15 +534,21 @@ end
 
 # ╔═╡ 6779db7a-3823-4a41-8b2d-5558dcd73943
 function storage(f,u,node,data)
-	(;Tamb)=data
+	(;Tamb,iT,ip)=data
 	ng=ngas(data)
 
+	cp_mix = zero(eltype(u))
 	for i=1:ng
-		f[i]=u[i]/(ph"R"*Tamb)
+		#f[i]=u[i]/(ph"R"*Tamb)
+		f[i]=u[i]/(ph"R"*u[iT])
+		cp_mix += u[i]/u[ip] * heatcap_gas(data.Fluids[i], u[iT])
 	end
 	
 	# total pressure
 	f[ng+1] = rho_mix_storage(u,data)
+
+	# heat storage term
+	f[iT] = cp_mix*u[ip]/ph"R"
 end
 
 # ╔═╡ 333b5c80-259d-47aa-a441-ee7894d6c407
@@ -543,42 +557,44 @@ function main(;data=ModelData(),nref=0)
 
 	grid=cyl_sym(data)
 	
-	(;ip,iT,p,Tamb,X0)=data
+	(;ip,iT,gni,p,Tamb,X0,wi,h)=data
 	ng=ngas(data)
-	
-	sys=VoronoiFVM.System( 	grid;
-							data=data,
-							flux=flux,
-							reaction=reaction,
-							storage=storage,
-							bcondition=bcond,					
-							boutflow=boutflow,
-							outflowboundaries=[Γ_bottom]
-							)
-	
-	#enable_species!(sys; species=collect(1:(ng+1))) # gas phase species pi & ptotal	
-	enable_species!(sys; species=collect(1:(ng+2))) # pi, ptotal, T	
-	
-	inival=unknowns(sys)
 
+
+
+	sys=VoronoiFVM.System( 	grid;
+						data=data,
+						flux=flux,
+						reaction=reaction,
+						storage=storage,
+						bcondition=bcond,					
+						boutflow=boutflow,
+						outflowboundaries=[Γ_bottom],
+						assembly=:edgewise
+						)
+
+	enable_species!(sys; species=collect(1:(ng+2))) # pi, ptotal, T		
+	inival=unknowns(sys)
+	
+		
 	inival[:,:].=1.0*p	
 	for i=1:ng
 		inival[i,:] .*= X0[i]
 	end
 	inival[iT,:] .= Tamb
 	
-	# solve problem with parameter embedding (homotopy)
 	control = SolverControl(nothing, sys;)
-		control.Δp=1.0e-1
-		#control.Δp_min=1.0e-6
-		control.Δp_grow=2.0
+		#control.Δp=0.1
+		#control.Δp_grow=2.0
 		control.handle_exceptions=true
 		control.Δu_opt=1.0e5
+		control.abstol_linear=1.0e-10
+		
 
 	embed=[0.0,1.0]
-	sol=solve(sys;inival=inival,control,embed,verbose="aen")
 
-	sol,grid,sys,data
+	sol=solve(sys;inival=inival,control,embed,verbose="aen")
+	sol,grid,sys,data	
 end;
 
 # ╔═╡ aa498412-e970-45f2-8b11-249cc5c2b18d
@@ -618,18 +634,18 @@ md"""
 # ╔═╡ 55f305b8-47a2-4fdf-b1cb-39f95f3dfa36
 #=╠═╡
 sol=sol_(t)
+#sol=sol_[1]
   ╠═╡ =#
 
 # ╔═╡ 8fcf636c-2330-4eda-9bb3-298e6a53dfd1
 #=╠═╡
 let
-	(;gni,ip,p)=data_embed
-	vis = GridVisualizer(legend = :rt, ylabel="Pressure / Pa")
-	#scalarplot!(vis, grid, sol[ip,:], label="total")
-	#scalarplot!(vis, grid, sol[gni[:N2],:])
-	scalarplot!(vis, grid, sol[gni[:H2],:])	
-	#scalarplot!(vis, grid, sol[gni[:CO2],:])
-	reveal(vis)
+	(;gni,ip,iT)=data_embed
+	vis = GridVisualizer(title="Pressure / Pa", resolution=(650,600), zoom=1.2)
+	#idx = ip
+	idx = gni[:N2]
+	#idx = gni[:H2]
+	scalarplot!(vis, grid, sol[idx,:], show=true)
 end
   ╠═╡ =#
 
@@ -697,11 +713,11 @@ checkinout(sys,sol)
 # ╠═202aefe3-1086-4fd3-8f22-8b8e2cee6cec
 # ╠═6220ceec-5c29-45c0-8bde-0444c916e820
 # ╠═28d0e651-2969-482f-8da5-8bac1c037d38
-# ╠═22447e9e-df5f-4773-a83e-8645ad0c7873
 # ╠═7b856860-5eb9-44ea-8244-d8166e8fdc5f
 # ╠═dd5e0a30-80ef-4eac-a014-b5a0f6a3c5fe
 # ╟─44aa5b49-d595-4982-bbc8-100d2f199415
 # ╠═333b5c80-259d-47aa-a441-ee7894d6c407
+# ╠═dfc9b34b-f85f-46b5-910e-4b2c76a0aa96
 # ╠═aa498412-e970-45f2-8b11-249cc5c2b18d
 # ╟─778326a2-4ad6-4b8b-b39a-a93a354c5ec8
 # ╟─be76db3b-e442-4208-bced-6ab215156291
@@ -711,7 +727,7 @@ checkinout(sys,sol)
 # ╟─2790b550-3105-4fc0-9070-d142c19678db
 # ╠═55f305b8-47a2-4fdf-b1cb-39f95f3dfa36
 # ╟─b9a9b575-4a26-4c79-a8c8-fc3741ae8ec7
-# ╠═8fcf636c-2330-4eda-9bb3-298e6a53dfd1
+# ╟─8fcf636c-2330-4eda-9bb3-298e6a53dfd1
 # ╠═36d02d06-6d0d-4b98-8d60-f2df0afaeaad
 # ╟─8e0fdbc7-8e2b-4ae9-8a31-6f38baf36ef3
 # ╟─3c4b22b9-4f55-45b9-98d8-6cd929c737c2

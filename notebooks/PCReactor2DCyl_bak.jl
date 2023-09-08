@@ -31,37 +31,13 @@ PlutoUI.TableOfContents(title="PC Reactor 2D")
 # ╔═╡ d95873cc-ad5a-4581-b8d7-b0147eb2491c
 function cyl_sym(data; nref=0)
 	(;wi,h,cath)=data
-	hw=(wi/2.0)/8.0*2.0^(-nref) # width of ~16 cm, divide into 8 segments	
 
-	#Hfrit=linspace(0.0,(h-cath),11)	
+	R = linspace(0,wi/2.0,30)
 
-	#HCL=linspace((h-cath), h, 5)
+ 	Z = linspace(0,h,60)
 
-	R = linspace(0,wi/2.0,9)
-	#R = linspace(0.0,1.0,11)
-    #R = collect(0:hw:(wi/2.0))
-    #Z = glue(Hfrit,HCL)
-
-	# inert inlet region to approach flux through inlet via Dirichlet B.C.
-	#Hfrit2=linspace(h,2*h,11)
-	#Z = glue(Z,Hfrit2)
- 	Z = linspace(0,h,31)
-	#Z = linspace(0.0,1.0,21)
-	
-    #grid = VoronoiFVM.Grid(R, Z)
 	grid = simplexgrid(R, Z)
-    #circular_symmetric!(grid)
-	
-	# catalyst layer region
-	#cellmask!(grid,[0,h-cath],[wi/2,h],2)
-
-	# inert inlet region
-	#cellmask!(grid,[0,h],[wi/2,2*h],3)
-	
-	# catalyst layer boundary
-	#bfacemask!(grid,[0,h],[wi/2,h],Γ_top)
-	#bfacemask!(grid,[0,2*h],[wi/2,2*h],Γ_top)
-	
+    #circular_symmetric!(grid)	
 	grid
 end
 
@@ -73,13 +49,6 @@ begin
 	const Γ_top = 3 # inflow bc
 	const Γ_axis = 4 # symmetry
 
-	# for 2D domain
-	#const Γ_bottom = 1
-	#const Γ_bottom = 5
-	#const Γ_right = 2
-	#const Γ_right = 5
-	#const Γ_top = 3
-	#const Γ_left = 4
 end;
 
 # ╔═╡ 2554b2fc-bf5c-4b8f-b5e9-8bc261fe597b
@@ -221,7 +190,7 @@ begin
 	X0::Vector{Float64} = let
 		x=zeros(Float64, NG)
 		x[gni[:H2]] = 1.0
-		#x[gni[:CO2]] = 1.0
+		x[gni[:CO2]] = 1.0
 		#x[gni[:CO]] = 1.0
 		#x[gni[:CH4]] = 1.0
 		#x[gni[:H2O]] = 1.0
@@ -287,8 +256,7 @@ end;
 end;
 
 # ╔═╡ 87630484-de43-46bc-a179-3e00b6e63c2a
-gridplot(cyl_sym(ModelData()))
-#gridplot(grid2D())
+gridplot(cyl_sym(ModelData()), aspect=5, resolution=(650,600),zoom=1.2)
 
 # ╔═╡ 78cf4646-c373-4688-b1ac-92ed5f922e3c
 function reaction(f,u,node,data)
@@ -543,29 +511,13 @@ sol=sol_(t)
 #sol=sol_[1]
   ╠═╡ =#
 
-# ╔═╡ eef5cd17-3840-42ef-9384-bbbe18803afc
-#=╠═╡
-let
-	sgrid = subgrid(grid, [Γ_bottom], boundary=true)
-	pN2=view(sol[6, :], sgrid)
-	p=view(sol[7, :], sgrid)	
-	sum(pN2 .- p)
-end
-  ╠═╡ =#
-
 # ╔═╡ 8fcf636c-2330-4eda-9bb3-298e6a53dfd1
 #=╠═╡
 let
-	(;gni,ip,p)=data_embed
-	vis = GridVisualizer(legend = :rt, ylabel="Pressure / Pa")
-	#scalarplot!(vis, grid, sol[ip,:], label="total")
-	#scalarplot!(vis, grid, sol[gni[:N2],:], label="N2", color=:green, clear=false)
-	#scalarplot!(vis, grid, sol[gni[:H2],:], label="H2", color=:red, clear=false)	
-	scalarplot!(vis, grid, sol[gni[:CO2],:], label="CO2", color=:blue, clear=false)
-	#scalarplot!(vis, grid, sol[gni[:CH4],:], label="CH4", color=:purple, clear=false)
-	#scalarplot!(vis, grid, sol[gni[:CO],:], label="CO", color=:orange, clear=false)
-	#scalarplot!(vis, grid, sol[gni[:H2O],:], label="H2O", color=:cyan, clear=false)
-	reveal(vis)
+	(;gni,ip,p)=data_embed	
+	idx = gni[:CO2]
+	
+	scalarplot(grid, sol[idx,:], aspect=5, resolution=(650,600),zoom=1.2)	
 end
   ╠═╡ =#
 
@@ -573,25 +525,6 @@ end
 md"""
 ### Excluding Inert Inlet
 """
-
-# ╔═╡ 076ad744-30bd-41de-bd78-2d5b9682b91c
-#=╠═╡
-let
-  	sgrid = subgrid(grid, [1,2])
-	ssol=view(sol[1, :], sgrid)
-
-	(;gni,ip,p)=data_embed
-	vis = GridVisualizer(legend = :rt, ylabel="Pressure / Pa")
-	#scalarplot!(vis, sgrid, view(sol[ip,:],sgrid), label="total")
-	#scalarplot!(vis, sgrid, view(sol[gni[:N2],:],sgrid), label="N2", color=:green, clear=false)
-	scalarplot!(vis, sgrid, view(sol[gni[:H2],:],sgrid), label="H2", color=:red, clear=false)	
-	#scalarplot!(vis, sgrid, view(sol[gni[:CO2],:],sgrid), label="CO2", color=:blue, clear=false)
-	#scalarplot!(vis, sgrid, view(sol[gni[:CH4],:],sgrid), label="CH4", color=:purple, clear=false)
-	#scalarplot!(vis, sgrid, view(sol[gni[:CO],:],sgrid), label="CO", color=:orange, clear=false)
-	#scalarplot!(vis, sgrid, view(sol[gni[:H2O],:],sgrid), label="H2O", color=:cyan, clear=false)
-	reveal(vis)
-end
-  ╠═╡ =#
 
 # ╔═╡ 8e0fdbc7-8e2b-4ae9-8a31-6f38baf36ef3
 md"""
@@ -618,12 +551,9 @@ end
 
 # ╔═╡ e1602429-74fa-4949-bb0f-ecd681f52e42
 function checkinout(sys,sol)
-	
-	tfact=TestFunctionFactory(sys)
-	#tf_in=testfunction(tfact,[Γ_bottom],[Γ_top])
-	#tf_out=testfunction(tfact,[Γ_top],[Γ_bottom])
-	tf_in=testfunction(tfact,[Γ_right],[Γ_left])
-	tf_out=testfunction(tfact,[Γ_left],[Γ_right])	
+		tfact=TestFunctionFactory(sys)
+	tf_in=testfunction(tfact,[Γ_bottom],[Γ_top])
+	tf_out=testfunction(tfact,[Γ_top],[Γ_bottom])
 	(;in=integrate(sys,tf_in,sol),out=integrate(sys,tf_out,sol) )
 end
 
@@ -666,12 +596,10 @@ checkinout(sys,sol)
 # ╠═3a35ac76-e1b7-458d-90b7-d59ba4f43367
 # ╟─2790b550-3105-4fc0-9070-d142c19678db
 # ╠═55f305b8-47a2-4fdf-b1cb-39f95f3dfa36
-# ╠═eef5cd17-3840-42ef-9384-bbbe18803afc
 # ╟─b9a9b575-4a26-4c79-a8c8-fc3741ae8ec7
 # ╠═8fcf636c-2330-4eda-9bb3-298e6a53dfd1
 # ╠═36d02d06-6d0d-4b98-8d60-f2df0afaeaad
 # ╟─4566f461-bd70-41be-b21c-1ba5d70ef94e
-# ╠═076ad744-30bd-41de-bd78-2d5b9682b91c
 # ╟─8e0fdbc7-8e2b-4ae9-8a31-6f38baf36ef3
 # ╟─3c4b22b9-4f55-45b9-98d8-6cd929c737c2
 # ╠═0738a2cc-516d-4a5f-b594-6105bea488ff
