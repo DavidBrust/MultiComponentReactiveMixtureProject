@@ -7,7 +7,7 @@ using InteractiveUtils
 # ╔═╡ 11ac9b20-6a3c-11ed-0bb6-735d6fbff2d9
 begin
 	using Pkg
-	Pkg.activate(joinpath(@__DIR__,".."))
+	Pkg.activate(joinpath(@__DIR__,"..\\.."))
 	
 	using VoronoiFVM
 	using ExtendableGrids, GridVisualize
@@ -15,7 +15,7 @@ begin
 	using LessUnitful
 	using PlutoVista	
 	using PlutoUI
-	#using Colors
+	using Colors
 
 	using FixedBed
 	
@@ -333,12 +333,6 @@ F::Float64 = ph"e"*ph"N_A"
 
 end
 
-# ╔═╡ cc94646d-b51c-4e1e-ba69-3bba8f6a771b
-let
-	data=ModelData()
-	typeof(Dmatrix(data.ng, data.Dg))
-end
-
 # ╔═╡ 3f643eb7-ff5f-4e88-8a57-5c559687ad1b
 begin
 	const ngas=ModelData().ng
@@ -432,7 +426,6 @@ end
 # ╠═ed7941c4-0485-4d84-ad5b-383eb5cae70a
 # ╟─a6afe118-dcbd-4126-8646-c7268acfacf3
 # ╠═f3dc68cb-f9c3-4e85-892f-34358831e3eb
-# ╠═cc94646d-b51c-4e1e-ba69-3bba8f6a771b
 # ╠═b6381008-0280-404c-a86c-9c9c3c9f82eb
 # ╟─02b76cda-ffae-4243-ab40-8d0fe1325776
 # ╠═dd7e659d-2fbf-494e-973e-03d913c60ca0

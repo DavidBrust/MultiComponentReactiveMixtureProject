@@ -31,7 +31,7 @@ PlutoUI.TableOfContents(title="M-S Transport + Darcy")
 
 # ╔═╡ 57117131-8c83-4788-9f8e-f0b1b9404f0a
 function grid1D()
-	X=0:0.01:1
+	X=0:0.005:1
 	grid=simplexgrid(X)
 
 	# catalyst region
@@ -198,7 +198,7 @@ begin
 	#kinpar::FixedBed.KinData{nreac(ReOrderSpec)} = ReOrderSpec
 
 	# kinetic constants for simple reactions
-	kp::Float64=1.0
+	kp::Float64=0.2
 	km::Float64=0.1
 	isreactive::Bool=true
 		
@@ -247,8 +247,8 @@ begin
 	#Qflow::Float64=0.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
 	#Qflow::Float64=148.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
 	#Qflow::Float64=1480.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
-	#Qflow::Float64=14800.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
-	Qflow::Float64=50000.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
+	Qflow::Float64=14800.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
+	#Qflow::Float64=50000.0*ufac"ml/minute" # volumetric feed flow rate (sccm)		
 
 	MWin::Float64 = molarweight_mix(Fluids, X0)
 	mdotin::Float64=MWin*Qflow*pn/(ph"R"*Tn)*ufac"kg/s"
@@ -277,10 +277,19 @@ function reaction(f,u,node,data)
 
 	if node.region == 2 && isreactive # catalyst layer
 
+		# H2 + CO2 <-> H2O + CO
+		#r = kp *(u[gni[:H2]]/ufac"bar") *u[gni[:CO2]]/ufac"bar" -km *u[gni[:H2O]]/ufac"bar"*u[gni[:CO]]/ufac"bar"		
+		#r *=embedparam(node)
+
+		#f[gni[:H2]]=r
+		#f[gni[:CO2]]=r
+		#f[gni[:H2O]]=-r
+		#f[gni[:CO]]=-r
+		
 		# 4 H2 + CO2 <-> 2 H2O + CH4
 		r = kp *(u[gni[:H2]]/ufac"bar")^4 *u[gni[:CO2]]/ufac"bar" -km *(u[gni[:H2O]]/ufac"bar")^2	*u[gni[:CH4]]/ufac"bar"		
 		r *=embedparam(node)
-		
+
 		f[gni[:H2]]=4*r
 		f[gni[:CO2]]=r
 		f[gni[:H2O]]=-2*r
@@ -493,11 +502,10 @@ function main(;data=ModelData(),nref=0,verbose="aen")
 	# solve problem with parameter embedding (homotopy)
 	control = SolverControl(nothing, sys;)
 		control.Δp=1.0e-1
-		#control.Δp_min=1.0e-6
 		control.Δp_grow=2.0
 		control.handle_exceptions=true
 		control.Δu_opt=1.0e5
-
+	#verbose="e"
 	embed=[0.0,1.0]
 	sol=solve(sys;inival=inival,control,embed,verbose=verbose)
 
@@ -530,9 +538,9 @@ sol=sol_(t)
 let
 	(;gni,ip,p)=data_embed
 	vis = GridVisualizer(legend = :rt, ylabel="Pressure / Pa")
-	scalarplot!(vis, grid, sol[ip,:], label="total")
+	#scalarplot!(vis, grid, sol[ip,:], label="total")
 	#scalarplot!(vis, grid, sol[gni[:N2],:], label="N2")
-	#scalarplot!(vis, grid, sol[gni[:H2],:], label="H2")	
+	scalarplot!(vis, grid, sol[gni[:H2],:], label="H2")	
 	#scalarplot!(vis, grid, sol[gni[:CO2],:], label="CO2")
 	#scalarplot!(vis, grid, sol[gni[:CH4],:], label="CH4")
 	#scalarplot!(vis, grid, sol[gni[:CO],:], label="CO")
@@ -546,6 +554,11 @@ md"""
 # Flow Variation
 """
 
+# ╔═╡ bbaf1025-461c-4b22-b0db-c7f09c92cf80
+#=╠═╡
+data_embed.mfluxin
+  ╠═╡ =#
+
 # ╔═╡ bfa85ada-9ccb-48e7-b1bf-f3c6562a2cb3
 let
 	
@@ -555,7 +568,7 @@ let
 	sol_,grid,_,data_embed=main(;data=ModelData(Qflow=0.0*ufac"l/minute"));
 	(;gni,gn)=data_embed
 
-	idx=gni[:CO2]
+	idx=gni[:H2]
 	
 	sol = sol_(sol_.t[end])
 	scalarplot!(vis, grid, sol[idx,:], label=string(gn[idx])*" 0 L/min", color=cs[2])
@@ -582,6 +595,41 @@ let
 	reveal(vis)
 
 end
+
+# ╔═╡ f146e8fc-80c0-476c-b384-7b77b3fc0bd9
+md"""
+## Molar or mass based velocity
+"""
+
+# ╔═╡ ba71ca91-8c67-4c3d-84c5-331d3d290e86
+#=╠═╡
+let
+	(;Fluids,gni,ip,mfluxin,Tamb) = data_embed
+	MWall = []
+	for j=1:size(sol,2)
+		MW = 0.0
+		for i=1:ngas(data_embed)
+			MW += sol[i,j]/sol[ip,j]*Fluids[i].MW
+		end
+		push!(MWall, MW)
+	end
+	
+	Nt = mfluxin ./ MWall
+	ct = sol[ip,:] ./ (ph"R"*Tamb)
+	vm = Nt ./ ct
+
+	
+	vis = GridVisualizer(legend = :rt, ylabel="Molar flux / mol m-2 s-1")
+	#scalarplot!(vis, grid, Nt, label="Theoretical", color=:red)
+	#scalarplot!(vis, grid, vm, label="avg. Molar velocity", color=:red)
+	scalarplot!(vis, grid, ct, label="avg. Molar velocity", color=:red)
+	reveal(vis)
+	
+	#rhoall=MWall.*sol[ip,:]/(ph"R"*Tamb)
+	#scalarplot(grid,rhoall)
+	#scalarplot(grid,fluxes[1,ip,:])
+end
+  ╠═╡ =#
 
 # ╔═╡ 8e0fdbc7-8e2b-4ae9-8a31-6f38baf36ef3
 md"""
@@ -659,7 +707,10 @@ checkinout(sys,sol)
 # ╠═8fcf636c-2330-4eda-9bb3-298e6a53dfd1
 # ╠═36d02d06-6d0d-4b98-8d60-f2df0afaeaad
 # ╟─9e02a838-2c26-453e-97d2-1de46b4d66ea
+# ╠═bbaf1025-461c-4b22-b0db-c7f09c92cf80
 # ╠═bfa85ada-9ccb-48e7-b1bf-f3c6562a2cb3
+# ╟─f146e8fc-80c0-476c-b384-7b77b3fc0bd9
+# ╠═ba71ca91-8c67-4c3d-84c5-331d3d290e86
 # ╟─8e0fdbc7-8e2b-4ae9-8a31-6f38baf36ef3
 # ╟─3c4b22b9-4f55-45b9-98d8-6cd929c737c2
 # ╠═eb44075f-fbd3-4717-a440-41cb4eda8de1

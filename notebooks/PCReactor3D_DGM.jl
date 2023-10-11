@@ -465,11 +465,6 @@ const uc_cat = SurfaceOpticalProps(
 	tau_vis=0.0 # opaque surface	
 )
 
-# ╔═╡ d689579e-58b9-415e-8426-5e7a5498aa0a
-let
-	uc_window.tau_vis/(1-uc_window.rho_vis*uc_cat.rho_vis)
-end
-
 # ╔═╡ fdaeafb6-e29f-41f8-8468-9c2b03b9eed7
 # optical parameters for uncoated frit in upper chamber (uc)
 const uc_frit = SurfaceOpticalProps(
@@ -719,8 +714,8 @@ begin
 	# kinetic parameters, S3P="simple 3 parameter" kinetics fit to UPV lab scale experimental data
 
 	#kinpar::FixedBed.KinData{nreac(S3P)} = S3P
-	#kinpar::FixedBed.KinData{nreac(XuFroment)} = XuFroment
-	kinpar::FixedBed.KinData{nreac(Wolf_rWGS)} = Wolf_rWGS
+	kinpar::FixedBed.KinData{nreac(XuFroment)} = XuFroment
+	#kinpar::FixedBed.KinData{nreac(Wolf_rWGS)} = Wolf_rWGS
 		
 	#ng::Int64		 		= kinpar.ng # number of gas phase species
 	ip::Int64=NG+1 # index of total pressure variable
@@ -847,7 +842,8 @@ begin
 	mdotin::Float64=MWin*Qflow*pn/(ph"R"*Tn)*ufac"kg/s"
 	
 	Tamb::Float64=298.15*ufac"K" # ambient temperature
-	p::Float64=1.0*ufac"atm" # reactor pressure
+	#p::Float64=1.0*ufac"atm" # reactor pressure
+	p::Float64=3.0*ufac"bar" # reactor pressure
 
 	u0::Float64=Qflow/(Ac)*ufac"m/s" # mean superficial velocity
 	ubot::Float64=u0*ufac"m/s" # adjustable parameter to match the outlet mass flow to prescribed inlet mass flow rate
@@ -1265,9 +1261,11 @@ function main(;data=ModelData(),nref=0,control = sys->SolverControl(),assembly=:
 	
 	 mycontrol=control(sys ;
 	 				  		handle_exceptions=true,
-							#Δp_min=1.0e-4,					  
-	 				  		Δp=0.25,
-	 				  		Δp_grow=2.0,
+							#Δp_min=1.0e-4,
+	 						Δp=0.05,
+	 				  		#Δp=0.25,
+	 				  		#Δp_grow=2.0,
+	 						Δp_grow=1.2,
 	 				  		Δu_opt=1.0e5 )
 	
 	embed=[0.0,1.0]
@@ -1294,7 +1292,7 @@ begin
 			kwargs...)
 		end
 		
-		sol_,grid,sys,data_embed=main(;data=ModelData(),nref=1,control,
+		sol_,grid,sys,data_embed=main(;data=ModelData(),nref=0,control,
 		assembly=:edgewise);
 		
 		if sol_ isa VoronoiFVM.TransientSolution
@@ -1459,6 +1457,11 @@ md"""
 ## Mass and Molar flows
 """
 
+# ╔═╡ 84373c2e-f673-42fd-9c39-9d1f8a87c262
+#=╠═╡
+data_embed.mdotin/ufac"kg/hr"
+  ╠═╡ =#
+
 # ╔═╡ f39dd714-972c-4d29-bfa8-d2c3795d2eef
 function massflow(data, bflux)
 	ng=ngas(data)
@@ -1515,6 +1518,26 @@ Chemical species flows through porous frit from bottom and top:
 | $(data_embed.gn[6]) | $(abs(round(ndot_top[6]/ufac"mol/hr",digits=2)))  |   $(round(ndot_bot[6]/ufac"mol/hr",digits=2))   |  mol/hr  |
 
 
+"""
+  ╠═╡ =#
+
+# ╔═╡ d784528f-1c3f-4522-9a6e-20ce648e2ef7
+#=╠═╡
+function ndo()
+	(;gni) = data_embed
+	dry_prod = ndot_bot[gni[:CO]]+ndot_bot[gni[:H2]]+ndot_bot[gni[:CH4]]+ndot_bot[gni[:CO2]]
+end
+  ╠═╡ =#
+
+# ╔═╡ 9f377ad9-3e79-42d2-b340-9020ffce88ca
+#=╠═╡
+md"""
+|    | Dry Molar Fraction    |    |
+|----|-------|-------|
+| $(data_embed.gn[1]) |   $(round(ndot_bot[1]/ndo(),digits=3)*100)   | % |
+| $(data_embed.gn[2]) |   $(round(ndot_bot[2]/ndo(),digits=3)*100)   | % |
+| $(data_embed.gn[3]) |   $(round(ndot_bot[3]/ndo(),digits=3)*100)   | % |
+| $(data_embed.gn[5]) |   $(round(ndot_bot[5]/ndo(),digits=3)*100)   | % |
 """
   ╠═╡ =#
 
@@ -1642,7 +1665,7 @@ end
 # ╔═╡ cfa366bc-f8b9-4219-b210-51b9fc5ff3f6
 #=╠═╡
 md"""
-Total irradiated power on aperture (from measurement, 80 kW/m2 nominal): __$(Integer(round(sum(M12)*(0.031497*ufac"cm")^2,digits=0))) W__
+Total irradiated power on __catalyst surface__ (from measurement, scaled to 70 kW/m2 nominal): __$(Integer(round(sum(M12)*(0.031497*ufac"cm")^2,digits=0))) W__
 
 Total irradiated power on __aperture__ (for interpolation on computational grid, interpolated to nom. avg. irradiation 70 kW/m2): __$(Pwr=PowerIn(sol,sys,grid,data_embed);round(sum(Pwr[Γ_top_cat]))) W__
 """
@@ -2023,7 +2046,8 @@ let
 	data=data_embed
 	(;gni,ip)=data
 	sol_xz, grid_xz = CutPlane(data,sol)
-	idx = gni[:CO]
+	#idx = gni[:CO]
+	idx = gni[:CH4]
 	#idx = gni[:CO2]
 	#idx = gni[:H2]
 	scalarplot(grid_xz, sol_xz[idx] ./sol_xz[ip], resolution=(650,600), zoom=1.2, aspect=5.0, Plotter=PlutoVista)
@@ -2341,16 +2365,15 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╠═cfa366bc-f8b9-4219-b210-51b9fc5ff3f6
 # ╠═f4ebb596-824a-4124-afb7-c368c1cabb00
 # ╟─3aef8203-ce28-4197-a43e-784840f7bc1e
-# ╟─2bf61cf4-2f4a-4c48-ad96-5de82403f3a0
-# ╟─d9dee38e-6036-46b8-bc06-e545baa06789
-# ╟─e58ec04f-023a-4e00-98b8-f9ae85ca506f
+# ╠═2bf61cf4-2f4a-4c48-ad96-5de82403f3a0
+# ╠═d9dee38e-6036-46b8-bc06-e545baa06789
+# ╠═e58ec04f-023a-4e00-98b8-f9ae85ca506f
 # ╟─80d2b5db-792a-42f9-b9c2-91d0e18cfcfb
 # ╟─6de46bcb-9aff-4a21-b8d6-f14e64aac95c
 # ╟─b1ef2a89-27db-4f21-a2e3-fd6356c394da
 # ╠═79e6cb48-53e2-4655-9d77-51f3deb67b94
 # ╟─4dae93b2-be63-4ee9-bc1e-871a31ade811
 # ╠═9547ed7c-3304-4c63-a6c1-5f84e0001c54
-# ╠═d689579e-58b9-415e-8426-5e7a5498aa0a
 # ╠═9d191a3a-e096-4ad7-aae6-bbd63d478fa2
 # ╠═2d51f54b-4cff-4253-b17f-217e3261f36d
 # ╠═fdaeafb6-e29f-41f8-8468-9c2b03b9eed7
@@ -2399,9 +2422,12 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─e81e803a-d831-4d62-939c-1e4a4fdec74f
 # ╟─c4521a0c-c5af-43cd-97bc-a4a7a42d27b1
 # ╟─b34c1d1b-a5b8-4de9-bea9-3f2d0503c1c0
+# ╠═84373c2e-f673-42fd-9c39-9d1f8a87c262
 # ╟─8b1a0902-2542-40ed-9f91-447bffa4290f
 # ╠═f39dd714-972c-4d29-bfa8-d2c3795d2eef
 # ╟─b06a7955-6c91-444f-9bf3-72cfb4a011ec
+# ╟─9f377ad9-3e79-42d2-b340-9020ffce88ca
+# ╠═d784528f-1c3f-4522-9a6e-20ce648e2ef7
 # ╠═6ae6d894-4923-4408-9b77-1067ba9e2aff
 # ╠═7ab38bc2-9ca4-4206-a4c3-5fed673557f1
 # ╟─84093807-8ea9-4290-8bf7-bd94c5c28691
