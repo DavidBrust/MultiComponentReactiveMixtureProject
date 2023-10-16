@@ -41,20 +41,7 @@ function grid1D()
 	X=(0:0.01:1)*ufac"cm"
 	grid=simplexgrid(X)
 	# catalyst region
-	cellmask!(grid,[0.8]*ufac"cm",[0.9]*ufac"cm",2)	
-	grid
-end
-
-# ╔═╡ b8819e9f-5262-421a-90ba-74f08d7fc52f
-function grid2D()
-	X=(0:0.01:1)*ufac"cm"
-	Y=(0:0.01:1)*ufac"cm"
-	grid=simplexgrid(X,Y)
-
-	# catalyst region
-	#cellmask!(grid,[0.7,0.0],[0.9,1.0],2)
-	#bfacemask!(grid, [1,0.2],[1,0.8],5)
-	
+	cellmask!(grid,[0.45]*ufac"cm",[0.55]*ufac"cm",2)	
 	grid
 end
 
@@ -79,7 +66,7 @@ md"""
 ## Mass Continuity
 ```math
 \begin{align}
-	\frac{\partial \rho}{\partial t} - \nabla \cdot \left ( \rho \vec v \right)  &= 0\\
+	\frac{\partial \rho}{\partial t} + \nabla \cdot \left ( \rho \vec v \right)  &= 0\\
 	\vec v  &= -\frac{\kappa}{\mu} \vec \nabla p\\
 \end{align}
 ```
@@ -87,7 +74,7 @@ md"""
 
 # ╔═╡ 220e0a21-9328-4cf3-86cc-58468bb02cf7
 md"""
-!!! __check signs in flux function: diffusive and convective flux, respecting VoronoiFVM.jl convention__ !!!
+Care must be taken with respect to the sign convention used in VoronoiFVM.jl.
 """
 
 # ╔═╡ b94513c2-c94e-4bcb-9342-47ea48fbfd14
@@ -95,8 +82,8 @@ md"""
 ## Species Mass Transport
 ```math
 \begin{align}
-	\frac{\partial \rho_i}{\partial t} - \nabla \cdot \left( \vec \Phi_i - \rho_i \vec v \right ) + R_i &= 0 ~, \qquad i = 1 ... \nu \\
-		-\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} \right) &= \sum_{j=1 \atop j \neq i}^{\nu} \frac{w_j \vec \Phi_i-w_i \vec \Phi_j}{D_{ij} M_i M_j} \\
+	\frac{\partial \rho_i}{\partial t} + \nabla \cdot \left( \vec \Phi_i + \rho_i \vec v \right ) - R_i &= 0 ~, \qquad i = 1 ... \nu \\
+		\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} \right) &= -\sum_{j=1 \atop j \neq i}^{\nu} \frac{w_j \vec \Phi_i-w_i \vec \Phi_j}{D_{ij} M_i M_j} \\
 		\sum_{i=1}^\nu x_i &= 1
 \end{align}
 ```
@@ -137,13 +124,18 @@ end
 
 # ╔═╡ 5f88937b-5802-4a4e-81e2-82737514b9e4
 function bcond(f,u,bnode,data)
-	(;p,ip,mfluxin,X0)=data
+	(;p,ip,mfluxin,X0,Xf)=data
+
+	X = @. X0 + (Xf-X0)*bnode.embedparam
 	
-	boundary_dirichlet!(f,u,bnode, species=1,region=Γ_left,value=X0[1])
-	boundary_dirichlet!(f,u,bnode, species=2,region=Γ_left,value=X0[2])
+	#boundary_dirichlet!(f,u,bnode, species=1,region=Γ_left,value=X0[1])
+	#boundary_dirichlet!(f,u,bnode, species=2,region=Γ_left,value=X0[2])
+	boundary_dirichlet!(f,u,bnode, species=1,region=Γ_left,value=X[1])
+	boundary_dirichlet!(f,u,bnode, species=2,region=Γ_left,value=X[2])
 	
 	#boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_left,value=p)
 	boundary_neumann!(f,u,bnode, species=ip, region=Γ_left, value=mfluxin*embedparam(bnode))
+	#boundary_neumann!(f,u,bnode, species=ip, region=Γ_left, value=mfluxin)
 
 
 	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
@@ -161,9 +153,7 @@ md"""
 
 # ╔═╡ 83a08a0f-eef6-436e-8cfa-a9af45fc5bb0
 md"""
-!!! __ask JF why Newton's method is not converging for larger Peclet numbers__ !!!
-
-Idea: the solution does not change for increasing mass fluxes, thus there is no meaningful update step / near singular Jacobi Matrix?
+__For Peclet numbers > 1 (convective transport > diffusive transport) it is observed that Newton's method has difficulties to converge in this simulation.__
 """
 
 # ╔═╡ f40a8111-b5cb-40f0-8b12-f57cf59637f1
@@ -176,11 +166,16 @@ Base.@kwdef mutable struct ModelData
 	m0::Array{Float64,1} = [10.0,10.0,10.0]*ufac"g/mol"
 	perm::Float64=1.23e-13*ufac"m^2" # perm. of porous medium, use in Darcy Eq.
 
-	X0::Array{Float64,1} = [0.5, 0.3, 0.2]
+	X0::Array{Float64,1} = [0.1, 0.7, 0.2]
+	Xf::Array{Float64,1} = [0.1, 0.7, 0.2]
+	#Xf::Array{Float64,1} = [0.5, 0.5, 0.0]
+	
+	
 	mmix0::Float64 = sum(X0 .* mf)
 	W0::Array{Float64,1} = @. mf*X0/mmix0
 	
-	mfluxin::Float64=0.0001*ufac"kg/(m^2*s)"
+	mfluxin::Float64=0.0005*ufac"kg/(m^2*s)"
+
 
 	#isreactive::Int64 = 0
 	isreactive::Int64 = 1
@@ -193,7 +188,7 @@ function darcyvelo(u,data)
 	(;ip,perm) = data
 
 	μ = 2.0e-5*ufac"Pa*s"
-	perm/μ*(u[ip,1]-u[ip,2])	
+	-perm/μ*(u[ip,1]-u[ip,2])	
 end
 
 # ╔═╡ 389a4798-a9ee-4e9c-8b44-a06201b4c457
@@ -211,7 +206,8 @@ function boutflow(f,u,edge,data)
 	#for i=1:ng
 		# specify flux at boundary
 		
-		f[i] = -darcyvelo(u,data) * cout*u[i,k]*m[i]
+		#f[i] = -darcyvelo(u,data) * cout*u[i,k]*m[i]
+		f[i] = darcyvelo(u,data) * cout*u[i,k]*m[i]
 	end	
 end
 
@@ -256,7 +252,8 @@ function flux(f,u,edge,data)
 	rho = c*mmix
 	v = darcyvelo(u,data)
 	# compute total mass flux
-	@inline f[ip] =rho*v
+	#@inline f[ip] =rho*v
+	@inline f[ip] = -rho*v
 	
 	w1 = m[1]*x1/mmix
 	w2 = m[2]*x2/mmix
@@ -268,23 +265,22 @@ function flux(f,u,edge,data)
 	M[2,1] = w2*(1/D[2,1] - 1/D[2,3])
 	M[2,2] = -w1/D[2,1] - (w2+w3)/D[2,3]
 
-	#δx1 = u[1,1]-u[1,2]
-	#δx2 = u[2,1]-u[2,2]
-	#δp = u[ip,1]-u[ip,2]
+	δx1 = u[1,1]-u[1,2]
+	δx2 = u[2,1]-u[2,2]
+	δp = u[ip,1]-u[ip,2]
 
-	#F[1] = ( δx1 + (x1-w1)*δp/pm )*c/mmix
-	#F[2] = ( δx2 + (x2-w2)*δp/pm )*c/mmix
-	F[1] = (u[1,1]-u[1,2])*c/mmix
-	F[2] = (u[2,1]-u[2,2])*c/mmix
+	F[1] = ( δx1 + (x1-w1)*δp/pm )*c/mmix
+	F[2] = ( δx2 + (x2-w2)*δp/pm )*c/mmix
+	#F[1] = (u[1,1]-u[1,2])*c/mmix
+	#F[2] = (u[2,1]-u[2,2])*c/mmix
 
 	@inline inplace_linsolve!(M,F)
 
-	#!!! check sign convention
-	f[1] = -F[1] + rho*w1*v
-	f[2] = -F[2] + rho*w2*v
-	#!!! check sign convention
-	
 
+	#f[1] = -(F[1] + embedparam(edge)*rho*w1*v)
+	#f[2] = -(F[2] + embedparam(edge)*rho*w2*v)
+	f[1] = -(F[1] + rho*w1*v)
+	f[2] = -(F[2] + rho*w2*v)
 end
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
@@ -312,12 +308,12 @@ begin
 	end
 
 	control = SolverControl(nothing, sys;)
-		control.Δp=1.0e-1
-		#control.Δp_grow=1.2
+		control.Δp=1.0e-2
+		control.Δp_grow=1.1
 		control.handle_exceptions=true
 		control.Δu_opt=1.0e5
 		control.Δp_min=1.0e-5
-		#control.maxiters=500
+		#control.maxiters=200
 
 	embed=[0,1]
 	solt=solve(sys;inival=inival,embed,control,verbose="ne")	
@@ -334,9 +330,9 @@ let
 	(;ip,p) = ModelData()
 
 	vis=GridVisualizer(legend=:lt, title="Molar Fractions", resolution=(600,300))
-	scalarplot!(vis, mygrid, sol[1,:], clear=false, label="1")
-	scalarplot!(vis, mygrid, sol[2,:], clear=false, color=:red, label="2")
-	scalarplot!(vis, mygrid, sol[3,:], clear=false, color=:blue, label="3")
+	scalarplot!(vis, mygrid, sol[1,:], clear=false, label="x1")
+	scalarplot!(vis, mygrid, sol[2,:], clear=false, color=:red, label="x2")
+	scalarplot!(vis, mygrid, sol[3,:], clear=false, color=:blue, label="x3")
 	#scalarplot!(vis, mygrid, sol[ip,:] ./p, clear=false, color=:gray, label="pt/pout")
 	reveal(vis)
 end
@@ -438,11 +434,13 @@ function check_reaction(f,u,node,data)
 	f[3] = f[3] - 1.0
 end
 
+# ╔═╡ 370ebbae-9caf-4e56-ad77-020048bf7aa8
+integrate(sys,check_reaction,sol)
+
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╠═d3278ac7-db94-4119-8efd-4dd18107e248
 # ╠═83fa22fa-451d-4c30-a4b7-834974245996
-# ╠═b8819e9f-5262-421a-90ba-74f08d7fc52f
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
 # ╠═832f3c15-b75a-4afe-8cc5-75ff3b4704d6
 # ╟─a078e1e1-c9cd-4d34-86d9-df4a052b6b96
@@ -457,11 +455,12 @@ end
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═111b1b1f-51a5-4069-a365-a713c92b79f4
+# ╠═e29848dd-d787-438e-9c32-e9c2136aec4f
+# ╠═370ebbae-9caf-4e56-ad77-020048bf7aa8
 # ╠═de69f808-2618-4add-b092-522a1d7e0bb7
 # ╟─db77fca9-4118-4825-b023-262d4073b2dd
 # ╟─83a08a0f-eef6-436e-8cfa-a9af45fc5bb0
 # ╠═ae8c7993-a89f-438a-a72a-d4a0c9a8ce57
-# ╠═e29848dd-d787-438e-9c32-e9c2136aec4f
 # ╠═f40a8111-b5cb-40f0-8b12-f57cf59637f1
 # ╠═e183587f-db01-4f04-85fc-8d1a21bc0526
 # ╠═389a4798-a9ee-4e9c-8b44-a06201b4c457
