@@ -38,22 +38,57 @@ PlutoUI.TableOfContents(title="M-S Transport + Darcy")
 
 # ╔═╡ 83fa22fa-451d-4c30-a4b7-834974245996
 function grid1D()
-	X=(0:0.02:1)*ufac"cm"
+	X=(0:0.05:1)*ufac"cm"
 	grid=simplexgrid(X)
 	# catalyst region
 	cellmask!(grid,[0.45]*ufac"cm",[0.55]*ufac"cm",2)	
 	grid
 end
 
+# ╔═╡ 4dae4173-0363-40bc-a9ca-ce5b4d5224cd
+function grid2D()
+	X=(0:0.05:1)*ufac"cm"
+	Y=(0:0.05:1)*ufac"cm"
+	grid=simplexgrid(X,Y)
+
+	# catalyst region
+	cellmask!(grid,[0.45,0.0].*ufac"cm",[0.55,1.0].*ufac"cm",2)
+	bfacemask!(grid, [1,0.2].*ufac"cm",[1,0.8].*ufac"cm",5)
+	
+	grid
+end
+
+# ╔═╡ 6da83dc0-3b0c-4737-833c-6ee91552ff5c
+md"""
+Check the box to start the simulation:
+
+__Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=false))
+"""
+
+# ╔═╡ 107a6fa3-60cb-43f0-8b21-50cd1eb5065a
+const dim = 2
+
 # ╔═╡ a995f83c-6ff7-4b95-a798-ea636ccb1d88
-gridplot(grid1D(), resolution=(600,200))
-#gridplot(grid2D())
+let
+	if dim == 1
+		gridplot(grid1D(), resolution=(600,200))
+	elseif dim == 2
+		gridplot(grid2D())
+	end
+end
 
 # ╔═╡ 832f3c15-b75a-4afe-8cc5-75ff3b4704d6
 begin
-	# for 1D domain
-	const Γ_left = 1
-	const Γ_right = 2
+	if dim == 1
+		const Γ_left = 1
+		const Γ_right = 2
+	elseif dim == 2
+		const Γ_bottom = 1
+		#const Γ_right = 2
+		const Γ_top = 3
+		const Γ_left = 4
+		const Γ_right = 5
+	end
 end;
 
 # ╔═╡ a078e1e1-c9cd-4d34-86d9-df4a052b6b96
@@ -150,6 +185,9 @@ function bcond(f,u,bnode,data)
 	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
 
 end
+
+# ╔═╡ 7fc8d2ef-2696-457c-a65f-76c924715e17
+RunSim
 
 # ╔═╡ db77fca9-4118-4825-b023-262d4073b2dd
 md"""
@@ -293,7 +331,12 @@ end
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
 begin
-	mygrid=grid1D()
+	
+	if dim == 1
+		mygrid=grid1D()
+	elseif dim == 2
+		mygrid=grid2D()
+	end
 	mydata=ModelData()
 	(;p,ip)=mydata
 	
@@ -317,19 +360,14 @@ begin
 	end
 
 	control = SolverControl(nothing, sys;)
-		#control.Δp=1.0e-1
 		control.Δt=1.0e-4
-		#control.Δp_grow=1.1
 		control.handle_exceptions=true
 		control.Δu_opt=1.0e5
-		#control.Δp_min=1.0e-5
-		#control.maxiters=200
 
-	#embed=[0,1]
-	#solt=solve(sys;inival=inival,embed,control,verbose="ne")
-
-	times=[0,20]
-	solt=solve(sys;inival=inival,times,control,verbose="ne")
+	if RunSim
+		times=[0,20]
+		solt=solve(sys;inival=inival,times,control,verbose="ne")
+	end
 end;
 
 # ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
@@ -341,12 +379,18 @@ sol = solt(t)
 # ╔═╡ 111b1b1f-51a5-4069-a365-a713c92b79f4
 let
 	(;ip,p) = ModelData()
-
-	vis=GridVisualizer(legend=:lt, title="Molar Fractions", resolution=(600,300))
-	scalarplot!(vis, mygrid, sol[1,:], clear=false, label="x1")
-	scalarplot!(vis, mygrid, sol[2,:], clear=false, color=:red, label="x2")
-	scalarplot!(vis, mygrid, sol[3,:], clear=false, color=:blue, label="x3")
-	#scalarplot!(vis, mygrid, sol[ip,:] ./p, clear=false, color=:gray, label="pt/pout")
+	if dim == 1
+		vis=GridVisualizer(legend=:lt, title="Molar Fractions", resolution=(600,300))
+		scalarplot!(vis, mygrid, sol[1,:], clear=false, label="x1")
+		scalarplot!(vis, mygrid, sol[2,:], clear=false, color=:red, label="x2")
+		scalarplot!(vis, mygrid, sol[3,:], clear=false, color=:blue, label="x3")
+	elseif dim == 2
+		vis=GridVisualizer(layout=(1,3), resolution=(700,233))
+		scalarplot!(vis[1,1], mygrid, sol[1,:], clear=false, label="x1")
+		scalarplot!(vis[1,2], mygrid, sol[2,:], clear=false, color=:red, label="x2")
+		scalarplot!(vis[1,3], mygrid, sol[3,:], clear=false, color=:blue, label="x3")
+	end
+	
 	reveal(vis)
 end
 
@@ -452,7 +496,10 @@ integrate(sys,check_reaction,sol)
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╠═d3278ac7-db94-4119-8efd-4dd18107e248
 # ╠═83fa22fa-451d-4c30-a4b7-834974245996
+# ╠═4dae4173-0363-40bc-a9ca-ce5b4d5224cd
+# ╟─6da83dc0-3b0c-4737-833c-6ee91552ff5c
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
+# ╠═107a6fa3-60cb-43f0-8b21-50cd1eb5065a
 # ╠═832f3c15-b75a-4afe-8cc5-75ff3b4704d6
 # ╟─a078e1e1-c9cd-4d34-86d9-df4a052b6b96
 # ╟─0fadb9d2-1ccf-4d44-b748-b76d911784ca
@@ -463,6 +510,7 @@ integrate(sys,check_reaction,sol)
 # ╠═3bb2deff-7816-4749-9f1e-c1e451372b1e
 # ╠═4af1792c-572e-465c-84bf-b67dd6a7bc93
 # ╠═5f88937b-5802-4a4e-81e2-82737514b9e4
+# ╠═7fc8d2ef-2696-457c-a65f-76c924715e17
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
