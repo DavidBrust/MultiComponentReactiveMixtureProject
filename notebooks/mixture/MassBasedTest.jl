@@ -175,7 +175,7 @@ Base.@kwdef mutable struct ModelData
 	mmix0::Float64 = sum(X0 .* mf)
 	W0::Array{Float64,1} = @. mf*X0/mmix0
 	
-	mfluxin::Float64=0.0005*ufac"kg/(m^2*s)"
+	mfluxin::Float64=0.0001*ufac"kg/(m^2*s)"
 
 
 	#isreactive::Int64 = 0
@@ -267,9 +267,9 @@ function flux(f,u,edge,data)
 	M[2,1] = w2*(1/D[2,1] - 1/D[2,3])
 	M[2,2] = -w1/D[2,1] - (w2+w3)/D[2,3]
 
-	δx1 = u[1,1]-u[1,2]
-	δx2 = u[2,1]-u[2,2]
-	δp = u[ip,1]-u[ip,2]
+	#δx1 = u[1,1]-u[1,2]
+	#δx2 = u[2,1]-u[2,2]
+	#δp = u[ip,1]-u[ip,2]
 
 	#F[1] = ( δx1 + (x1-w1)*δp/pm )*c/mmix
 	#F[2] = ( δx2 + (x2-w2)*δp/pm )*c/mmix
@@ -314,11 +314,11 @@ begin
 	end
 
 	control = SolverControl(nothing, sys;)
-		control.Δp=1.0e-4
-		control.Δp_grow=1.1
+		#control.Δp=1.0e-1
+		#control.Δp_grow=1.1
 		control.handle_exceptions=true
 		control.Δu_opt=1.0e5
-		control.Δp_min=1.0e-5
+		#control.Δp_min=1.0e-5
 		#control.maxiters=200
 
 	embed=[0,1]
@@ -366,11 +366,12 @@ let
 	scalarplot!(vis[1,1], mygrid, w3, clear=false, color=:blue, label="w3")
 
 	p0 = sol[ip,1]
-	rho0 = @. sol[ip,1] * mmix[1] /(ph"R"*T)
-	rho = @. sol[ip,:] * mmix /(ph"R"*T)
+	rho0 = @. p0 * mmix[1] /(ph"R"*T)
+	ps = sol[ip,:]
+	rho = @. ps * mmix /(ph"R"*T)
 	scalarplot!(vis[2,1], mygrid, rho/rho0, clear=false, label="Rho / Rho0")
 	scalarplot!(vis[2,1], mygrid, rho0./rho, clear=false, color=:red, label="v / v0")
-	scalarplot!(vis[2,1], mygrid, sol[ip,:]/p0, clear=false, color=:blue, label="p / p0")
+	scalarplot!(vis[2,1], mygrid, ps/p0, clear=false, color=:blue, label="p / p0")
 	reveal(vis)
 end
 
@@ -444,17 +445,6 @@ end
 # ╔═╡ 370ebbae-9caf-4e56-ad77-020048bf7aa8
 integrate(sys,check_reaction,sol)
 
-# ╔═╡ 7bd5668c-6e9f-42c7-83b9-fa10fdd9c989
-let
-	in_,out_ = checkinout(sys,sol)
-	rr = integrate(sys,check_reaction,sol)
-
-	in_[2]
-	out_[2]
-	in_[2]+out_[2] ≈ rr[2,2]
-	in_[1]+out_[1] ≈ rr[1,2]
-end
-
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╠═d3278ac7-db94-4119-8efd-4dd18107e248
@@ -475,7 +465,6 @@ end
 # ╠═111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╠═e29848dd-d787-438e-9c32-e9c2136aec4f
 # ╠═370ebbae-9caf-4e56-ad77-020048bf7aa8
-# ╠═7bd5668c-6e9f-42c7-83b9-fa10fdd9c989
 # ╠═de69f808-2618-4add-b092-522a1d7e0bb7
 # ╟─db77fca9-4118-4825-b023-262d4073b2dd
 # ╟─83a08a0f-eef6-436e-8cfa-a9af45fc5bb0
