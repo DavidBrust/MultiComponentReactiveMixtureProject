@@ -99,7 +99,8 @@ function reaction(f,u,node,data)
 	(;kp,km,p,m0,mf,ip,T, isreactive)=data
 	if node.region == 2 && isreactive == 1 # catalyst layer		
 
-		m = @. m0 + (mf-m0)*node.embedparam
+		#m = @. m0 + (mf-m0)*node.embedparam
+		m = mf
 		
 		# 1 u2 -> 3 u1 
 		c = u[ip]/(ph"R"*T)
@@ -108,7 +109,7 @@ function reaction(f,u,node,data)
 		c3 = u[3]*c
 		
 		r = kp* c2
-		r *=embedparam(node)
+		#r *=embedparam(node)
 
 		f[1] = -3*r*m[1]
 		f[2] = r*m[2]
@@ -126,12 +127,12 @@ end
 function bcond(f,u,bnode,data)
 	(;p,ip,mfluxin,X0,Xf)=data
 
-	X = @. X0 + (Xf-X0)*bnode.embedparam
+	#X = @. X0 + (Xf-X0)*bnode.embedparam
 	
 	#boundary_dirichlet!(f,u,bnode, species=1,region=Γ_left,value=X0[1])
 	#boundary_dirichlet!(f,u,bnode, species=2,region=Γ_left,value=X0[2])
-	boundary_dirichlet!(f,u,bnode, species=1,region=Γ_left,value=X[1])
-	boundary_dirichlet!(f,u,bnode, species=2,region=Γ_left,value=X[2])
+	boundary_dirichlet!(f,u,bnode, species=1,region=Γ_left,value=Xf[1])
+	boundary_dirichlet!(f,u,bnode, species=2,region=Γ_left,value=Xf[2])
 	
 	#boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_left,value=p)
 	boundary_neumann!(f,u,bnode, species=ip, region=Γ_left, value=mfluxin*embedparam(bnode))
@@ -179,7 +180,7 @@ Base.@kwdef mutable struct ModelData
 
 	#isreactive::Int64 = 0
 	isreactive::Int64 = 1
-	kp::Float64=5.0
+	kp::Float64=5.0e-1
 	km::Float64=1.0e-3
 end
 
@@ -195,7 +196,8 @@ end
 function boutflow(f,u,edge,data)
 	(;T,ip,m0,mf,ng)=data
 	
-	m = @. m0 + (mf-m0)*edge.embedparam
+	#m = @. m0 + (mf-m0)*edge.embedparam
+	m = mf
 
 	k=outflownode(edge)
 
@@ -203,7 +205,6 @@ function boutflow(f,u,edge,data)
 	cout = pout/(ph"R"*T)
 	
 	for i=1:(ng-1)
-	#for i=1:ng
 		# specify flux at boundary
 		
 		#f[i] = -darcyvelo(u,data) * cout*u[i,k]*m[i]
@@ -236,7 +237,8 @@ function flux(f,u,edge,data)
 	#X = MVector{ng,eltype(u)}(undef)
 	M = MMatrix{ng-1,ng-1,eltype(u)}(undef)
 
-	m = @. m0 + (mf-m0)*edge.embedparam
+	#m = @. m0 + (mf-m0)*edge.embedparam
+	m = mf
 	
 	D = DiffCoeffsMass(ng,m)
 	
@@ -269,18 +271,22 @@ function flux(f,u,edge,data)
 	δx2 = u[2,1]-u[2,2]
 	δp = u[ip,1]-u[ip,2]
 
-	F[1] = ( δx1 + (x1-w1)*δp/pm )*c/mmix
-	F[2] = ( δx2 + (x2-w2)*δp/pm )*c/mmix
-	#F[1] = (u[1,1]-u[1,2])*c/mmix
-	#F[2] = (u[2,1]-u[2,2])*c/mmix
+	#F[1] = ( δx1 + (x1-w1)*δp/pm )*c/mmix
+	#F[2] = ( δx2 + (x2-w2)*δp/pm )*c/mmix
+	F[1] = (u[1,1]-u[1,2])*c/mmix
+	F[2] = (u[2,1]-u[2,2])*c/mmix
 
 	@inline inplace_linsolve!(M,F)
 
+	# central difference flux
+	#f[1] = -(F[1] + rho*w1*v)
+	#f[2] = -(F[2] + rho*w2*v)
+	f[1] = -(F[1] + c*x1*m[1]*v)
+	f[2] = -(F[2] + c*x2*m[2]*v)
 
-	#f[1] = -(F[1] + embedparam(edge)*rho*w1*v)
-	#f[2] = -(F[2] + embedparam(edge)*rho*w2*v)
-	f[1] = -(F[1] + rho*w1*v)
-	f[2] = -(F[2] + rho*w2*v)
+	# upwind flux
+	#f[1] = -(F[1] + ( v>0.0 ? v*u[ip,1]/(ph"R"*T)*u[1,1]*m[1] : v*u[ip,2]/(ph"R"*T)*u[1,2]*m[1] ) )
+	#f[2] = -(F[2] + ( v>0.0 ? v*u[ip,1]/(ph"R"*T)*u[2,1]*m[2] : v*u[ip,2]/(ph"R"*T)*u[2,2]*m[2] ) )
 end
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
@@ -308,7 +314,7 @@ begin
 	end
 
 	control = SolverControl(nothing, sys;)
-		control.Δp=1.0e-2
+		control.Δp=1.0e-4
 		control.Δp_grow=1.1
 		control.handle_exceptions=true
 		control.Δu_opt=1.0e5
@@ -323,7 +329,7 @@ end;
 @bind t Slider(solt.t,show_value=true,default=solt.t[end])
 
 # ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
-sol = solt(t);
+sol = solt(t)
 
 # ╔═╡ 111b1b1f-51a5-4069-a365-a713c92b79f4
 let
@@ -413,7 +419,8 @@ function check_reaction(f,u,node,data)
 	if node.region == 2 # catalyst layer
 		
 
-		m = @. m0 + (mf-m0)
+		#m = @. m0 + (mf-m0)
+		m=mf
 		
 		# 1 u2 -> 3 u1 
 		c = u[ip]/(ph"R"*T)
@@ -437,6 +444,17 @@ end
 # ╔═╡ 370ebbae-9caf-4e56-ad77-020048bf7aa8
 integrate(sys,check_reaction,sol)
 
+# ╔═╡ 7bd5668c-6e9f-42c7-83b9-fa10fdd9c989
+let
+	in_,out_ = checkinout(sys,sol)
+	rr = integrate(sys,check_reaction,sol)
+
+	in_[2]
+	out_[2]
+	in_[2]+out_[2] ≈ rr[2,2]
+	in_[1]+out_[1] ≈ rr[1,2]
+end
+
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╠═d3278ac7-db94-4119-8efd-4dd18107e248
@@ -457,6 +475,7 @@ integrate(sys,check_reaction,sol)
 # ╠═111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╠═e29848dd-d787-438e-9c32-e9c2136aec4f
 # ╠═370ebbae-9caf-4e56-ad77-020048bf7aa8
+# ╠═7bd5668c-6e9f-42c7-83b9-fa10fdd9c989
 # ╠═de69f808-2618-4add-b092-522a1d7e0bb7
 # ╟─db77fca9-4118-4825-b023-262d4073b2dd
 # ╟─83a08a0f-eef6-436e-8cfa-a9af45fc5bb0
