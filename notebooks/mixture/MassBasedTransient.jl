@@ -307,14 +307,14 @@ function flux(f,u,edge,data)
 	#M[2,1] = w2*(1/D[2,1] - 1/D[2,3])
 	#M[2,2] = -w1/D[2,1] - (w2+w3)/D[2,3]
 
-	##δx1 = u[1,1]-u[1,2]
-	##δx2 = u[2,1]-u[2,2]
-	##δp = u[ip,1]-u[ip,2]
+	δx1 = u[1,1]-u[1,2]
+	δx2 = u[2,1]-u[2,2]
+	δp = u[ip,1]-u[ip,2]
 
-	##F[1] = ( δx1 + (x1-w1)*δp/pm )*c/mmix
-	##F[2] = ( δx2 + (x2-w2)*δp/pm )*c/mmix
-	F[1] = (u[1,1]-u[1,2])*c/mmix
-	F[2] = (u[2,1]-u[2,2])*c/mmix
+	F[1] = ( δx1 + (x1-w1)*δp/pm )*c/mmix
+	F[2] = ( δx2 + (x2-w2)*δp/pm )*c/mmix
+	#F[1] = (u[1,1]-u[1,2])*c/mmix
+	#F[2] = (u[2,1]-u[2,2])*c/mmix
 
 	@inline inplace_linsolve!(M,F)
 
