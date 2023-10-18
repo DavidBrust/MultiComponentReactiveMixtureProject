@@ -34,12 +34,19 @@ begin
 	GridVisualize.default_plotter!(PlutoVista)
 end;
 
+# ╔═╡ 6da83dc0-3b0c-4737-833c-6ee91552ff5c
+md"""
+Check the box to start the simulation:
+
+__Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=true))
+"""
+
 # ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
 PlutoUI.TableOfContents(title="M-S Transport + Darcy")
 
 # ╔═╡ 83fa22fa-451d-4c30-a4b7-834974245996
 function grid1D()
-	X=(0:0.1:1)*ufac"cm"
+	X=(0:0.05:1)*ufac"cm"
 	grid=simplexgrid(X)
 	# catalyst region
 	cellmask!(grid,[0.4]*ufac"cm",[0.6]*ufac"cm",2)	
@@ -72,13 +79,6 @@ function grid3D()
 	
 	grid
 end
-
-# ╔═╡ 6da83dc0-3b0c-4737-833c-6ee91552ff5c
-md"""
-Check the box to start the simulation:
-
-__Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=false))
-"""
 
 # ╔═╡ 107a6fa3-60cb-43f0-8b21-50cd1eb5065a
 const dim = 2
@@ -324,11 +324,6 @@ function flux(f,u,edge,data)
 	f[1] = -(F[1] + c*x1*m[1]*v)
 	f[2] = -(F[2] + c*x2*m[2]*v)
 
-	#f[1] = u[1,1]-u[1,2]
-	#f[2] = u[2,1]-u[2,2]
-
-	#f[ip] = u[ip,1]-u[ip,2]
-
 end
 
 # ╔═╡ 4af1792c-572e-465c-84bf-b67dd6a7bc93
@@ -374,7 +369,7 @@ begin
 	elseif dim == 2
 		mygrid=grid2D()
 		strategy = nothing
-		times=[0,20]
+		times=[0,10]
 	else
 		mygrid=grid3D()
 		strategy = GMRESIteration(UMFPACKFactorization())
@@ -576,11 +571,11 @@ integrate(sys,check_reaction,sol)
 
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
+# ╟─6da83dc0-3b0c-4737-833c-6ee91552ff5c
 # ╠═d3278ac7-db94-4119-8efd-4dd18107e248
 # ╠═83fa22fa-451d-4c30-a4b7-834974245996
 # ╠═4dae4173-0363-40bc-a9ca-ce5b4d5224cd
 # ╠═561e96e2-2d48-4eb6-bb9d-ae167a622aeb
-# ╟─6da83dc0-3b0c-4737-833c-6ee91552ff5c
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═107a6fa3-60cb-43f0-8b21-50cd1eb5065a
