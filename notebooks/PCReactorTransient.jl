@@ -68,14 +68,15 @@ end
 
 # ╔═╡ 561e96e2-2d48-4eb6-bb9d-ae167a622aeb
 function grid3D()
-	X=(0:0.1:1)*ufac"cm"
+	X=(0:1:14)*ufac"cm"
 	Y=(0:0.1:1)*ufac"cm"
-	Z=(0:0.1:1)*ufac"cm"
+	Z=(0:1:14)*ufac"cm"
 	grid=simplexgrid(X,Y,Z)
 
 	# catalyst region
-	cellmask!(grid,[0.3,0.4,0.3].*ufac"cm",[0.7,0.6,0.7].*ufac"cm",2)
-	bfacemask!(grid, [0.2,1,0.2].*ufac"cm",[0.8,1,0.8].*ufac"cm",7)
+	cellmask!(grid,[2,0.1,2].*ufac"cm",[12,0.3,12].*ufac"cm",2)
+	#bfacemask!(grid, [2,1,2].*ufac"cm",[12,1,12].*ufac"cm",7) # mask outflow
+	bfacemask!(grid, [2,0,2].*ufac"cm",[12,0,12].*ufac"cm",7) # mask inflow
 	
 	grid
 end
@@ -85,7 +86,7 @@ const dim = 1
 
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
 if dim == 3
-	@bind xcut Slider(linspace(0,1,21)*ufac"cm",show_value=true,default=0.5*ufac"cm")
+	@bind xcut Slider(linspace(0,14,21)*ufac"cm",show_value=true,default=6.5*ufac"cm")
 end
 
 # ╔═╡ a995f83c-6ff7-4b95-a798-ea636ccb1d88
@@ -111,10 +112,13 @@ begin
 		const Γ_left = 4
 		const Γ_right = 5
 	else
-		const Γ_left = 1
+		# mask inflow
+		const Γ_left = 7 
+		const Γ_right = 3
+		# mask outflow
+		# const Γ_left = 1 
+		# const Γ_right = 7		
 		const Γ_front = 2
-		#const Γ_right = 3
-		const Γ_right = 7
 		const Γ_back = 4
 		const Γ_bottom = 5
 		const Γ_top = 6
@@ -155,6 +159,28 @@ md"""
 md"""
 where $\rho$ is the (total) mixture density, $\vec v$ is the mass-averaged (barycentric)  mixture velocity calculated with the Darcy equation, $x_i$, $w_i$ and $M_i$ are the molar fraction, mass fraction and molar mass of species $i$ respectively, $\vec \Phi_i$ is the mass flux of species $i$ ($\frac{\text{kg}}{\text{m}^2 \text{s}}$) and $R_i$ is the species mass volumetric source/sink ($\frac{\text{kg}}{\text{m}^3 \text{s}}$) of gas phase species $i$.
 """
+
+# ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
+md"""
+## Implementation
+The simulation is setup as a transient simulation. Initially, no chemical reactions take place. 
+
+The mass flow boundary condition into the reactor domain is "ramped up" starting from a low value and linearly increasing until the final value is reached. A time delay is given to let the flow stabilize until the reactivity of the catalyst is "ramped up" until its final reactivity value is reached.
+"""
+
+# ╔═╡ 68ca72ae-3b24-4c09-ace1-5e340c8be3d4
+function len(grid)
+	coord = grid[Coordinates]
+	L=0.0
+	if dim == 1
+		L=coord[end]
+	elseif dim == 2
+		L=coord[1,end]
+	else
+		L=coord[2,end]
+	end
+	L*ufac"m"
+end
 
 # ╔═╡ db77fca9-4118-4825-b023-262d4073b2dd
 md"""
@@ -275,7 +301,7 @@ function reaction(f,u,node,data)
             pi[i] = u[ip]*u[i]
 		end
 
-		rf = ramp(node.time; du=(0,1), dt=(5.0,6.0))
+		rf = ramp(node.time; du=(0,1), dt=(2.5,3.5))
 		RR = @inline -lcat*ri(data,T,pi)*rf	
         #RR = @inline -lcat*ri(data,T,pi)
 		for i=1:ng
@@ -317,11 +343,7 @@ function bcond(f,u,bnode,data)
 	(;p,ip,mfluxin,X0,W0)=data
 	ng=ngas(data)
 
-	if bnode.time <= 2.0
-		r_mfluxin = mfluxin*ramp(bnode.time; du=(0.01,0.1), dt=(1.0,2.0))
-	else
-		r_mfluxin = mfluxin*ramp(bnode.time; du=(0.1,1.0), dt=(2.0,3.0))
-	end
+	r_mfluxin = mfluxin*ramp(bnode.time; du=(0.01,1), dt=(0.0,1.0))
 	
 	for i=1:(ng-1)
 		#boundary_dirichlet!(f,u,bnode, species=i,region=Γ_left,value=X0[i])
@@ -451,7 +473,8 @@ begin
 	else
 		mygrid=grid3D()
 		strategy = GMRESIteration(UMFPACKFactorization())
-		times=[0,1]
+		#times=[0,1.2]
+		times=[0,4.1]
 	end
 	mydata=ModelData()
 	(;p,ip,X0)=mydata
@@ -479,15 +502,17 @@ begin
 	end
 
 	control = SolverControl(strategy, sys;)
-	#control = SolverControl(GMRESIteration(UMFPACKFactorization()), sys;)
-		control.Δt=1.0e-3
+		#control.Δt=1.0e-3
 		control.Δt_min=1.0e-6
+		control.Δt_max=2.0
 		control.handle_exceptions=true
 		control.Δu_opt=1000.0
+	function post(sol,oldsol, t, Δt)
+		@info "t= "*string(round(t,sigdigits=2))*"\t Δt= "*string(round(Δt,sigdigits=2))
+	end
 
 	if RunSim
-		#times=[0,5.0]
-		solt=solve(sys;inival=inival,times,control,verbose="e")
+		solt=solve(sys;inival=inival,times,control,post)
 	end
 end;
 
@@ -574,17 +599,14 @@ end
 
 # ╔═╡ e000c100-ee46-454e-b049-c1c29daa9a56
 let
-	L=mygrid[Coordinates][end]*ufac"m"
+	L=len(mygrid)
 	(;mfluxin,mmix0,lcat,T,p,X0,gni) = mydata
 	c0 = p*X0/(ph"R"*T)
 	rho0 = p*mmix0/(ph"R"*T)
-	v0 = mfluxin / rho0
-	
+	v0 = mfluxin / rho0	
 	RR = -lcat*ri(mydata,T,p*X0)
-
 	tau = L/v0
 	Da = maximum(RR)/c0[gni[:H2]] * tau
-
 end
 
 # ╔═╡ f690c19f-22e3-4428-bc1c-3ed7d1646e71
@@ -648,7 +670,7 @@ end
 
 # ╔═╡ ae8c7993-a89f-438a-a72a-d4a0c9a8ce57
 let
-	L=mygrid[Coordinates][end]*ufac"m"
+	L=len(mygrid)
 	(;mfluxin,mmix0,p,T) = mydata
 	ng = ngas(mydata)
 	rho0 = p*mmix0/(ph"R"*T)
@@ -704,6 +726,7 @@ end
 # ╠═3bb2deff-7816-4749-9f1e-c1e451372b1e
 # ╠═4af1792c-572e-465c-84bf-b67dd6a7bc93
 # ╠═5f88937b-5802-4a4e-81e2-82737514b9e4
+# ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
@@ -711,10 +734,11 @@ end
 # ╠═7c7d2f10-d8d2-447e-874b-7be365e0b00c
 # ╠═111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╠═de69f808-2618-4add-b092-522a1d7e0bb7
+# ╟─68ca72ae-3b24-4c09-ace1-5e340c8be3d4
 # ╟─db77fca9-4118-4825-b023-262d4073b2dd
 # ╠═ae8c7993-a89f-438a-a72a-d4a0c9a8ce57
 # ╟─e7497364-75ef-4bd9-87ca-9a8c2d97064c
-# ╟─e000c100-ee46-454e-b049-c1c29daa9a56
+# ╠═e000c100-ee46-454e-b049-c1c29daa9a56
 # ╟─f6e54602-b63e-4ce5-b8d5-f626fbe5ae7a
 # ╠═f690c19f-22e3-4428-bc1c-3ed7d1646e71
 # ╟─0d507c5e-eb0f-4094-a30b-a4a82fd5c302
