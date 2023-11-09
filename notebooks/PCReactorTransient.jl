@@ -69,12 +69,12 @@ end
 # ╔═╡ 561e96e2-2d48-4eb6-bb9d-ae167a622aeb
 function grid3D()
 	X=(0:1:14)*ufac"cm"
-	Y=(0:0.1:1)*ufac"cm"
+	Y=(0:0.05:0.5)*ufac"cm"
 	Z=(0:1:14)*ufac"cm"
 	grid=simplexgrid(X,Y,Z)
 
 	# catalyst region
-	cellmask!(grid,[2,0.1,2].*ufac"cm",[12,0.3,12].*ufac"cm",2)
+	cellmask!(grid,[2,0.0,2].*ufac"cm",[12,0.1,12].*ufac"cm",2)
 	#bfacemask!(grid, [2,1,2].*ufac"cm",[12,1,12].*ufac"cm",7) # mask outflow
 	bfacemask!(grid, [2,0,2].*ufac"cm",[12,0,12].*ufac"cm",7) # mask inflow
 	
@@ -160,6 +160,22 @@ md"""
 where $\rho$ is the (total) mixture density, $\vec v$ is the mass-averaged (barycentric)  mixture velocity calculated with the Darcy equation, $x_i$, $w_i$ and $M_i$ are the molar fraction, mass fraction and molar mass of species $i$ respectively, $\vec \Phi_i$ is the mass flux of species $i$ ($\frac{\text{kg}}{\text{m}^2 \text{s}}$) and $R_i$ is the species mass volumetric source/sink ($\frac{\text{kg}}{\text{m}^3 \text{s}}$) of gas phase species $i$.
 """
 
+# ╔═╡ 8f2549f4-b0a6-440f-af94-6880e0814dc2
+md"""
+## Thermal Energy Transport
+"""
+
+# ╔═╡ 78589a1e-2507-4279-ba42-1aaec90d87d0
+md"""
+```math
+\begin{align}
+- \nabla \cdot \left(\lambda_{\text{eff}} \nabla T - \sum_i^{\nu} \vec N_i h_i \right)  &= 0
+\end{align}
+```
+
+where $\lambda_{\text{eff}}$ is the effective thermal conductivity. The heat release from chemical reactions is considered as part of the species enthalpies. The convective heat transport within the porous medium is expressed via the sum over the product of species (mass) fluxes with species mass-specific enthalpies $\vec H_i= \vec N_i h_i$.
+"""
+
 # ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
 md"""
 ## Implementation
@@ -241,8 +257,11 @@ Base.@kwdef mutable struct ModelData{NG}
 	isreactive::Bool = 1
 	
 	ip::Int64 = NG+1
+	iT::Int64 = ip+1 
+	
 	p::Float64 = 1.0*ufac"bar"
 	T::Float64 = 923.15*ufac"K"
+	Tamb::Float64 = 298.15*ufac"K"
 
 	gn::Dict{Int, Symbol} 	= kinpar.gn # names and fluid indices
 	gni::Dict{Symbol, Int}  = kinpar.gni # inverse names and fluid indices
@@ -279,6 +298,10 @@ Base.@kwdef mutable struct ModelData{NG}
 	ϵ::Float64=0.33 # porosity, VitraPor sintetered filter class 0
 	perm::Float64=1.23e-10*ufac"m^2" # perm. of porous medium, use in Darcy Eq.
 	γ_τ::Float64=ϵ^1.5 # constriction/tourtuosity factor
+	# Solid (non-porous) Borosilica glass (frit material)
+	rhos::Float64=2.23e3*ufac"kg/m^3" # density of non-porous Boro-Solikatglas 3.3
+	lambdas::Float64=1.13*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2
+	cs::Float64=0.8e3*ufac"J/(kg*K)" # heat capacity of non-porous SiO2
 	
 end
 
@@ -321,7 +344,7 @@ end
 
 # ╔═╡ 4af1792c-572e-465c-84bf-b67dd6a7bc93
 function storage(f,u,node,data)
-	(;T,ip,m,ϵ)=data
+	(;T,ip,iT,m,ϵ,rhos,cs)=data
 	ng=ngas(data)
 
 	c = u[ip]/(ph"R"*T)
@@ -335,16 +358,18 @@ function storage(f,u,node,data)
 		mmix += u[i]*m[i]
 	end
 	
-	f[ng+1] = mmix*c*ϵ
+	f[ip] = mmix*c*ϵ
+	f[iT] = rhos*cs*(1-ϵ)
 end
 
 # ╔═╡ 5f88937b-5802-4a4e-81e2-82737514b9e4
 function bcond(f,u,bnode,data)
-	(;p,ip,mfluxin,X0,W0)=data
+	(;p,ip,iT,T,mfluxin,X0,W0)=data
 	ng=ngas(data)
 
-	r_mfluxin = mfluxin*ramp(bnode.time; du=(0.01,1), dt=(0.0,1.0))
+	boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_left,value=T)
 	
+	r_mfluxin = mfluxin*ramp(bnode.time; du=(0.01,1), dt=(0.0,1.0))
 	for i=1:(ng-1)
 		#boundary_dirichlet!(f,u,bnode, species=i,region=Γ_left,value=X0[i])
 		#boundary_neumann!(f,u,bnode, species=i,region=Γ_left,value=mfluxin*W0[i])
@@ -356,6 +381,7 @@ function bcond(f,u,bnode,data)
 
 
 	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
+	boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_right,value=T)
 
 end
 
@@ -402,7 +428,7 @@ end
 
 # ╔═╡ 5547d7ad-dd58-4b00-8238-6e1abb32874e
 function flux(f,u,edge,data)
-	(;m,ip,T)=data
+	(;m,ip,iT,T)=data
 	ng=ngas(data)
 		
 	F = MVector{ng-1,eltype(u)}(undef)
@@ -457,6 +483,8 @@ function flux(f,u,edge,data)
 	@inbounds for i=1:(ng-1)
 		f[i] = -(F[i] + c*X[i]*m[i]*v)
 	end
+	
+	f[iT] = u[iT,1]-u[iT,2]
 end
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
@@ -474,10 +502,10 @@ begin
 		mygrid=grid3D()
 		strategy = GMRESIteration(UMFPACKFactorization())
 		#times=[0,1.2]
-		times=[0,4.1]
+		times=[0,20.0]
 	end
 	mydata=ModelData()
-	(;p,ip,X0)=mydata
+	(;p,ip,Tamb,iT,X0)=mydata
 	ng=ngas(mydata)
 	
 	sys=VoronoiFVM.System( 	mygrid;
@@ -491,11 +519,13 @@ begin
 							assembly=:edgewise
 							)
 	
-	enable_species!(sys; species=collect(1:(ng+1))) # gas phase species pi & ptotal	
+	#enable_species!(sys; species=collect(1:(ng+1))) # gas phase species pi & ptotal	
+	enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
 	
 	inival=unknowns(sys)
 
 	inival[ip,:].=p
+	inival[iT,:].=Tamb
 	for i=1:ng
 		inival[i,:] .= 1.0/ng
 		#inival[i,:] .= X0[i]
@@ -551,7 +581,7 @@ end
 # ╔═╡ de69f808-2618-4add-b092-522a1d7e0bb7
 let
 	mydata = ModelData()
-	(;p,m,ip,T, mfluxin) = mydata
+	(;p,m,ip,T,Tamb,mfluxin) = mydata
 	ng = ngas(mydata)
 	mmix = []
 	for j in 1:length(sol[1,:])
@@ -562,18 +592,13 @@ let
 		push!(mmix, _mmix)
 	end
 	
-	w1 = sol[1,:]*m[1] ./mmix
-	w2 = sol[2,:]*m[2] ./mmix
-	w3 = sol[3,:]*m[3] ./mmix
-
 	ps = sol[ip,:]
 	rho = @. ps * mmix /(ph"R"*T)
 	
 	if dim == 1
 		vis=GridVisualizer(legend=:lt, resolution=(600,400), layout = (2, 1))
-		scalarplot!(vis[1,1], mygrid, w1, clear=false, label="w1")
-		scalarplot!(vis[1,1], mygrid, w2, clear=false, color=:red, label="w2")
-		scalarplot!(vis[1,1], mygrid, w3, clear=false, color=:blue, label="w3")
+
+		scalarplot!(vis[1,1], mygrid, sol[iT,:]/Tamb, clear=false, label="T / Tamb")
 
 		p0 = sol[ip,1]
 		rho0 = @. p0 * mmix[1] /(ph"R"*T)
@@ -722,6 +747,8 @@ end
 # ╟─0fadb9d2-1ccf-4d44-b748-b76d911784ca
 # ╟─b94513c2-c94e-4bcb-9342-47ea48fbfd14
 # ╟─c886dd12-a90c-40ab-b9d0-32934c17baee
+# ╟─8f2549f4-b0a6-440f-af94-6880e0814dc2
+# ╟─78589a1e-2507-4279-ba42-1aaec90d87d0
 # ╠═5547d7ad-dd58-4b00-8238-6e1abb32874e
 # ╠═3bb2deff-7816-4749-9f1e-c1e451372b1e
 # ╠═4af1792c-572e-465c-84bf-b67dd6a7bc93
@@ -729,10 +756,10 @@ end
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
-# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═e29848dd-d787-438e-9c32-e9c2136aec4f
 # ╠═7c7d2f10-d8d2-447e-874b-7be365e0b00c
-# ╠═111b1b1f-51a5-4069-a365-a713c92b79f4
+# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
+# ╟─111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╠═de69f808-2618-4add-b092-522a1d7e0bb7
 # ╟─68ca72ae-3b24-4c09-ace1-5e340c8be3d4
 # ╟─db77fca9-4118-4825-b023-262d4073b2dd
