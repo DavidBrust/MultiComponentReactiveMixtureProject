@@ -40,6 +40,12 @@ Check the box to start the simulation:
 __Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=false))
 """
 
+# ╔═╡ 107a6fa3-60cb-43f0-8b21-50cd1eb5065a
+begin
+	const dim = 2
+	const fine = false
+end
+
 # ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
 PlutoUI.TableOfContents(title="M-S Transport + Darcy")
 
@@ -67,6 +73,31 @@ function grid2D()
 end
 
 # ╔═╡ 561e96e2-2d48-4eb6-bb9d-ae167a622aeb
+function grid3D_fine()
+
+	hmin=0.1*ufac"cm"
+    hmax=2.0*ufac"cm"
+	XLeft=(0:0.5:2)*ufac"cm"
+    XInnerL=geomspace(2.0*ufac"cm",7.0*ufac"cm",hmin,hmax)
+    XInnerR=geomspace(7.0*ufac"cm",12.0*ufac"cm",hmax,hmin)
+	XRight=(12:0.5:14)*ufac"cm"
+	
+    X=glue(XLeft, XInnerL)
+	X=glue(X, XInnerR)
+	X=glue(X, XRight)
+
+	Y=(0:0.1:1)*ufac"cm"
+	Z=(0:1:14)*ufac"cm"
+	grid=simplexgrid(X,Y,X)
+
+	# catalyst region
+	cellmask!(grid,[2,0.0,2].*ufac"cm",[12,0.1,12].*ufac"cm",2)
+	bfacemask!(grid, [2,0,2].*ufac"cm",[12,0,12].*ufac"cm",7) # mask inflow
+	
+	grid
+end
+
+# ╔═╡ e8e7a652-fb37-4c4a-b59b-180e6ba29398
 function grid3D()
 	X=(0:1:14)*ufac"cm"
 	Y=(0:0.1:1)*ufac"cm"
@@ -81,9 +112,6 @@ function grid3D()
 	grid
 end
 
-# ╔═╡ 107a6fa3-60cb-43f0-8b21-50cd1eb5065a
-const dim = 1
-
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
 if dim == 3
 	@bind xcut Slider(linspace(0,14,21)*ufac"cm",show_value=true,default=6.5*ufac"cm")
@@ -96,7 +124,11 @@ let
 	elseif dim == 2
 		gridplot(grid2D())
 	else
-		gridplot(grid3D(); xplane=xcut, show=true, outlinealpha=0.0 )
+		if fine
+			gridplot(grid3D_fine(); xplane=xcut, show=true, outlinealpha=0.0)
+		else
+			gridplot(grid3D(); xplane=xcut, show=true, outlinealpha=0.0)
+		end
 	end
 end
 
@@ -460,8 +492,7 @@ function flux(f,u,edge,data)
 end
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
-begin
-	
+begin	
 	if dim == 1
 		mygrid=grid1D()
 		strategy = nothing
@@ -471,10 +502,13 @@ begin
 		strategy = nothing
 		times=[0,10]
 	else
-		mygrid=grid3D()
+		if fine
+			mygrid=grid3D_fine()
+		else
+			mygrid=grid3D()
+		end
 		strategy = GMRESIteration(UMFPACKFactorization())
-		#times=[0,1.2]
-		times=[0,4.1]
+		times=[0,5.0]
 	end
 	mydata=ModelData()
 	(;p,ip,X0)=mydata
@@ -502,7 +536,9 @@ begin
 	end
 
 	control = SolverControl(strategy, sys;)
-		#control.Δt=1.0e-3
+	if dim == 3 && fine
+		control.Δt=1.0e-2
+	end
 		control.Δt_min=1.0e-6
 		control.Δt_max=2.0
 		control.handle_exceptions=true
@@ -515,6 +551,17 @@ begin
 		solt=solve(sys;inival=inival,times,control,post)
 	end
 end;
+
+# ╔═╡ 30512844-217c-41bd-9efd-865bf8e7df47
+let
+	(;gni,ip)=mydata
+	#pCO = [p >= 0 ? p : 0.0 for p in sol[gni[:CO],:]]
+	#writeVTK("../data/out/231110/blocked/ptot.vtu", mygrid; point_data = sol[ip,:])
+	#writeVTK("../data/out/231110/blocked/x_CO.vtu", mygrid; point_data = sol[gni[:CO],:])
+	#writeVTK("../data/out/231110/blocked/x_CO2.vtu", mygrid; point_data = sol[gni[:CO2],:])
+	#writeVTK("../data/out/231110/blocked/x_H2.vtu", mygrid; point_data = sol[gni[:H2],:])
+	
+end
 
 # ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 @bind t Slider(solt.t,show_value=true,default=solt.t[end])
@@ -697,26 +744,31 @@ checkinout(sys,sol)
 let
 	(;gn,m,nfluxin,X0) = mydata
 	in_,out_=checkinout(sys,sol)
-	println("Molar species in/outlfows obtained from Testfunction integration:")
-	for i = 1:ngas(mydata)
-		println(string(gn[i])*" IN:\t"* string(round(in_[i]/m[i]/ufac"mol/hr",sigdigits=4)) * "\t OUT: " * string(round(out_[i]/m[i]/ufac"mol/hr",sigdigits=4)) *"\t mol/hr")
-	end
-	println("\nMolar species in/outlfows as specified")
-	for i = 1:ngas(mydata)
-		println(string(gn[i])*" IN:\t"* string(round(nfluxin*X0[i]/ufac"mol/hr",sigdigits=5)) )
+
+	fn = "../data/out/231110/txt/moleflows_block.txt"
+	open(fn,"w") do io
+   		println(io, "Molar species in/outlfows obtained from Testfunction integration:")
+		for i = 1:ngas(mydata)
+			println(io, string(gn[i])*" IN:\t"* string(round(in_[i]/m[i]/ufac"mol/hr",sigdigits=4)) * "\t OUT: " * string(round(out_[i]/m[i]/ufac"mol/hr",sigdigits=4)) *"\t mol/hr")
+		end
+		println(io, "\nMolar species in/outlfows as specified")
+		for i = 1:ngas(mydata)
+			println(io, string(gn[i])*" IN:\t"* string(round(0.1^2*nfluxin*X0[i]/ufac"mol/hr",sigdigits=5)) )
+		end	
 	end	
 end
 
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─6da83dc0-3b0c-4737-833c-6ee91552ff5c
+# ╠═107a6fa3-60cb-43f0-8b21-50cd1eb5065a
 # ╠═d3278ac7-db94-4119-8efd-4dd18107e248
 # ╠═83fa22fa-451d-4c30-a4b7-834974245996
 # ╠═4dae4173-0363-40bc-a9ca-ce5b4d5224cd
 # ╠═561e96e2-2d48-4eb6-bb9d-ae167a622aeb
+# ╠═e8e7a652-fb37-4c4a-b59b-180e6ba29398
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
-# ╠═107a6fa3-60cb-43f0-8b21-50cd1eb5065a
 # ╠═832f3c15-b75a-4afe-8cc5-75ff3b4704d6
 # ╟─a078e1e1-c9cd-4d34-86d9-df4a052b6b96
 # ╟─0fadb9d2-1ccf-4d44-b748-b76d911784ca
@@ -729,10 +781,11 @@ end
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
-# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═e29848dd-d787-438e-9c32-e9c2136aec4f
 # ╠═7c7d2f10-d8d2-447e-874b-7be365e0b00c
-# ╠═111b1b1f-51a5-4069-a365-a713c92b79f4
+# ╠═30512844-217c-41bd-9efd-865bf8e7df47
+# ╟─111b1b1f-51a5-4069-a365-a713c92b79f4
+# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═de69f808-2618-4add-b092-522a1d7e0bb7
 # ╟─68ca72ae-3b24-4c09-ace1-5e340c8be3d4
 # ╟─db77fca9-4118-4825-b023-262d4073b2dd
