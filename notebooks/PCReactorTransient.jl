@@ -55,13 +55,13 @@ end
 
 # ╔═╡ 4dae4173-0363-40bc-a9ca-ce5b4d5224cd
 function grid2D()
-	X=(0:0.1:1)*ufac"cm"
-	Y=(0:0.1:1)*ufac"cm"
-	grid=simplexgrid(X,Y)
+	R=(0:1:7)*ufac"cm"
+	Z=(0:0.05:0.5)*ufac"cm"
+	grid=simplexgrid(R,Z)
+	circular_symmetric!(grid)
 
-	# catalyst region
-	cellmask!(grid,[0.4,0.3].*ufac"cm",[0.6,0.7].*ufac"cm",2)
-	bfacemask!(grid, [1,0.2].*ufac"cm",[1,0.8].*ufac"cm",5)
+	cellmask!(grid,[0.0,0.4].*ufac"cm",[6.0,0.5].*ufac"cm",2) # catalyst region
+	bfacemask!(grid, [0.0,0.5].*ufac"cm",[6.0,0.5].*ufac"cm",5)
 	
 	grid
 end
@@ -82,7 +82,7 @@ function grid3D()
 end
 
 # ╔═╡ 107a6fa3-60cb-43f0-8b21-50cd1eb5065a
-const dim = 1
+const dim = 2
 
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
 if dim == 3
@@ -106,11 +106,11 @@ begin
 		const Γ_left = 1
 		const Γ_right = 2
 	elseif dim == 2
-		const Γ_bottom = 1
-		#const Γ_right = 2
-		const Γ_top = 3
-		const Γ_left = 4
-		const Γ_right = 5
+		const Γ_out = 1
+		const Γ_sym = 4		
+		const Γ_outer = 2
+		#const Γ_left = 4
+		const Γ_in = 5
 	else
 		# mask inflow
 		const Γ_left = 7 
@@ -364,24 +364,33 @@ end
 
 # ╔═╡ 5f88937b-5802-4a4e-81e2-82737514b9e4
 function bcond(f,u,bnode,data)
-	(;p,ip,iT,T,mfluxin,X0,W0)=data
+	(;p,ip,iT,T,Tamb,mfluxin,X0,W0,m)=data
 	ng=ngas(data)
 
-	boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_left,value=T)
-	
 	r_mfluxin = mfluxin*ramp(bnode.time; du=(0.01,1), dt=(0.0,1.0))
-	for i=1:(ng-1)
-		#boundary_dirichlet!(f,u,bnode, species=i,region=Γ_left,value=X0[i])
-		#boundary_neumann!(f,u,bnode, species=i,region=Γ_left,value=mfluxin*W0[i])
-		boundary_neumann!(f,u,bnode, species=i,region=Γ_left,value=r_mfluxin*W0[i])
-	end
+	#hf_conv=zero(eltype(u))
 	
-	#boundary_neumann!(f,u,bnode, species=ip, region=Γ_left, value=mfluxin)
-	boundary_neumann!(f,u,bnode, species=ip, region=Γ_left, value=r_mfluxin)
-
-
-	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
-	boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_right,value=T)
+	if dim==2
+		boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_in,value=T)
+		for i=1:(ng-1)		
+		boundary_neumann!(f,u,bnode, species=i,region=Γ_in,value=r_mfluxin*W0[i])
+		#@inline hf_conv += r_mfluxin*W0[i]/m[i] * enthalpy_gas(data.Fluids[i], Tamb)
+		end
+		#@inline hf_conv += r_mfluxin*W0[ng]/m[ng] * enthalpy_gas(data.Fluids[ng], Tamb)
+		#boundary_neumann!(f,u,bnode, species=iT,region=Γ_in,value= hf_conv )
+		
+		boundary_neumann!(f,u,bnode, species=ip, region=Γ_in, value=r_mfluxin)
+		boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_out,value=p)
+		boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_out,value=T)
+	else
+		boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_left,value=T)
+		for i=1:(ng-1)
+		boundary_neumann!(f,u,bnode, species=i,region=Γ_left,value=r_mfluxin*W0[i])
+		end
+		boundary_neumann!(f,u,bnode, species=ip, region=Γ_left, value=r_mfluxin)
+		boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
+		boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_right,value=T)
+	end
 
 end
 
@@ -395,20 +404,25 @@ end
 
 # ╔═╡ 389a4798-a9ee-4e9c-8b44-a06201b4c457
 function boutflow(f,u,edge,data)
-	(;T,ip,m)=data
+	(;iT,T,ip,m)=data
 	ng=ngas(data)
 
 	k=outflownode(edge)
 
 	pout = u[ip,k]
 	cout = pout/(ph"R"*T)
-	
+	#X = MVector{ng,eltype(u)}(undef)
+	#mmix = zero(eltype(u))
 	for i=1:(ng-1)
 		# specify flux at boundary
-		
 		#f[i] = -darcyvelo(u,data) * cout*u[i,k]*m[i]
 		f[i] = darcyvelo(u,data) * cout*u[i,k]*m[i]
-	end	
+		#X[i] = u[i,k]
+		#mmix += X[i]*m[i]
+	end
+	#X[ng] = u[ng,k]
+	#mmix += X[ng]*m[ng]
+	#@inline f[iT] = darcyvelo(u,data) *cout * enthalpy_mix(data.Fluids, u[iT,k], X) 
 end
 
 # ╔═╡ ca08d9a2-8148-441e-a149-b9d0c5232a6d
@@ -440,6 +454,7 @@ function flux(f,u,edge,data)
 	@inline D_matrix!(data, D)
 		
 	pm = 0.5*(u[ip,1]+u[ip,2])
+	Tm = 0.5*(u[iT,1]+u[iT,2])
 	c = pm/(ph"R"*T)
 
 	mmix = zero(eltype(u))
@@ -480,11 +495,19 @@ function flux(f,u,edge,data)
 
 	@inline inplace_linsolve!(M,F)
 
+	#hf_conv = zero(eltype(u))
 	@inbounds for i=1:(ng-1)
 		f[i] = -(F[i] + c*X[i]*m[i]*v)
+		#hf_conv += f[i] * enthalpy_gas(data.Fluids[i], Tm) / m[i]
 	end
+	#hf_conv += f[ng] * enthalpy_gas(data.Fluids[ng], Tm) / m[ng]
+	#@inline hf_conv = f[ip] * enthalpy_mix(data.Fluids, Tm, X) / mmix
+
+	# TODO: include λbed
+	#Bp,Bm = fbernoulli_pm(hf_conv/1.0/Tm)
+	#f[iT]= 1.0*(Bm*u[iT,1]-Bp*u[iT,2])
+	f[iT]= u[iT,1]-u[iT,2]
 	
-	f[iT] = u[iT,1]-u[iT,2]
 end
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
@@ -515,7 +538,8 @@ begin
 							storage=storage,
 							bcondition=bcond,
 							boutflow=boutflow,
-							outflowboundaries=[Γ_right],
+							outflowboundaries=
+								[dim == 2 ? Γ_out : Γ_right],
 							assembly=:edgewise
 							)
 	
@@ -551,6 +575,13 @@ end;
 
 # ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
 sol = solt(t);
+
+# ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
+let
+	#vis=GridVisualizer(layout=(1,3), resolution=(700,300))
+	(;iT)=mydata
+	scalarplot(mygrid, sol[iT,:])
+end
 
 # ╔═╡ 111b1b1f-51a5-4069-a365-a713c92b79f4
 let
@@ -705,13 +736,16 @@ let
 end
 
 # ╔═╡ 1224970e-8a59-48a9-b0ef-76ed776ca15d
-function checkinout(sys,sol)
-	
+function checkinout(sys,sol)	
 	tfact=TestFunctionFactory(sys)
-	tf_in=testfunction(tfact,[Γ_right],[Γ_left])
-	tf_out=testfunction(tfact,[Γ_left],[Γ_right])
-	#tf_in=testfunction(tfact,[Γ_left],[Γ_right])
-	#tf_out=testfunction(tfact,[Γ_right],[Γ_left])
+	if dim == 2
+		tf_in=testfunction(tfact,[Γ_out],[Γ_in])
+		tf_out=testfunction(tfact,[Γ_in],[Γ_out])
+	else
+		tf_in=testfunction(tfact,[Γ_right],[Γ_left])
+		tf_out=testfunction(tfact,[Γ_left],[Γ_right])
+	end
+
 	(;in=integrate(sys,tf_in,sol),out=integrate(sys,tf_out,sol) )
 end
 
@@ -753,13 +787,15 @@ end
 # ╠═3bb2deff-7816-4749-9f1e-c1e451372b1e
 # ╠═4af1792c-572e-465c-84bf-b67dd6a7bc93
 # ╠═5f88937b-5802-4a4e-81e2-82737514b9e4
+# ╠═389a4798-a9ee-4e9c-8b44-a06201b4c457
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
 # ╠═e29848dd-d787-438e-9c32-e9c2136aec4f
 # ╠═7c7d2f10-d8d2-447e-874b-7be365e0b00c
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-# ╟─111b1b1f-51a5-4069-a365-a713c92b79f4
+# ╠═99b59260-7651-45d0-b364-4f86db9927f8
+# ╠═111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╠═de69f808-2618-4add-b092-522a1d7e0bb7
 # ╟─68ca72ae-3b24-4c09-ace1-5e340c8be3d4
 # ╟─db77fca9-4118-4825-b023-262d4073b2dd
@@ -773,7 +809,6 @@ end
 # ╟─67adda35-6761-4e3c-9d05-81e5908d9dd2
 # ╠═f40a8111-b5cb-40f0-8b12-f57cf59637f1
 # ╠═e183587f-db01-4f04-85fc-8d1a21bc0526
-# ╠═389a4798-a9ee-4e9c-8b44-a06201b4c457
 # ╠═ca08d9a2-8148-441e-a149-b9d0c5232a6d
 # ╠═37b5908c-dd4e-4fb8-9d5b-68402493e10d
 # ╠═2cbd3e87-289c-47a2-b837-10133974ae82
