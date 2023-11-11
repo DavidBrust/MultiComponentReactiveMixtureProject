@@ -432,14 +432,6 @@ function dynvisc_thermcond_mix(data, T, x)
 end
 
 
-# function dynvisc_gas!(muf, i, Fluid, T)
-# 	(;A,B,C,D,E) = Fluid.DynVisc
-# 	# VDI heat atlas 2010 D3.1 Equation (3)
-# 	muf[i] = A+B*T+C*T^2+D*T^3+E*T^4 * ufac"Pa*s"
-#     nothing
-# end
-
-
 
 
 #Thermal conductivity of gases at low pressures, W/(m*K)
@@ -453,10 +445,11 @@ end
 
 
 #Molar heat capacity of ideal gases, J/(mol*K)
-function heatcap_gas(Fluid, T)
+function heatcap_gas(Fluid::FluidProps, T)
 	(;A,B,C,D,E,F,G) = Fluid.HeatCap
 	# VDI heat atlas 2010 D3.1 Equation (10)
-	T_ApT = (T/(A+T))
+    T_ApT = zero(eltype(T))
+	T_ApT += (T/(A+T))
 	(B+(C-B)*T_ApT^2*(1- (A/(A+T))*(D+E*T_ApT+F*T_ApT^2+G*T_ApT^3) ) ) * ph"R" * ufac"J/(mol*K)"
 end
 
@@ -469,13 +462,7 @@ function heatcap_mix(Fluids::AbstractVector, T, x)
     cpmix
 end
 
-# function heatcap_gas!(cf, i, Fluid, T)
-# 	(;A,B,C,D,E,F,G) = Fluid.HeatCap
-# 	# VDI heat atlas 2010 D3.1 Equation (10)
-# 	T_ApT = (T/(A+T))
-# 	cf[i] = (B+(C-B)*T_ApT^2*(1- (A/(A+T))*(D+E*T_ApT+F*T_ApT^2+G*T_ApT^3) ) ) * ph"R" * ufac"J/(mol*K)"
-# 	nothing
-# end
+
 
 # Molar enthalpy of ideal gases, J/(mol*K)
 # calculation according to VDI heat atlas 2010 D1.6 Equation (66), p. 140
@@ -495,15 +482,6 @@ end
 
 # ideal gas mixture enthalpy
 # calculation according to VDI heat atlas 2010 D1.6 Equation (67), p. 140
-# function enthalpy_mix(Fluids, T, x)
-#     hmix = zero(eltype(x))
-#     ng=length(x)
-#     for i=1:ng
-#         hmix += x[i] * enthalpy_gas(Fluids[i], T)
-#     end
-#     hmix
-# end
-
 function enthalpy_mix(Fluids::AbstractVector, T, x)
     hmix = zero(eltype(x))
     ng=length(x)
@@ -515,15 +493,6 @@ end
 
 
 
-function heatcap_mix!(cmix, cf, Fluids, T, x)
-    cmix[1] = zero(eltype(cmix))
-    ng=length(x)
-    for i=1:ng
-        heatcap_gas!(cf, i, Fluids[i], T)
-        cmix[1] += x[i] * cf[i]
-    end
-    nothing
-end
 
 function molarweight_mix(Fluids, x)
     # wmix =0

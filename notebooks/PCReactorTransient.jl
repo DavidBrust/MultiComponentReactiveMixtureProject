@@ -174,14 +174,20 @@ md"""
 ```
 
 where $\lambda_{\text{eff}}$ is the effective thermal conductivity. The heat release from chemical reactions is considered as part of the species enthalpies. The convective heat transport within the porous medium is expressed via the sum over the product of species (mass) fluxes with species mass-specific enthalpies $\vec H_i= \vec N_i h_i$.
+
+As part of the initialisation strategy (see next section) the convective contribution of heat flux is ramped up at the same time with the heat transport boundary conditions after the flow field has been established.
 """
 
 # ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
 md"""
-## Implementation
-The simulation is setup as a transient simulation. Initially, no chemical reactions take place. 
+## Initialisation
+The simulation is setup as a transient simulation. An initialisation strategy is employed where different physics are enabled step by step once a stationary state is established. Initially, no heat is transported and no chemical reactions take place. 
 
-The mass flow boundary condition into the reactor domain is "ramped up" starting from a low value and linearly increasing until the final value is reached. A time delay is given to let the flow stabilize until the reactivity of the catalyst is "ramped up" until its final reactivity value is reached.
+1. Velocity field (mass flow is ramped up from 1-100 % in T=[0;1] s)
+2. Temperature field (heat transport is ramped up from 0-100 % in T=[1;2] s)
+3. Catalyst reactivity (ramped up from 0-100 % in T=[2;3] s)
+
+The mass flow boundary condition into the reactor domain is "ramped up" starting from a low value and linearly increasing until the final value is reached. A time delay is given to let the flow stabilize. Once the flow field is established, heat transport is ramped up until a stable temperature field is established. Finally, the reactivity of the catalyst is "ramped up" until its final reactivity value is reached.
 """
 
 # ╔═╡ 68ca72ae-3b24-4c09-ace1-5e340c8be3d4
@@ -324,13 +330,12 @@ function reaction(f,u,node,data)
             pi[i] = u[ip]*u[i]
 		end
 
-		rf = ramp(node.time; du=(0,1), dt=(2.5,3.5))
+		rf = ramp(node.time; du=(0,1), dt=(2.0,3.0))
 		RR = @inline -lcat*ri(data,T,pi)*rf	
         #RR = @inline -lcat*ri(data,T,pi)
 		for i=1:ng
 			f[i] = zero(eltype(u))
 			for j=1:nreac(kinpar)
-#                f[i] += nuij[(j-1)*ng+i] * RR[j]
 				f[i] += nuij[(j-1)*ng+i] * RR[j] * m[i]
 			end			
 		end
@@ -344,44 +349,49 @@ end
 
 # ╔═╡ 4af1792c-572e-465c-84bf-b67dd6a7bc93
 function storage(f,u,node,data)
-	(;T,ip,iT,m,ϵ,rhos,cs)=data
+	(;ip,iT,m,ϵ,rhos,cs)=data
 	ng=ngas(data)
 
-	c = u[ip]/(ph"R"*T)
+	c = u[ip]/(ph"R"*u[iT])
+	#c = u[ip]/(ph"R"*T)
 	for i=1:ng
 		f[i]=c*u[i]*m[i]*ϵ
 	end
 	
 	# total pressure
 	mmix = zero(eltype(u))
+	cpmix = 0.0
 	for i=1:ng
 		mmix += u[i]*m[i]
+		@inline cpmix += heatcap_gas(data.Fluids[i], u[iT])*u[i]
 	end
 	
 	f[ip] = mmix*c*ϵ
-	f[iT] = rhos*cs*(1-ϵ)
+
+	# solid heat capacity is 4 orders of magnitude larger than gas phase heat cap
+	#f[iT] = u[iT] * (rhos*cs*(1-ϵ) + cpmix*c*ϵ)
+	f[iT] = u[iT] * (rhos*cs*(1-ϵ) + cpmix*c*ϵ) / 100
 end
 
 # ╔═╡ 5f88937b-5802-4a4e-81e2-82737514b9e4
 function bcond(f,u,bnode,data)
-	(;p,ip,iT,T,Tamb,mfluxin,X0,W0,m)=data
+	(;p,ip,iT,T,Tamb,mfluxin,X0,W0,m,mmix0)=data
 	ng=ngas(data)
 
 	r_mfluxin = mfluxin*ramp(bnode.time; du=(0.01,1), dt=(0.0,1.0))
-	#hf_conv=zero(eltype(u))
+	@inline r_hfluxin = mfluxin/mmix0 * enthalpy_mix(data.Fluids, Tamb+200, X0) * ramp(bnode.time; du=(0.0,1), dt=(1.0,2.0))
 	
-	if dim==2
-		boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_in,value=T)
+	
+	if dim==2		
 		for i=1:(ng-1)		
-		boundary_neumann!(f,u,bnode, species=i,region=Γ_in,value=r_mfluxin*W0[i])
-		#@inline hf_conv += r_mfluxin*W0[i]/m[i] * enthalpy_gas(data.Fluids[i], Tamb)
-		end
-		#@inline hf_conv += r_mfluxin*W0[ng]/m[ng] * enthalpy_gas(data.Fluids[ng], Tamb)
-		#boundary_neumann!(f,u,bnode, species=iT,region=Γ_in,value= hf_conv )
+			boundary_neumann!(f,u,bnode, species=i,region=Γ_in,value=r_mfluxin*W0[i])
+		end		
+
+		boundary_neumann!(f,u,bnode, species=iT,region=Γ_in,value=r_hfluxin)
 		
 		boundary_neumann!(f,u,bnode, species=ip, region=Γ_in, value=r_mfluxin)
 		boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_out,value=p)
-		boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_out,value=T)
+
 	else
 		boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_left,value=T)
 		for i=1:(ng-1)
@@ -394,12 +404,12 @@ function bcond(f,u,bnode,data)
 
 end
 
-# ╔═╡ e183587f-db01-4f04-85fc-8d1a21bc0526
-function darcyvelo(u,data)
+# ╔═╡ c29f9187-e79c-4e56-8063-c76c98839523
+function darcyvelo(u,data,mu)
 	(;ip,perm) = data
 
-	μ = 2.0e-5*ufac"Pa*s"
-	-perm/μ*(u[ip,1]-u[ip,2])	
+	#μ = 2.0e-5*ufac"Pa*s"
+	-perm/mu*(u[ip,1]-u[ip,2])	
 end
 
 # ╔═╡ 389a4798-a9ee-4e9c-8b44-a06201b4c457
@@ -410,24 +420,30 @@ function boutflow(f,u,edge,data)
 	k=outflownode(edge)
 
 	pout = u[ip,k]
-	cout = pout/(ph"R"*T)
-	#X = MVector{ng,eltype(u)}(undef)
-	#mmix = zero(eltype(u))
+	#cout = pout/(ph"R"*T)
+	cout = pout/(ph"R"*u[iT,k])
+	X = MVector{ng,eltype(u)}(undef)
+	
+	for i=1:ng
+		X[i] = u[i,k]
+	end
+	@inline mumix, _ = dynvisc_thermcond_mix(data, u[iT,k], X)
+	v = darcyvelo(u,data,mumix)
+	
 	for i=1:(ng-1)
 		# specify flux at boundary
-		#f[i] = -darcyvelo(u,data) * cout*u[i,k]*m[i]
-		f[i] = darcyvelo(u,data) * cout*u[i,k]*m[i]
-		#X[i] = u[i,k]
-		#mmix += X[i]*m[i]
+		# f[i] = darcyvelo(u,data) * cout*u[i,k]*m[i]
+		f[i] = v*cout*u[i,k]*m[i]
 	end
-	#X[ng] = u[ng,k]
-	#mmix += X[ng]*m[ng]
-	#@inline f[iT] = darcyvelo(u,data) *cout * enthalpy_mix(data.Fluids, u[iT,k], X) 
+
+	#@inline f[iT] = darcyvelo(u,data) *cout * enthalpy_mix(data.Fluids, u[iT,k], X) * ramp(edge.time; du=(0.0,1.0), dt=(1.0,2.0))
+	@inline f[iT] = v *cout * enthalpy_mix(data.Fluids, u[iT,k], X) * ramp(edge.time; du=(0.0,1.0), dt=(1.0,2.0))
+	
 end
 
-# ╔═╡ ca08d9a2-8148-441e-a149-b9d0c5232a6d
-function D_matrix!(data, D)
-	(;m,γ_τ,T,p)=data
+# ╔═╡ f4dba346-61bc-420d-b419-4ea2d46be6da
+function D_matrix!(data, D, T, p)
+	(;m,γ_τ)=data
 	ng=ngas(data)
 	@inbounds for i=1:(ng-1)
 		for j=(i+1):ng
@@ -451,28 +467,31 @@ function flux(f,u,edge,data)
 	M = MMatrix{ng-1,ng-1,eltype(u)}(undef)
 	D = MMatrix{ng,ng,eltype(u)}(undef)
 
-	@inline D_matrix!(data, D)
-		
 	pm = 0.5*(u[ip,1]+u[ip,2])
 	Tm = 0.5*(u[iT,1]+u[iT,2])
-	c = pm/(ph"R"*T)
-
+	#c = pm/(ph"R"*T)
+	c = pm/(ph"R"*Tm)
+	
+	δp = u[ip,1]-u[ip,2]
+	
 	mmix = zero(eltype(u))
 	for i=1:ng
 		X[i] = 0.5*(u[i,1]+u[i,2])
 		mmix += X[i]*m[i]
 	end
+
+	@inline D_matrix!(data, D, Tm, pm)
+	@inline mumix, lambdamix = dynvisc_thermcond_mix(data, Tm, X)
 	
 	rho = c*mmix
-	v = darcyvelo(u,data)
+	#v = darcyvelo(u,data)
+	v = darcyvelo(u,data,mumix)
 	
 	f[ip] = -rho*v
 
 	for i=1:ng
 		W[i] = m[i]/mmix*X[i]
 	end
-	
-	δp = u[ip,1]-u[ip,2]
 	
 	@inbounds for i=1:(ng-1)
 		for j=1:(ng-1)
@@ -495,18 +514,18 @@ function flux(f,u,edge,data)
 
 	@inline inplace_linsolve!(M,F)
 
-	#hf_conv = zero(eltype(u))
+	hf_conv = zero(eltype(u))
 	@inbounds for i=1:(ng-1)
 		f[i] = -(F[i] + c*X[i]*m[i]*v)
-		#hf_conv += f[i] * enthalpy_gas(data.Fluids[i], Tm) / m[i]
 	end
-	#hf_conv += f[ng] * enthalpy_gas(data.Fluids[ng], Tm) / m[ng]
 	#@inline hf_conv = f[ip] * enthalpy_mix(data.Fluids, Tm, X) / mmix
-
+	@inline hf_conv = f[ip] * enthalpy_mix(data.Fluids, Tm, X) * ramp(edge.time; du=(0.0,1), dt=(1.0,2.0)) / mmix
+	
+	
 	# TODO: include λbed
-	#Bp,Bm = fbernoulli_pm(hf_conv/1.0/Tm)
-	#f[iT]= 1.0*(Bm*u[iT,1]-Bp*u[iT,2])
-	f[iT]= u[iT,1]-u[iT,2]
+	Bp,Bm = fbernoulli_pm(hf_conv/1.0/Tm)
+	f[iT]= 1.0*(Bm*u[iT,1]-Bp*u[iT,2])
+	#f[iT]= u[iT,1]-u[iT,2]
 	
 end
 
@@ -520,7 +539,7 @@ begin
 	elseif dim == 2
 		mygrid=grid2D()
 		strategy = nothing
-		times=[0,10]
+		times=[0,5.0]
 	else
 		mygrid=grid3D()
 		strategy = GMRESIteration(UMFPACKFactorization())
@@ -558,7 +577,7 @@ begin
 	control = SolverControl(strategy, sys;)
 		#control.Δt=1.0e-3
 		control.Δt_min=1.0e-6
-		control.Δt_max=2.0
+		control.Δt_max=1.0
 		control.handle_exceptions=true
 		control.Δu_opt=1000.0
 	function post(sol,oldsol, t, Δt)
@@ -580,7 +599,7 @@ sol = solt(t);
 let
 	#vis=GridVisualizer(layout=(1,3), resolution=(700,300))
 	(;iT)=mydata
-	scalarplot(mygrid, sol[iT,:])
+	scalarplot(mygrid, sol[iT,:] .- 273.15)
 end
 
 # ╔═╡ 111b1b1f-51a5-4069-a365-a713c92b79f4
@@ -612,7 +631,7 @@ end
 # ╔═╡ de69f808-2618-4add-b092-522a1d7e0bb7
 let
 	mydata = ModelData()
-	(;p,m,ip,T,Tamb,mfluxin) = mydata
+	(;p,m,ip,iT,Tamb,mfluxin) = mydata
 	ng = ngas(mydata)
 	mmix = []
 	for j in 1:length(sol[1,:])
@@ -624,7 +643,9 @@ let
 	end
 	
 	ps = sol[ip,:]
-	rho = @. ps * mmix /(ph"R"*T)
+	Ts = sol[iT,:]
+	#rho = @. ps * mmix /(ph"R"*T)
+	rho = @. ps * mmix /(ph"R"*Ts)
 	
 	if dim == 1
 		vis=GridVisualizer(legend=:lt, resolution=(600,400), layout = (2, 1))
@@ -788,7 +809,7 @@ end
 # ╠═4af1792c-572e-465c-84bf-b67dd6a7bc93
 # ╠═5f88937b-5802-4a4e-81e2-82737514b9e4
 # ╠═389a4798-a9ee-4e9c-8b44-a06201b4c457
-# ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
+# ╠═927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
 # ╠═e29848dd-d787-438e-9c32-e9c2136aec4f
@@ -808,8 +829,8 @@ end
 # ╠═5bbe72b2-2f80-4dae-9706-7ddb0b8b6dbe
 # ╟─67adda35-6761-4e3c-9d05-81e5908d9dd2
 # ╠═f40a8111-b5cb-40f0-8b12-f57cf59637f1
-# ╠═e183587f-db01-4f04-85fc-8d1a21bc0526
-# ╠═ca08d9a2-8148-441e-a149-b9d0c5232a6d
+# ╠═c29f9187-e79c-4e56-8063-c76c98839523
+# ╠═f4dba346-61bc-420d-b419-4ea2d46be6da
 # ╠═37b5908c-dd4e-4fb8-9d5b-68402493e10d
 # ╠═2cbd3e87-289c-47a2-b837-10133974ae82
 # ╠═1224970e-8a59-48a9-b0ef-76ed776ca15d
