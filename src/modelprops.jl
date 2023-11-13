@@ -2,7 +2,7 @@ abstract type AbstractModelData end
 
 
 # calculate non-dimensional numbers: Reynolds, Prandtl, Peclet
-function RePrPe(data::AbstractModelData,T,p,x)
+function RePrPe(data,T,p,x)
 	d=data.d
 	u0=data.u0
     Fluids=data.Fluids
@@ -25,57 +25,48 @@ end
 #Implementation follows the notation in __VDI Heat Atlas 2010, ch. D6.3 eqs. (5a-5e).__
 #"""
 # calculate fixed bed (porous material) effective thermal conductivity
-function kbed(data::AbstractModelData)
-	(;ϕ,λs,Fluid,Tin) = data
-	λf=thermcond_gas(Fluid, Tin)
-	B=1.25*((1.0-ϕ)/ϕ)^(10.0/9.0)
-	kp=λs/λf
+function kbed(data)
+	(;poros,lambdas,Fluid,Tin) = data
+	lambdaf=thermcond_gas(Fluid, Tin)
+	B=1.25*((1.0-poros)/poros)^(10.0/9.0)
+	kp=lambdas/lambdaf
 	N=1.0-(B/kp)
 	kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
-	1.0-sqrt(1.0-ϕ)+sqrt(1.0-ϕ)*kc
+	1.0-sqrt(1.0-poros)+sqrt(1.0-poros)*kc
 end
 
 
-function kbed(data::AbstractModelData,λf)
-	(;ϕ,λs) = data
-	B=1.25*((1.0-ϕ)/ϕ)^(10.0/9.0)
-	kp=λs/λf
+function kbed(data, lambdaf)
+	(;poros,lambdas) = data
+	B=1.25*((1.0-poros)/poros)^(10.0/9.0)
+	kp=lambdas/lambdaf
 	N=1.0-(B/kp)
 	kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
-	kbed=1.0-sqrt(1.0-ϕ)+sqrt(1.0-ϕ)*kc
-end
-
-function kbed!(kbed,ϕ,λs,λf)
-	#(;ϕ,λs) = data
-	B=1.25*((1.0-ϕ)/ϕ)^(10.0/9.0)
-	kp=λs/λf[1]
-	N=1.0-(B/kp)
-	kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
-	kbed[1] = 1.0-sqrt(1.0-ϕ)+sqrt(1.0-ϕ)*kc
+	1.0-sqrt(1.0-poros)+sqrt(1.0-poros)*kc
 end
 
 # mostly equivalent to VDI Heat Atlas 2010, ch. D6.3 eqs. (5a-5e). with addition
 # of flattening coefficient ψ, that might be relevant for sintered materials
-function kbed_VDI_flattening(data,λf)
-	(;ϕ,ψ,λs) = data
-	B=1.25*((1.0-ϕ)/ϕ)^(10.0/9.0)
-	kp=λs/λf
+function kbed_VDI_flattening(data,lambdaf)
+	(;poros,ψ,lambdas) = data
+	B=1.25*((1.0-poros)/poros)^(10.0/9.0)
+	kp=lambdas/lambdaf
 	N=1.0-(B/kp)
 	kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
-	1 - sqrt(1-ϕ) + sqrt(1-ϕ)*(ψ*kp+(1-ψ)*kc)
+	1 - sqrt(1-poros) + sqrt(1-poros)*(ψ*kp+(1-ψ)*kc)
 end
 
 # effective thermal conductivity for porous materials with random structure
 # as proposed by Andrii Cheilytko (Andrii.Cheilytko@dlr.de)
-function lambda_eff_AC(data,λf)
-	(;ϕ,λs) = data
+function lambda_eff_AC(data,lambdaf)
+	(;poros,lambdas) = data
     # contact angle between particles in packing
 	ky=1/sin(45*π/180)
     # initial version, developed for unordered foams
-	# Ψ=ky*(1-ϕ)*(1-λf/λs+sqrt((1-λf/λs)^2+4))/2+ky*ϕ*(1-λs/λf+sqrt((1-λs/λf)^2+4))/2
+	# Ψ=ky*(1-poros)*(1-lambdaf/lambdas+sqrt((1-lambdaf/lambdas)^2+4))/2+ky*poros*(1-lambdas/lambdaf+sqrt((1-lambdas/lambdaf)^2+4))/2
     # version developed for open volumetric receivers with open channel structure
-    Ψ=1/ky*(ϕ-1)*(λs-λf)/(λs*λf)*(λf*(ϕ-1)-λs*ϕ)
-	λeff = (λs*λf/(λs*ϕ+λf*(1-ϕ)))*(ϕ*λs/λf+(1-ϕ)+Ψ)*(ϕ+λf/λs*(1-ϕ)+Ψ)/(ϕ*λs/λf+2*Ψ+(1-ϕ)*λf/λs+1)
+    Ψ=1/ky*(poros-1)*(lambdas-lambdaf)/(lambdas*lambdaf)*(lambdaf*(poros-1)-lambdas*poros)
+	λeff = (lambdas*lambdaf/(lambdas*poros+lambdaf*(1-poros)))*(poros*lambdas/lambdaf+(1-poros)+Ψ)*(poros+lambdaf/lambdas*(1-poros)+Ψ)/(poros*lambdas/lambdaf+2*Ψ+(1-poros)*lambdaf/lambdas+1)
 end
 
 #"""
@@ -88,27 +79,13 @@ end
 #```
 #
 #"""
-function hsf(data::AbstractModelData,T,p,x)
+function hsf(data,T,p,x)
 	Re,Pr,_ = RePrPe(data,T,p,x)
-	_,λf = dynvisc_thermcond_mix(data, T, x)
-	ϕ = data.ϕ
-	d = data.d
-	λf/d*((1.0 + 4*(1.0-ϕ)/ϕ) + 0.5*(1.0-ϕ)^0.5*Re^0.6*Pr^(1.0/3.0))*ufac"W/(m^2*K)"
+	_,lambdaf = dynvisc_thermcond_mix(data, T, x)
+    (;poros,d) = data
+	lambdaf/d*((1.0 + 4*(1.0-poros)/poros) + 0.5*(1.0-poros)^0.5*Re^0.6*Pr^(1.0/3.0))*ufac"W/(m^2*K)"
 end
 
-# Knudsen effective Diffusivity
-
-# In the DGM the solid porous matrix is considered as another species in the ideal gas mix. The Knudsen diffusion coefficients describe the interactions between the gas molecules and the solid porous matrix. Analogous to the gas-gas diffusion coefficients, the Knudsen diffusion coefficients quantify the resulting friction force from momentum transfer upon collision with the walls acting on the gas molecules.
-
-# Calculation of Knudsen diffusion coefficients according to __Wesselingh, J. A., & Krishna, R. (2006).__ Mass Transfer in Multicomponent Mixtures (ch. 21, Fig. 21.8)
-
-
-function DK_eff(data,T,i)
-	ϕ=data.ϕ # porosity
-	dp=data.dp # avg. particle size (assumed to be = pore size)
-	DK=dp*ϕ^1.5/(1.0-ϕ)*sqrt(8.0*ph"R"*T/(9.0*π*data.Fluids[i].MW))
-	#Bern(DK)
-end
 
 #
 # ## Irradiation
