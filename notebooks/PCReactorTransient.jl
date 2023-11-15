@@ -4,16 +4,6 @@
 using Markdown
 using InteractiveUtils
 
-# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
-macro bind(def, element)
-    quote
-        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
-        local el = $(esc(element))
-        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
-        el
-    end
-end
-
 # ╔═╡ c21e1942-628c-11ee-2434-fd4adbdd2b93
 begin
 	using Pkg
@@ -25,23 +15,30 @@ begin
 	using StaticArrays
 
 	using LessUnitful
-	
+	using DataFrames
 	using PlutoVista, Plots
 	using PlutoUI, Colors
 	using FixedBed
+	using Printf
 	
 	GridVisualize.default_plotter!(PlutoVista)
 end;
 
 # ╔═╡ 6da83dc0-3b0c-4737-833c-6ee91552ff5c
+# ╠═╡ skip_as_script = true
+#=╠═╡
 md"""
 Check the box to start the simulation:
 
 __Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=false))
 """
+  ╠═╡ =#
 
 # ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
+# ╠═╡ skip_as_script = true
+#=╠═╡
 PlutoUI.TableOfContents(title="M-S Transport + Darcy")
+  ╠═╡ =#
 
 # ╔═╡ 83fa22fa-451d-4c30-a4b7-834974245996
 function grid1D()
@@ -86,11 +83,16 @@ end
 const dim = 2
 
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
+# ╠═╡ skip_as_script = true
+#=╠═╡
 if dim == 3
 	@bind xcut Slider(linspace(0,14,21)*ufac"cm",show_value=true,default=6.5*ufac"cm")
 end
+  ╠═╡ =#
 
 # ╔═╡ a995f83c-6ff7-4b95-a798-ea636ccb1d88
+# ╠═╡ skip_as_script = true
+#=╠═╡
 let
 	if dim == 1
 		gridplot(grid1D(), resolution=(600,200))
@@ -100,6 +102,7 @@ let
 		gridplot(grid3D(); xplane=xcut, show=true, outlinealpha=0.0 )
 	end
 end
+  ╠═╡ =#
 
 # ╔═╡ 832f3c15-b75a-4afe-8cc5-75ff3b4704d6
 begin
@@ -129,7 +132,7 @@ end;
 
 # ╔═╡ a078e1e1-c9cd-4d34-86d9-df4a052b6b96
 md"""
-Multi-component transport of ideal-gas mixture through porous medium.
+Reactor Simulation of PC reactor for cylindrical symmetrical geometry (2D).
 """
 
 # ╔═╡ 0fadb9d2-1ccf-4d44-b748-b76d911784ca
@@ -171,7 +174,7 @@ md"""
 md"""
 ```math
 \begin{align}
-- \nabla \cdot \left(\lambda_{\text{eff}} \nabla T - \sum_i^{\nu} \vec N_i h_i \right)  &= 0
+\frac{\partial((1-\epsilon)\rho_{\text s} c_{\text s}+\epsilon c c_p) T}{\partial t} - \nabla \cdot \left(\lambda_{\text{eff}} \nabla T - \sum_i^{\nu} \vec N_i h_i \right)  &= 0
 \end{align}
 ```
 
@@ -184,6 +187,27 @@ As part of the initialisation strategy (see next section) the convective contrib
 md"""
 ## Boundary Conditions
 """
+
+# ╔═╡ abc28f81-903b-4656-b137-881060ae459c
+function radiosity_window(f,u,bnode,data)
+    (;iT,iTw,G_lamp,uc_window,uc_cat,uc_mask)=data
+    # irrad. exchange between quartz window (1), cat surface (2), masked sruface (3) 
+    tau1_vis=uc_window.tau_vis
+    rho1_vis=uc_window.rho_vis
+    tau1_IR=uc_window.tau_IR
+    rho1_IR=uc_window.rho_IR
+    eps1=uc_window.eps
+
+    Tglass = u[iTw] # local tempererature of quartz window
+    G1_bot_IR = eps1*ph"σ"*Tglass^4
+	G1_bot_vis = 0.0
+    if bnode.region==Γ_top_in # catalyst layer (2)
+		# flux profile measured behind quarz in plane of cat layer
+		G1_bot_vis += G_lamp
+
+    end
+    return G1_bot_vis,G1_bot_IR
+end
 
 # ╔═╡ ee797850-f5b5-4178-be07-28192c04252d
 function bflux(f,u,bedge,data)
@@ -209,18 +233,6 @@ function bstorage(f,u,bnode,data)
 	end
 end
 
-# ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
-md"""
-## Initialisation
-The simulation is setup as a transient simulation. An initialisation strategy is employed where different physics are enabled step by step once a stationary state is established. Initially, no heat is transported and no chemical reactions take place. 
-
-1. Velocity field (mass flow is ramped up from 1-100 % in T=[0;1] s)
-2. Temperature field (heat transport is ramped up from 0-100 % in T=[1;2] s)
-3. Catalyst reactivity (ramped up from 0-100 % in T=[2;3] s)
-
-The mass flow boundary condition into the reactor domain is "ramped up" starting from a low value and linearly increasing until the final value is reached. A time delay is given to let the flow stabilize. Once the flow field is established, heat transport is ramped up until a stable temperature field is established. Finally, the reactivity of the catalyst is "ramped up" until its final reactivity value is reached.
-"""
-
 # ╔═╡ 98468f9e-6dee-4b0b-8421-d77ac33012cc
 md"""
 ### Temperature
@@ -234,6 +246,15 @@ md"""
 ### Molar fractions
 1) CO
 2) CO2
+"""
+
+# ╔═╡ eb9dd385-c4be-42a2-8565-cf3cc9b2a078
+md"""
+### Flow field
+1. Pressure
+2. Density
+3. Velocity X
+4. Velocity Y
 """
 
 # ╔═╡ 68ca72ae-3b24-4c09-ace1-5e340c8be3d4
@@ -296,27 +317,6 @@ md"""
 ## Model Data
 """
 
-# ╔═╡ abc28f81-903b-4656-b137-881060ae459c
-function radiosity_window(f,u,bnode,data)
-    (;iT,iTw,G_lamp,uc_window,uc_cat,uc_mask)=data
-    # irrad. exchange between quartz window (1), cat surface (2), masked sruface (3) 
-    tau1_vis=uc_window.tau_vis
-    rho1_vis=uc_window.rho_vis
-    tau1_IR=uc_window.tau_IR
-    rho1_IR=uc_window.rho_IR
-    eps1=uc_window.eps
-
-    Tglass = u[iTw] # local tempererature of quartz window
-    G1_bot_IR = eps1*ph"σ"*Tglass^4
-	G1_bot_vis = 0.0
-    if bnode.region==Γ_top_in # catalyst layer (2)
-		# flux profile measured behind quarz in plane of cat layer
-		G1_bot_vis += G_lamp
-
-    end
-    return G1_bot_vis,G1_bot_IR
-end
-
 # ╔═╡ 60713981-8c10-403d-9f58-821bf14f2121
 Base.@kwdef struct SurfaceOpticalProps
 	alpha_IR::Float64 = 0.2 # absorptance: obtain from datasheet/measurement
@@ -373,6 +373,11 @@ const lc_plate = SurfaceOpticalProps(
 # ╔═╡ f40a8111-b5cb-40f0-8b12-f57cf59637f1
 begin	
 Base.@kwdef mutable struct ModelData{NG}
+	dt_mf::Tuple{Float64, Float64}=(0.0,1.0)
+	dt_hf_enth::Tuple{Float64, Float64}=(1.0,2.0)
+	dt_hf_irrad::Tuple{Float64, Float64}=(2.0,3.0)
+	dt_cat::Tuple{Float64, Float64}=(3.0,4.0)
+	
 	kinpar::FixedBed.KinData{nreac(XuFroment)} = XuFroment
 	mcat::Float64=2000.0*ufac"mg"
 	Vcat::Float64=1.0*ufac"m^2"*0.02*ufac"cm"
@@ -460,7 +465,7 @@ end;
 
 # ╔═╡ 3bb2deff-7816-4749-9f1e-c1e451372b1e
 function reaction(f,u,node,data)
-	(;m,ip,iT,isreactive)=data
+	(;m,ip,iT,isreactive,dt_cat)=data
 	ng=ngas(data)
 
 	if node.region == 2 && isreactive # catalyst layer
@@ -472,8 +477,9 @@ function reaction(f,u,node,data)
             pi[i] = u[ip]*u[i]
 		end
 
-		rf = ramp(node.time; du=(0,1), dt=(3.0,4.0))
-		RR = @inline -lcat*ri(data,u[iT],pi)*rf
+		rf = ramp(node.time; du=(0,1), dt=dt_cat)
+		RR = @inline -lcat*ri(data,u[iT],pi)
+		#RR = @inline -lcat*ri(data,u[iT],pi)*rf
 		#RR = @inline -lcat*ri(data,T,pi)*rf
 		for i=1:ng
 			f[i] = zero(eltype(u))
@@ -512,13 +518,13 @@ function storage(f,u,node,data)
 
 	# solid heat capacity is 4 orders of magnitude larger than gas phase heat cap
 	#f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros)
-	f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros) / 100
+	f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros) / 200
 	
 end
 
 # ╔═╡ a90c6d87-b442-43e8-ab27-827fab25d4f6
 function top(f,u,bnode,data)
-	(;p,ip,iT,iTw,Tamb,mfluxin,X0,W0,m,mmix0,uc_window,uc_cat,uc_mask,uc_h,Nu,k_nat_conv)=data
+	(;p,ip,iT,iTw,Tamb,mfluxin,X0,W0,m,mmix0,uc_window,uc_cat,uc_mask,uc_h,Nu,k_nat_conv,dt_hf_enth,dt_hf_irrad)=data
 	ng=ngas(data)
 
 	# irrad. exchange between quartz window (1), cat surface (2), masked surface (3)
@@ -549,10 +555,10 @@ function top(f,u,bnode,data)
 			f[i] = -r_mfluxin*W0[i] # species mass flux
 		end		
 		# heatflux from enthalpy inflow
-		@inline r_hf_enth = mfluxin/mmix0 * enthalpy_mix(data.Fluids, Tamb+200, X0) * ramp(bnode.time; du=(0.0,1), dt=(1.0,2.0))
+		@inline r_hf_enth = mfluxin/mmix0 * enthalpy_mix(data.Fluids, Tamb+100, X0) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
 		
 		# heatflux from irradiation
-		r_hf_irrad = (-eps2*ph"σ"*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR) * ramp(bnode.time; du=(0.0,1), dt=(2.0,3.0))
+		hflux_irrad = (-eps2*ph"σ"*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR) 
 		
 		# heatflux from convection through top chamber
         Tm=0.5*(u[iT] + u[iTw]) # mean temperature
@@ -560,17 +566,17 @@ function top(f,u,bnode,data)
         @inline _,λf=dynvisc_thermcond_mix(data, Tm, X0)
 		dh=2*uc_h
 		kconv=Nu*λf/dh*ufac"W/(m^2*K)"
-		flux_conv = kconv*(u[iT]-Tm)
+		hflux_conv = kconv*(u[iT]-Tm)
 		
-		f[iT] = -r_hf_enth -r_hf_irrad + flux_conv
-
+		f[iT] = -r_hf_enth +(-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+		
 		# calculate local window temperature from (local) flux balance
-		flux_conv_top_w = k_nat_conv*(u[iTw]-Tamb)
+		hflux_conv_top_w = k_nat_conv*(u[iTw]-Tamb)
 		G2_vis = rho2_vis*G1_vis		
 		G2_IR = eps2*ph"σ"*u[iT]^4 + rho2_IR*G1_IR
-		flux_abs_w = alpha1_vis*G2_vis + alpha1_IR*G2_IR + alpha1_IR*ph"σ"*Tamb^4
-		flux_emit_w = uc_window.eps*ph"σ"*u[iTw]^4
-		f[iTw] = -flux_conv -flux_abs_w +flux_conv_top_w +2*flux_emit_w
+		hflux_abs_w = alpha1_vis*G2_vis + alpha1_IR*G2_IR + alpha1_IR*ph"σ"*Tamb^4
+		hflux_emit_w = uc_window.eps*ph"σ"*u[iTw]^4
+		f[iTw] = -hflux_conv -hflux_abs_w +hflux_conv_top_w +2*hflux_emit_w
 		
 	# elseif bnode.region==Γ_top_mask
 	#
@@ -608,7 +614,7 @@ end
 
 # ╔═╡ 85439b96-fe21-4b2c-8695-f7088305112f
 function bottom(f,u,bnode,data)
-	(;iT,iTp,k_nat_conv,Tamb,lc_h,Nu) = data
+	(;iT,iTp,k_nat_conv,Tamb,lc_h,Nu,dt_hf_irrad) = data
 	ng=ngas(data)
 	if bnode.region == Γ_bottom
 
@@ -622,28 +628,32 @@ function bottom(f,u,bnode,data)
 
 		# heatflux from irradiation exchange with bottom plate
 		Tplate = u[iTp]	
-		irrad_hflux = -eps1*ph"σ"*u[iT]^4 + alpha1_IR/(1-rho1_IR*rho2_IR)*(eps2*ph"σ"*Tplate^4+rho2_IR*eps1*ph"σ"*u[iT]^4)
+		hflux_irrad = -eps1*ph"σ"*u[iT]^4 + alpha1_IR/(1-rho1_IR*rho2_IR)*(eps2*ph"σ"*Tplate^4+rho2_IR*eps1*ph"σ"*u[iT]^4)
 	
-		r_hf_irrad = irrad_hflux * ramp(bnode.time; du=(0.0,1), dt=(2.0,3.0))
 		# heatflux from convective/conductive heat exchange with bottom plate
 		Tm=0.5*(u[iT] + Tplate)
+
+		X=MVector{ng,eltype(u)}(undef)
+		for i=1:ng
+			X[i] = u[i]
+		end
         # thermal conductivity at Tm and outlet composition X
-        @inline _,λf=dynvisc_thermcond_mix(data, Tm, u[1:ng])
+        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X)
 
         # flux_cond = -λf*(u[iT]-Tplate)/lc_h # positive flux in positive z coord.
 		dh=2*lc_h
 		kconv=Nu*λf/dh*ufac"W/(m^2*K)"
-		flux_conv = kconv*(u[iT]-Tm) # positive flux in negative z coord. (towards plate)
+		hflux_conv = kconv*(u[iT]-Tm) # positive flux in negative z coord. (towards plate)
 
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
-		f[iT] = -r_hf_irrad + flux_conv
+		f[iT] = (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
 		
 		# calculate (local) plate temperature from (local) flux balance
-		flux_conv_bot_p = k_nat_conv*(u[iTp]-Tamb)*2
-		flux_emit_p = lc_plate.eps*ph"σ"*u[iTp]^4
+		hflux_conv_bot_p = k_nat_conv*(u[iTp]-Tamb)*2
+		hflux_emit_p = lc_plate.eps*ph"σ"*u[iTp]^4
 		G1_IR = (eps1*ph"σ"*u[iT]^4 + rho1_IR*eps2*ph"σ"*u[iTp]^4)/(1-rho1_IR*rho2_IR)
-		flux_abs_p = alpha2_IR*G1_IR + alpha2_IR*ph"σ"*Tamb^4
-		f[iTp] = -flux_conv -flux_abs_p +2*flux_emit_p +flux_conv_bot_p		
+		hflux_abs_p = alpha2_IR*G1_IR + alpha2_IR*ph"σ"*Tamb^4
+		f[iTp] = -hflux_conv -hflux_abs_p +2*hflux_emit_p +hflux_conv_bot_p		
 	end
 end
 
@@ -651,18 +661,8 @@ end
 function bcond(f,u,bnode,data)
 	(;p,ip,iT,Tamb,mfluxin,X0,W0,m,mmix0)=data
 	ng=ngas(data)
-
-	#r_mfluxin = mfluxin*ramp(bnode.time; du=(0.01,1), dt=(0.0,1.0))
-	#@inline r_hfluxin = mfluxin/mmix0 * enthalpy_mix(data.Fluids, Tamb+200, X0) * ramp(bnode.time; du=(0.0,1), dt=(1.0,2.0))
 		
 	if dim==2		
-		#for i=1:(ng-1)		
-		#	boundary_neumann!(f,u,bnode, species=i,region=Γ_top_in,value=r_mfluxin*W0[i])
-		#end		
-
-		#boundary_neumann!(f,u,bnode, species=iT,region=Γ_top_in,value=r_hfluxin)
-		
-		#boundary_neumann!(f,u,bnode, species=ip, region=Γ_top_in, value=r_mfluxin)
 		top(f,u,bnode,data)
 		side(f,u,bnode,data)
 		bottom(f,u,bnode,data)
@@ -677,7 +677,6 @@ function bcond(f,u,bnode,data)
 		boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
 		boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_right,value=Tamb)
 	end
-
 end
 
 # ╔═╡ c29f9187-e79c-4e56-8063-c76c98839523
@@ -690,7 +689,7 @@ end
 
 # ╔═╡ 389a4798-a9ee-4e9c-8b44-a06201b4c457
 function boutflow(f,u,edge,data)
-	(;iT,iTp,ip,m,lc_frit,lc_plate)=data
+	(;iT,iTp,ip,m,lc_frit,lc_plate,dt_hf_enth)=data
 	ng=ngas(data)
 
 	k=outflownode(edge)
@@ -708,7 +707,7 @@ function boutflow(f,u,edge,data)
 		f[i] = v*cout*u[i,k]*m[i] # species mass flux at outflow
 	end
 	# convective heat flux
-	@inline r_hf_conv = v *cout * enthalpy_mix(data.Fluids, u[iT,k], X) * ramp(edge.time; du=(0.0,1.0), dt=(1.0,2.0))
+	@inline r_hf_conv = v *cout * enthalpy_mix(data.Fluids, u[iT,k], X) * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth)
 
 	f[iT] = r_hf_conv
 end
@@ -730,7 +729,7 @@ end
 
 # ╔═╡ 5547d7ad-dd58-4b00-8238-6e1abb32874e
 function flux(f,u,edge,data)
-	(;m,ip,iT)=data
+	(;m,ip,iT,dt_hf_enth)=data
 	ng=ngas(data)
 		
 	F = MVector{ng-1,eltype(u)}(undef)
@@ -755,10 +754,8 @@ function flux(f,u,edge,data)
 	@inline D_matrix!(data, D, Tm, pm)
 	@inline mumix, lambdamix = dynvisc_thermcond_mix(data, Tm, X)
 	lambda_bed=kbed(data,lambdamix)*lambdamix
-	#lambda_bed=kbed(data,lambdamix)*lambdamix*50
 	
 	rho = c*mmix
-	#v = darcyvelo(u,data)
 	v = darcyvelo(u,data,mumix)
 	
 	f[ip] = -rho*v
@@ -792,14 +789,14 @@ function flux(f,u,edge,data)
 	@inbounds for i=1:(ng-1)
 		f[i] = -(F[i] + c*X[i]*m[i]*v)
 	end
-	#@inline hf_conv = f[ip] * enthalpy_mix(data.Fluids, Tm, X) / mmix
-	@inline hf_conv = f[ip] * enthalpy_mix(data.Fluids, Tm, X) * ramp(edge.time; du=(0.0,1), dt=(1.0,2.0)) / mmix
+	@inline hf_conv = f[ip] * enthalpy_mix(data.Fluids, Tm, X) / mmix * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth) 
 	
 	Bp,Bm = fbernoulli_pm(hf_conv/lambda_bed/Tm)
 	f[iT] = lambda_bed*(Bm*u[iT,1]-Bp*u[iT,2])
 end
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
+#=╠═╡
 begin
 	
 	if dim == 1
@@ -809,11 +806,10 @@ begin
 	elseif dim == 2
 		mygrid=grid2D()
 		strategy = nothing
-		times=[0,5.0]
+		times=[0,8.0]
 	else
 		mygrid=grid3D()
 		strategy = GMRESIteration(UMFPACKFactorization())
-		#times=[0,1.2]
 		times=[0,20.0]
 	end
 	mydata=ModelData()
@@ -841,12 +837,9 @@ begin
 	inival=unknowns(sys)
 
 	inival[ip,:].=p
-	#inival[iT,:].=Tamb
 	inival[[iT,iTw,iTp],:] .= Tamb
-	#inival[[iT,iTw],:] .= Tamb
 	
 	for i=1:ng
-		#inival[i,:] .= 1.0/ng
 		inival[i,:] .= X0[i]
 	end
 
@@ -863,17 +856,74 @@ begin
 	end
 
 	if RunSim
-		solt=solve(sys;inival=inival,times,control,post,verbose="ne")
+		solt=solve(sys;inival=inival,times,control,post)
 	end
 end;
+  ╠═╡ =#
+
+# ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
+#=╠═╡
+md"""
+## Initialisation and Solve
+The simulation is setup as a transient simulation. An initialisation strategy is employed where different physics are enabled step by step once a stationary state is established. Initially, no heat is transported and no chemical reactions take place. 
+
+1. Velocity field (mass flow is ramped up from 1-100 % in T=$(mydata.dt_mf) s)
+2. Temperature field through enthalpy flux (ramped up from 0-100 % in T=$(mydata.dt_hf_enth) s)
+3. Temperature field through irradiation b.c. (ramped up from 0-100 % in T=$(mydata.dt_hf_irrad) s)
+
+The mass flow boundary condition into the reactor domain is "ramped up" starting from a low value and linearly increasing until the final value is reached. A time delay is given to let the flow stabilize. Once the flow field is established, heat transport is ramped up until a stable temperature field is established. Finally, the reactivity of the catalyst is "ramped up" until its final reactivity value is reached.
+"""
+  ╠═╡ =#
 
 # ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
+# ╠═╡ skip_as_script = true
+#=╠═╡
 @bind t Slider(solt.t,show_value=true,default=solt.t[end])
+  ╠═╡ =#
 
 # ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
+# ╠═╡ skip_as_script = true
+#=╠═╡
 sol = solt(t);
+  ╠═╡ =#
+
+# ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
+#=╠═╡
+let
+	(;m,ip)=mydata
+	ng=ngas(mydata)
+	vis=GridVisualizer(resolution=(600,300), xlabel="Time / s", ylabel="Molar flow / mol/hr")
+	
+	tfact=TestFunctionFactory(sys)	
+	tf_out=testfunction(tfact,[Γ_top_in],[Γ_bottom])
+
+	outflow_rate_tran=Float64[]
+	outflow_rate_steady=Float64[]
+	outflow_rate=Float64[]
+	reaction_rate=Float64[]
+	storage_rate=Float64[]
+
+	k=1
+	for i=2:length(solt)
+		m_ = k in 1:ng ? m[k] : 1
+		fac = k in 1:ng ? ufac"mol/hr" : ufac"kg/hr"
+		ofr=integrate(sys,tf_out, solt[i])
+		push!(outflow_rate,ofr[k]/m_/fac)		
+		rr = integrate(sys,reaction,solt[i])[k,2] / m_ /fac
+		sr = sum(integrate(sys,storage,solt[i]), dims=2)[k]/m_/fac
+		push!(reaction_rate, rr)
+		push!(storage_rate, sr)
+   	end
+	scalarplot!(vis, solt.t[2:end], -outflow_rate, label="Outflow rate")	
+	scalarplot!(vis, solt.t[2:end], -reaction_rate, label="Reaction rate", color=:red, clear=false)
+	scalarplot!(vis, solt.t[2:end], storage_rate, label="Storage rate", color=:blue, clear=false, )
+	reveal(vis)	
+end
+  ╠═╡ =#
 
 # ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
+# ╠═╡ skip_as_script = true
+#=╠═╡
 let
 	(;iT,iTw,iTp)=mydata
 	vis=GridVisualizer(layout=(3,1), resolution=(680,900))
@@ -893,8 +943,11 @@ let
 	bsolp=view(sol[iTp, :], bgridp)
 	scalarplot!(vis[3,1],bgridp, bsolp.-273.15,resolution=(680,200),show=true)	
 end
+  ╠═╡ =#
 
 # ╔═╡ 111b1b1f-51a5-4069-a365-a713c92b79f4
+# ╠═╡ skip_as_script = true
+#=╠═╡
 let
 	(;ip,p,gn,gni) = mydata
 	ng=ngas(mydata)
@@ -906,20 +959,39 @@ let
 			scalarplot!(vis, mygrid, sol[i,:], clear=false, color=pcols[i],label=gn[i])
 		end
 	elseif dim == 2
-		vis=GridVisualizer(layout=(2,1), resolution=(680,600))
+		vis=GridVisualizer(layout=(3,1), resolution=(680,900))
 		scalarplot!(vis[1,1], mygrid, sol[gni[:CO],:], aspect = 4.0,zoom = 2.8) # CO
 		scalarplot!(vis[2,1], mygrid, sol[gni[:CO2],:], aspect = 4.0,zoom = 2.8) # CO2
+
+		cols = distinguishable_colors(ng)
+		# plot species molar fractions along frit thickness (along y axis)
+		function _2to1(a,b)
+			a[1]=b[2]
+			#a[2]=b[2]
+		end
+		_grid=grid2D()
+		bfacemask!(_grid, [3.0,0.0].*ufac"cm",[3.0,0.5].*ufac"cm",5)
+	    grid1D = subgrid(_grid, [5]; boundary = true, transform = _2to1)
+		for i=1:ng
+			sol1D=view(sol[i, :], grid1D)
+			scalarplot!(vis[3,1],grid1D, sol1D, label=gn[i], color=cols[i],clear=false)
+		end
+		reveal(vis)
+	
+		
 	else
 		vis=GridVisualizer(layout=(3,1), resolution=(400,1200), outlinealpha=0.0)
 		scalarplot!(vis[1,1], mygrid, sol[1,:], clear=false, label="x1")
 		scalarplot!(vis[2,1], mygrid, sol[2,:], clear=false, color=:red, label="x2")
 		scalarplot!(vis[3,1], mygrid, sol[3,:], clear=false, color=:blue, label="x3")
-	end
-	
+	end	
 	reveal(vis)
 end
+  ╠═╡ =#
 
 # ╔═╡ de69f808-2618-4add-b092-522a1d7e0bb7
+# ╠═╡ skip_as_script = true
+#=╠═╡
 let
 	mydata = ModelData()
 	(;p,m,ip,iT,Tamb,mfluxin) = mydata
@@ -949,13 +1021,13 @@ let
 		scalarplot!(vis[2,1], mygrid, rho0./rho, clear=false, color=:red, label="v / v0")
 		scalarplot!(vis[2,1], mygrid, ps/p0, clear=false, color=:blue, label="p / p0")
 	elseif dim == 2
-		vis=GridVisualizer(layout=(2,2), resolution=(660,660))
-		scalarplot!(vis[1,1], mygrid, ps, title="Total Pressure")
-		scalarplot!(vis[1,2], mygrid, rho, title="Total Density")
+		vis=GridVisualizer(layout=(4,1), resolution=(600,800))
+		scalarplot!(vis[1,1], mygrid, ps, aspect=4.0, zoom=3.5) # Total pressure
+		scalarplot!(vis[2,1], mygrid, rho, aspect=4.0, zoom=3.5) # Total Density
 		nf = nodeflux(sys, sol)
 		massflux = nf[:,ip,:]
-		scalarplot!(vis[2,1], mygrid, massflux[1,:]./rho, title="Velocity - X")
-		scalarplot!(vis[2,2], mygrid, massflux[2,:]./rho, title="Velocity - Y")
+		scalarplot!(vis[3,1], mygrid, massflux[1,:]./rho, aspect=4.0, zoom=3.5) # Velocity - X
+		scalarplot!(vis[4,1], mygrid, massflux[2,:]./rho, aspect=4.0, zoom=3.5) # Velocity - Y
 	else
 		vis=GridVisualizer(layout=(2,1), resolution=(400,800), outlinealpha=0.0)
 		scalarplot!(vis[1,1], mygrid, ps, title="Total Pressure")
@@ -964,8 +1036,11 @@ let
 	end
 	reveal(vis)
 end
+  ╠═╡ =#
 
 # ╔═╡ e000c100-ee46-454e-b049-c1c29daa9a56
+# ╠═╡ skip_as_script = true
+#=╠═╡
 let
 	L=len(mygrid)
 	(;mfluxin,mmix0,lcat,p,X0,gni) = mydata
@@ -977,8 +1052,11 @@ let
 	tau = L/v0
 	Da = maximum(RR)/c0[gni[:H2]] * tau
 end
+  ╠═╡ =#
 
 # ╔═╡ f690c19f-22e3-4428-bc1c-3ed7d1646e71
+# ╠═╡ skip_as_script = true
+#=╠═╡
 let	
 	(;mfluxin,mmix0,X0,p,Tamb,m,dp,Fluids) = mydata
 	ng = ngas(mydata)
@@ -994,14 +1072,18 @@ let
 	#Pe = u0*ρf*cf*d/λf # Peclet
 	#Re,Pr,Pe
 end
+  ╠═╡ =#
 
 # ╔═╡ 5bbe72b2-2f80-4dae-9706-7ddb0b8b6dbe
+# ╠═╡ skip_as_script = true
+#=╠═╡
 let
 	(;dp,Tamb,p) = mydata
 	σs = Dict(:H2 => 289*ufac"pm", :CH4 => 380*ufac"pm", :H2O => 265*ufac"pm", :N2 => 364*ufac"pm", :CO => 376*ufac"pm", :CO2 => 330*ufac"pm")
 
 	Kn = ph"k_B"*Tamb/(sqrt(2)*pi*σs[:H2O]^2*p*dp)	
 end
+  ╠═╡ =#
 
 # ╔═╡ 37b5908c-dd4e-4fb8-9d5b-68402493e10d
 function DiffCoeffsMass(ng,m)
@@ -1038,6 +1120,8 @@ function DiffCoeffs(data)
 end
 
 # ╔═╡ ae8c7993-a89f-438a-a72a-d4a0c9a8ce57
+# ╠═╡ skip_as_script = true
+#=╠═╡
 let
 	L=maximum(mygrid[Coordinates][dim,:])
 	(;mfluxin,mmix0,p,Tamb) = mydata
@@ -1047,6 +1131,7 @@ let
 	D = DiffCoeffs(mydata)
 	Pe = L*v0 / minimum(D[D.>0])
 end
+  ╠═╡ =#
 
 # ╔═╡ 1224970e-8a59-48a9-b0ef-76ed776ca15d
 function checkinout(sys,sol)	
@@ -1062,22 +1147,44 @@ function checkinout(sys,sol)
 	(;in=integrate(sys,tf_in,sol),out=integrate(sys,tf_out,sol) )
 end
 
-# ╔═╡ e29848dd-d787-438e-9c32-e9c2136aec4f
+# ╔═╡ b13a76c9-509d-4367-8428-7b5b316ff1ed
+#=╠═╡
 checkinout(sys,sol)
+  ╠═╡ =#
+
+# ╔═╡ b55e2a48-5a2d-4e29-9f3b-219854461d09
+function areas(sol,sys,grid,data)
+	iT = data.iT
+	function area(f,u,bnode,data)
+		f[iT] = one(eltype(u)) # use temperature index to hold area information
+	end	
+	integrate(sys,area,sol; boundary=true)[iT,:]
+end
 
 # ╔═╡ 7c7d2f10-d8d2-447e-874b-7be365e0b00c
+# ╠═╡ skip_as_script = true
+#=╠═╡
 let
-	(;gn,m,nfluxin,X0) = mydata
+	(;gn,gni,m,nfluxin,X0) = mydata
 	in_,out_=checkinout(sys,sol)
-	println("Molar species in/outlfows obtained from Testfunction integration:")
-	for i = 1:ngas(mydata)
-		println(string(gn[i])*" IN:\t"* string(round(in_[i]/m[i]/ufac"mol/hr",sigdigits=4)) * "\t OUT: " * string(round(out_[i]/m[i]/ufac"mol/hr",sigdigits=4)) *"\t mol/hr")
+	Ac_in=areas(sol,sys,mygrid,mydata)[Γ_top_in]
+	println("Molar species in- & outflows:")
+	for i = 1:ngas(mydata)		
+		@printf "%s\tIN: %2.2f\t OUT: %2.2f mol/hr\n" gn[i] Ac_in*nfluxin*X0[i]/ufac"mol/hr" -out_[i]/m[i]/ufac"mol/hr"
 	end
-	println("\nMolar species in/outlfows as specified")
-	for i = 1:ngas(mydata)
-		println(string(gn[i])*" IN:\t"* string(round(nfluxin*X0[i]/ufac"mol/hr",sigdigits=5)) )
-	end	
+
+	nout(i) = -out_[i]/m[i]
+	nin(i) = Ac_in*nfluxin*X0[i]
+	println("\nConversion:")
+	for i in(gni[:CO2],gni[:H2])
+		@printf "X%4s: %2.2f\n" gn[i] (nin(i)-nout(i))/nin(i)
+	end
+	println("\nYield & Selectivity (CO2 based):")
+	for i in(gni[:CO],gni[:CH4])
+		@printf "Y%4s: %2.2f \tS%4s: %2.2f\n" gn[i] nout(i)/nin(gni[:CO2]) gn[i] nout(i)/(nin(gni[:CO2])-nout(gni[:CO2]))
+	end
 end
+  ╠═╡ =#
 
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
@@ -1100,6 +1207,7 @@ end
 # ╠═3bb2deff-7816-4749-9f1e-c1e451372b1e
 # ╠═4af1792c-572e-465c-84bf-b67dd6a7bc93
 # ╟─f28be8bd-4ccc-473c-b01f-730f2483ac78
+# ╠═abc28f81-903b-4656-b137-881060ae459c
 # ╠═a90c6d87-b442-43e8-ab27-827fab25d4f6
 # ╠═7f8955d2-5f0b-4217-b08d-e3f53849dbec
 # ╠═85439b96-fe21-4b2c-8695-f7088305112f
@@ -1110,13 +1218,15 @@ end
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
-# ╠═e29848dd-d787-438e-9c32-e9c2136aec4f
-# ╠═7c7d2f10-d8d2-447e-874b-7be365e0b00c
-# ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
+# ╠═b13a76c9-509d-4367-8428-7b5b316ff1ed
+# ╟─7c7d2f10-d8d2-447e-874b-7be365e0b00c
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
+# ╟─5d5ac33c-f738-4f9e-bcd2-efc43b638109
+# ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
 # ╠═99b59260-7651-45d0-b364-4f86db9927f8
 # ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
-# ╠═111b1b1f-51a5-4069-a365-a713c92b79f4
+# ╟─111b1b1f-51a5-4069-a365-a713c92b79f4
+# ╟─eb9dd385-c4be-42a2-8565-cf3cc9b2a078
 # ╠═de69f808-2618-4add-b092-522a1d7e0bb7
 # ╟─68ca72ae-3b24-4c09-ace1-5e340c8be3d4
 # ╟─db77fca9-4118-4825-b023-262d4073b2dd
@@ -1128,7 +1238,6 @@ end
 # ╟─0d507c5e-eb0f-4094-a30b-a4a82fd5c302
 # ╠═5bbe72b2-2f80-4dae-9706-7ddb0b8b6dbe
 # ╟─67adda35-6761-4e3c-9d05-81e5908d9dd2
-# ╠═abc28f81-903b-4656-b137-881060ae459c
 # ╠═60713981-8c10-403d-9f58-821bf14f2121
 # ╠═a53197e9-504f-46e0-9c88-37b6f4bad0f6
 # ╠═fb70db70-33a5-4191-a6c6-0b888aa2dd4a
@@ -1141,3 +1250,4 @@ end
 # ╠═37b5908c-dd4e-4fb8-9d5b-68402493e10d
 # ╠═2cbd3e87-289c-47a2-b837-10133974ae82
 # ╠═1224970e-8a59-48a9-b0ef-76ed776ca15d
+# ╠═b55e2a48-5a2d-4e29-9f3b-219854461d09
