@@ -57,8 +57,7 @@ function grid2D()
 	grid=simplexgrid(R,Z)
 	circular_symmetric!(grid)
 
-	cellmask!(grid,[0.0,0.4].*ufac"cm",[7.0,0.5].*ufac"cm",2) # catalyst region
-	
+	cellmask!(grid,[0.0,0.4].*ufac"cm",[7.0,0.5].*ufac"cm",2) # catalyst region	
 	#cellmask!(grid,[0.0,0.4].*ufac"cm",[5.0,0.5].*ufac"cm",2) # catalyst region
 	#bfacemask!(grid, [0.0,0.5].*ufac"cm",[5.0,0.5].*ufac"cm",5) # inflow	
 	grid
@@ -832,7 +831,6 @@ begin
 	
 	enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
 	enable_boundary_species!(sys, iTw, [Γ_top_in]) # window temperature as boundary species in upper chamber
-	#enable_boundary_species!(sys, iTw, [Γ_top_in,Γ_top_mask]) # window temperature as boundary species in upper chamber
 	enable_boundary_species!(sys, iTp, [Γ_bottom]) # plate temperature as boundary species in lower chamber
 	inival=unknowns(sys)
 
@@ -850,9 +848,7 @@ begin
 		control.handle_exceptions=true
 		control.Δu_opt=100.0
 	function post(sol,oldsol, t, Δt)
-		@info "t= "*string(round(t,sigdigits=2))*"\t Δt= "*string(round(Δt,sigdigits=2))
-
-		 
+		@info "t= "*string(round(t,sigdigits=2))*"\t Δt= "*string(round(Δt,sigdigits=2))		 
 	end
 
 	if RunSim
@@ -885,40 +881,6 @@ The mass flow boundary condition into the reactor domain is "ramped up" starting
 # ╠═╡ skip_as_script = true
 #=╠═╡
 sol = solt(t);
-  ╠═╡ =#
-
-# ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
-#=╠═╡
-let
-	(;m,ip)=mydata
-	ng=ngas(mydata)
-	vis=GridVisualizer(resolution=(600,300), xlabel="Time / s", ylabel="Molar flow / mol/hr")
-	
-	tfact=TestFunctionFactory(sys)	
-	tf_out=testfunction(tfact,[Γ_top_in],[Γ_bottom])
-
-	outflow_rate_tran=Float64[]
-	outflow_rate_steady=Float64[]
-	outflow_rate=Float64[]
-	reaction_rate=Float64[]
-	storage_rate=Float64[]
-
-	k=1
-	for i=2:length(solt)
-		m_ = k in 1:ng ? m[k] : 1
-		fac = k in 1:ng ? ufac"mol/hr" : ufac"kg/hr"
-		ofr=integrate(sys,tf_out, solt[i])
-		push!(outflow_rate,ofr[k]/m_/fac)		
-		rr = integrate(sys,reaction,solt[i])[k,2] / m_ /fac
-		sr = sum(integrate(sys,storage,solt[i]), dims=2)[k]/m_/fac
-		push!(reaction_rate, rr)
-		push!(storage_rate, sr)
-   	end
-	scalarplot!(vis, solt.t[2:end], -outflow_rate, label="Outflow rate")	
-	scalarplot!(vis, solt.t[2:end], -reaction_rate, label="Reaction rate", color=:red, clear=false)
-	scalarplot!(vis, solt.t[2:end], storage_rate, label="Storage rate", color=:blue, clear=false, )
-	reveal(vis)	
-end
   ╠═╡ =#
 
 # ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
@@ -1042,7 +1004,7 @@ end
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	L=len(mygrid)
+	L=maximum(mygrid[Coordinates][dim,:])
 	(;mfluxin,mmix0,lcat,p,X0,gni) = mydata
 	T = 650 + 273.15
 	c0 = p*X0/(ph"R"*T)
@@ -1186,6 +1148,62 @@ let
 end
   ╠═╡ =#
 
+# ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
+#=╠═╡
+let
+	(;m,ip,gn,poros,mfluxin,W0)=mydata
+	ng=ngas(mydata)
+	vis=GridVisualizer(resolution=(600,300), xlabel="Time / s", ylabel="Molar flow / Total Moles")
+	
+	tfact=TestFunctionFactory(sys)	
+	tf_out=testfunction(tfact,[Γ_top_in],[Γ_bottom])
+	
+	Ac_in=areas(sol,sys,mygrid,mydata)[Γ_top_in]
+	
+	inflow_rate=Float64[]
+	outflow_rate=Float64[]
+	reaction_rate=Float64[]
+	stored_amount=Float64[]
+
+	k=4
+	for i=2:length(solt)
+		m_ = k in 1:ng ? m[k] : 1
+		W_ = k in 1:ng ? W0[k] : 1
+		#fac = k in 1:ng ? ufac"mol/hr" : ufac"kg/hr"
+		# use time dependent version of integrate function for use w testfunction
+		ofr=integrate(sys,tf_out,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])
+
+		ifr=Ac_in*mfluxin*W_*ramp(solt.t[i]; du=(0.01,1), dt=(0.0,1.0))
+		push!(inflow_rate,ifr/m_)		
+		push!(outflow_rate,ofr[k]/m_)		
+		rr = integrate(sys,reaction,solt[i])[k,2]
+		amount = sum(integrate(sys,storage,solt[i]), dims=2)[k]
+		push!(reaction_rate, rr/m_)
+		push!(stored_amount, amount/m_)
+   	end
+
+	
+	# integrals
+	I_in=0.0
+	I_out=0.0
+	I_reac=0.0
+	for i=1:length(solt)-1
+		I_in+=inflow_rate[i]*(solt.t[i+1]-solt.t[i])
+		I_out+=outflow_rate[i]*(solt.t[i+1]-solt.t[i])
+		I_reac+=reaction_rate[i]*(solt.t[i+1]-solt.t[i])
+	end
+	name = k in 1:ng ?  gn[k] : "Total Mass"
+	@printf "%s In: %2.2e \t Out: %2.2e \t React: %2.2e \nIn - Out: %2.4e \nStorage tEnd -t0: %2.4e" name I_in I_out I_reac I_in+I_out-I_reac stored_amount[end]-stored_amount[1]
+
+	
+	scalarplot!(vis, solt.t[2:end], inflow_rate, label="Inflow rate")	
+	scalarplot!(vis, solt.t[2:end], -outflow_rate, label="Outflow rate", color=:red, clear=false)	
+	scalarplot!(vis, solt.t[2:end], -reaction_rate, label="Reaction rate",  color=:blue, clear=false)
+	scalarplot!(vis, solt.t[2:end], stored_amount, label="Stored amount", color=:green, clear=false, )
+	reveal(vis)	
+end
+  ╠═╡ =#
+
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─6da83dc0-3b0c-4737-833c-6ee91552ff5c
@@ -1219,9 +1237,9 @@ end
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
 # ╠═b13a76c9-509d-4367-8428-7b5b316ff1ed
-# ╟─7c7d2f10-d8d2-447e-874b-7be365e0b00c
+# ╠═7c7d2f10-d8d2-447e-874b-7be365e0b00c
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-# ╟─5d5ac33c-f738-4f9e-bcd2-efc43b638109
+# ╠═5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
 # ╠═99b59260-7651-45d0-b364-4f86db9927f8
 # ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
