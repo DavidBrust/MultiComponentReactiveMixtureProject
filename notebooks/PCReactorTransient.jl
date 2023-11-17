@@ -59,7 +59,7 @@ function grid2D()
 
 	cellmask!(grid,[0.0,0.45].*ufac"cm",[7.0,0.5].*ufac"cm",2) # catalyst region	
 	#cellmask!(grid,[0.0,0.4].*ufac"cm",[5.0,0.5].*ufac"cm",2) # catalyst region
-	#bfacemask!(grid, [0.0,0.5].*ufac"cm",[5.0,0.5].*ufac"cm",5) # inflow	
+	bfacemask!(grid, [0.0,0.5].*ufac"cm",[5.0,0.5].*ufac"cm",5) # top inner
 	grid
 end
 
@@ -112,9 +112,9 @@ begin
 		const Γ_bottom = 1
 		const Γ_outer = 2
 		#const Γ_top_mask = 3
-		const Γ_top_in = 3
+		const Γ_top_outer = 3
 		const Γ_sym = 4		
-		#const Γ_top_in = 5
+		const Γ_top_inner = 5
 	else
 		# mask inflow
 		const Γ_left = 7 
@@ -200,7 +200,7 @@ function radiosity_window(f,u,bnode,data)
     Tglass = u[iTw] # local tempererature of quartz window
     G1_bot_IR = eps1*ph"σ"*Tglass^4
 	G1_bot_vis = 0.0
-    if bnode.region==Γ_top_in # catalyst layer (2)
+    if bnode.region==Γ_top_inner # catalyst layer (2)
 		# flux profile measured behind quarz in plane of cat layer
 		G1_bot_vis += G_lamp
 
@@ -211,8 +211,8 @@ end
 # ╔═╡ ee797850-f5b5-4178-be07-28192c04252d
 function bflux(f,u,bedge,data)
 	# window temperature distribution
-	#if bedge.region == Γ_top_in || bedge.region == Γ_top_mask
-	if bedge.region == Γ_top_in
+	if bedge.region == Γ_top_inner || bedge.region == Γ_top_outer
+	#if bedge.region == Γ_top_inner
 		(;iTw,lambda_window) = data
 		f[iTw] = lambda_window * (u[iTw, 1] - u[iTw, 2])
 	elseif bedge.region == Γ_bottom
@@ -223,7 +223,7 @@ end
 
 # ╔═╡ b375a26d-3ee6-4b69-9bd8-c69c3e193dc9
 function bstorage(f,u,bnode,data)
-	if bnode.region == Γ_top_in
+	if bnode.region == Γ_top_inner|| bnode.region == Γ_top_outer
 		(;iTw) = data
 		f[iTw] = u[iTw]
 	elseif bnode.region == Γ_bottom
@@ -373,10 +373,9 @@ const lc_plate = SurfaceOpticalProps(
 begin	
 Base.@kwdef mutable struct ModelData{NG}
 	dt_mf::Tuple{Float64, Float64}=(0.0,1.0)
-	dt_hf_enth::Tuple{Float64, Float64}=(2.0,6.0)
-	dt_hf_irrad::Tuple{Float64, Float64}=(3.0,6.0)
-	dt_cat::Tuple{Float64, Float64}=(3.0,4.0)
-	
+	dt_hf_enth::Tuple{Float64, Float64}=(2.0,10.0)
+	dt_hf_irrad::Tuple{Float64, Float64}=(3.0,10.0)
+		
 	kinpar::FixedBed.KinData{nreac(XuFroment)} = XuFroment
 	mcat::Float64=500.0*ufac"mg"
 	Vcat::Float64=1.0*ufac"m^2"*0.02*ufac"cm"
@@ -464,7 +463,7 @@ end;
 
 # ╔═╡ 3bb2deff-7816-4749-9f1e-c1e451372b1e
 function reaction(f,u,node,data)
-	(;m,ip,iT,isreactive,dt_cat)=data
+	(;m,ip,iT,isreactive)=data
 	ng=ngas(data)
 
 	if node.region == 2 && isreactive # catalyst layer
@@ -476,10 +475,8 @@ function reaction(f,u,node,data)
             pi[i] = u[ip]*u[i]
 		end
 
-		rf = ramp(node.time; du=(0,1), dt=dt_cat)
-		RR = @inline -lcat*ri(data,u[iT],pi)
-		#RR = @inline -lcat*ri(data,u[iT],pi)*rf
-		#RR = @inline -lcat*ri(data,T,pi)*rf
+        RR = @inline -lcat*ri(data,u[iT],pi)
+		
 		for i=1:ng
 			f[i] = zero(eltype(u))
 			for j=1:nreac(kinpar)
@@ -545,9 +542,9 @@ function top(f,u,bnode,data)
 	G1_vis, G1_IR = radiosity_window(f,u,bnode,data)
 	
 	# top boundaries (inlet and mask cross-sections)
-	if bnode.region==Γ_top_in
+	if bnode.region==Γ_top_inner|| bnode.region==Γ_top_outer
 
-		r_mfluxin = mfluxin*ramp(bnode.time; du=(0.01,1), dt=(0.0,1.0))
+		r_mfluxin = mfluxin*ramp(bnode.time; du=(0.1,1), dt=(0.0,1.0))
 		
 		f[ip] = -r_mfluxin # total mass flux
 		for i=1:(ng-1)
@@ -832,8 +829,8 @@ end
 function checkinout(sys,sol)	
 	tfact=TestFunctionFactory(sys)
 	if dim == 2
-		tf_in=testfunction(tfact,[Γ_bottom],[Γ_top_in])
-		tf_out=testfunction(tfact,[Γ_top_in],[Γ_bottom])
+		tf_in=testfunction(tfact,[Γ_bottom],[Γ_top_inner,Γ_top_outer])
+		tf_out=testfunction(tfact,[Γ_top_inner,Γ_top_outer],[Γ_bottom])
 	else
 		tf_in=testfunction(tfact,[Γ_right],[Γ_left])
 		tf_out=testfunction(tfact,[Γ_left],[Γ_right])
@@ -876,7 +873,7 @@ begin
 	elseif dim == 2
 		mygrid=grid2D()
 		strategy = nothing
-		times=[0,11.0]
+		times=[0,12.0]
 	else
 		mygrid=grid3D()
 		strategy = GMRESIteration(UMFPACKFactorization())
@@ -901,7 +898,7 @@ begin
 							)
 	
 	enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
-	enable_boundary_species!(sys, iTw, [Γ_top_in]) # window temperature as boundary species in upper chamber
+	enable_boundary_species!(sys, iTw, [Γ_top_inner,Γ_top_outer]) # window temperature as boundary species in upper chamber
 	enable_boundary_species!(sys, iTp, [Γ_bottom]) # plate temperature as boundary species in lower chamber
 	inival=unknowns(sys)
 
@@ -915,8 +912,9 @@ begin
 	nd_ids = unique(mygrid[CellNodes][:,mygrid[CellRegions] .== 2])
 	cat_vol = sum(nodevolumes(sys)[nd_ids])
 	mydata.lcat = mydata.mcat/cat_vol
-    area_in = bareas(Γ_top_in,sys,mygrid)
-	mydata.mfluxin = mydata.mflowin / area_in
+    area_inner = bareas(Γ_top_inner,sys,mygrid)
+    area_outer = bareas(Γ_top_outer,sys,mygrid)
+	mydata.mfluxin = mydata.mflowin / (area_inner+area_outer)
 	
 	control = SolverControl(strategy, sys;)
 		control.Δt_min=1.0e-6
@@ -929,7 +927,7 @@ begin
 	end
 
 	if RunSim
-		solt=solve(sys;inival=inival,times,control,post,verbose="n")
+		solt=solve(sys;inival=inival,times,control,post)
 	end
 end;
   ╠═╡ =#
@@ -1007,15 +1005,13 @@ end
 # ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
 #=╠═╡
 let
-	(;m,ip,gn,poros,mfluxin,W0)=mydata
+	(;m,ip,gn,poros,mflowin,W0)=mydata
 	ng=ngas(mydata)
 	vis=GridVisualizer(resolution=(600,300), xlabel="Time / s", ylabel="Molar flow / Total Moles")
 	
 	tfact=TestFunctionFactory(sys)	
-	tf_out=testfunction(tfact,[Γ_top_in],[Γ_bottom])
-	
-	Ac_in=areas(sol,sys,mygrid,mydata)[Γ_top_in]
-	
+	tf_out=testfunction(tfact,[Γ_top_inner,Γ_top_outer],[Γ_bottom])
+		
 	inflow_rate=Float64[]
 	outflow_rate=Float64[]
 	reaction_rate=Float64[]
@@ -1029,7 +1025,7 @@ let
 		# use time dependent version of integrate function for use w testfunction
 		ofr=integrate(sys,tf_out,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])
 
-		ifr=Ac_in*mfluxin*W_*ramp(solt.t[i]; du=(0.01,1), dt=(0.0,1.0))
+		ifr=mflowin*W_*ramp(solt.t[i]; du=(0.1,1), dt=(0.0,1.0))
 		push!(inflow_rate,ifr/m_)		
 		push!(outflow_rate,ofr[k]/m_)		
 		rr = integrate(sys,reaction,solt[i])[k,2]
@@ -1075,7 +1071,7 @@ let
 		#a[2]=b[2]
 	end
     # window
-	bgridw = subgrid(mygrid, [Γ_top_in]; boundary = true, transform = _2to1)
+	bgridw = subgrid(mygrid, [Γ_top_inner]; boundary = true, transform = _2to1)
 	bsolw=view(sol[iTw, :], bgridw)
 	scalarplot!(vis[2,1],bgridw, bsolw.-273.15, resolution=(680,200))
 	# bottom plate

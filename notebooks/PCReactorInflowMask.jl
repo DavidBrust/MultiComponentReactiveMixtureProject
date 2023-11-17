@@ -200,10 +200,9 @@ function radiosity_window(f,u,bnode,data)
     Tglass = u[iTw] # local tempererature of quartz window
     G1_bot_IR = eps1*ph"σ"*Tglass^4
 	G1_bot_vis = 0.0
-    if bnode.region==Γ_top_in || bnode.region==Γ_top_mask
-		# flux profile measured behind quarz in plane of cat layer
-		G1_bot_vis += G_lamp
-
+    #if bnode.region==Γ_top_in || bnode.region==Γ_top_mask
+	if bnode.region==Γ_top_in # outer area (Γ_top_mask) in the dark Γ_top_mask
+		G1_bot_vis += G_lamp # flux profile behind quarz window in plane of cat layer
     end
     return G1_bot_vis,G1_bot_IR
 end
@@ -373,9 +372,8 @@ const lc_plate = SurfaceOpticalProps(
 begin	
 Base.@kwdef mutable struct ModelData{NG}
 	dt_mf::Tuple{Float64, Float64}=(0.0,1.0)
-	dt_hf_enth::Tuple{Float64, Float64}=(2.0,6.0)
-	dt_hf_irrad::Tuple{Float64, Float64}=(3.0,6.0)
-	dt_cat::Tuple{Float64, Float64}=(3.0,4.0)
+	dt_hf_enth::Tuple{Float64, Float64}=(2.0,10.0)
+	dt_hf_irrad::Tuple{Float64, Float64}=(3.0,10.0)
 	
 	kinpar::FixedBed.KinData{nreac(XuFroment)} = XuFroment
 	mcat::Float64=500.0*ufac"mg"
@@ -464,7 +462,7 @@ end;
 
 # ╔═╡ 3bb2deff-7816-4749-9f1e-c1e451372b1e
 function reaction(f,u,node,data)
-	(;m,ip,iT,isreactive,dt_cat)=data
+	(;m,ip,iT,isreactive)=data
 	ng=ngas(data)
 
 	if node.region == 2 && isreactive # catalyst layer
@@ -476,10 +474,8 @@ function reaction(f,u,node,data)
             pi[i] = u[ip]*u[i]
 		end
 
-		rf = ramp(node.time; du=(0,1), dt=dt_cat)
 		RR = @inline -lcat*ri(data,u[iT],pi)
-		#RR = @inline -lcat*ri(data,u[iT],pi)*rf
-		#RR = @inline -lcat*ri(data,T,pi)*rf
+
 		for i=1:ng
 			f[i] = zero(eltype(u))
 			for j=1:nreac(kinpar)
@@ -547,7 +543,7 @@ function top(f,u,bnode,data)
 	# top boundaries (inlet and mask cross-sections)
 	if bnode.region==Γ_top_in || bnode.region==Γ_top_mask
 
-		r_mfluxin = mfluxin*ramp(bnode.time; du=(0.01,1), dt=(0.0,1.0))
+		r_mfluxin = mfluxin*ramp(bnode.time; du=(0.1,1), dt=(0.0,1.0))
 	
 		if bnode.region==Γ_top_in
 			f[ip] = -r_mfluxin # total mass flux
@@ -882,7 +878,7 @@ begin
 	elseif dim == 2
 		mygrid=grid2D()
 		strategy = nothing
-		times=[0,11.0]
+		times=[0,12.0]
 	else
 		mygrid=grid3D()
 		strategy = GMRESIteration(UMFPACKFactorization())
@@ -1028,7 +1024,7 @@ let
 	reaction_rate=Float64[]
 	stored_amount=Float64[]
 
-	k=5
+	k=2
 	for i=2:length(solt)
 		m_ = k in 1:ng ? m[k] : 1
 		W_ = k in 1:ng ? W0[k] : 1
@@ -1036,7 +1032,7 @@ let
 		# use time dependent version of integrate function for use w testfunction
 		ofr=integrate(sys,tf_out,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])
 
-		ifr=Ac_in*mfluxin*W_*ramp(solt.t[i]; du=(0.01,1), dt=(0.0,1.0))
+		ifr=Ac_in*mfluxin*W_*ramp(solt.t[i]; du=(0.1,1), dt=(0.0,1.0))
 		push!(inflow_rate,ifr/m_)		
 		push!(outflow_rate,ofr[k]/m_)		
 		rr = integrate(sys,reaction,solt[i])[k,2]
