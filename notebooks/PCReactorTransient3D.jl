@@ -40,16 +40,6 @@ __Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=false))
 PlutoUI.TableOfContents(title="M-S Transport + Darcy")
   ╠═╡ =#
 
-# ╔═╡ 83fa22fa-451d-4c30-a4b7-834974245996
-function grid1D()
-	X=(0:0.02:1)*ufac"cm"
-	grid=simplexgrid(X)
-	# catalyst region
-	cellmask!(grid,[0.4]*ufac"cm",[0.6]*ufac"cm",2)	
-	#cellmask!(grid,[0.0]*ufac"cm",[0.2]*ufac"cm",2)	
-	grid
-end
-
 # ╔═╡ 4dae4173-0363-40bc-a9ca-ce5b4d5224cd
 function grid2D()
 	R=(0:1:7)*ufac"cm"
@@ -65,21 +55,29 @@ end
 
 # ╔═╡ 561e96e2-2d48-4eb6-bb9d-ae167a622aeb
 function grid3D()
-	X=(0:1:14)*ufac"cm"
-	Y=(0:0.05:0.5)*ufac"cm"
-	Z=(0:1:14)*ufac"cm"
+	xmax=14
+	ymax=14
+	zmax=0.5
+	X=(0:1:xmax)*ufac"cm"
+	Y=(0:1:ymax)*ufac"cm"
+	Z=(0:0.05:zmax)*ufac"cm"
+	
 	grid=simplexgrid(X,Y,Z)
 
 	# catalyst region
-	cellmask!(grid,[2,0.0,2].*ufac"cm",[12,0.1,12].*ufac"cm",2)
-	#bfacemask!(grid, [2,1,2].*ufac"cm",[12,1,12].*ufac"cm",7) # mask outflow
-	bfacemask!(grid, [2,0,2].*ufac"cm",[12,0,12].*ufac"cm",7) # mask inflow
+	cellmask!(grid,[0,0,0.45].*ufac"cm",[xmax,ymax,0.5].*ufac"cm",2)
+	bfacemask!(grid, [0,0,0].*ufac"cm",[xmax,0,zmax].*ufac"cm",1) # front side
+	bfacemask!(grid, [xmax,0,0].*ufac"cm",[xmax,ymax,zmax].*ufac"cm",1) # right side
+	bfacemask!(grid, [0,ymax,0].*ufac"cm",[xmax,ymax,zmax].*ufac"cm",1) # back side
+	bfacemask!(grid, [0,0,0].*ufac"cm",[0,ymax,zmax].*ufac"cm",1) # left side
+	
+	bfacemask!(grid, [2,2,zmax].*ufac"cm",[12,12,zmax].*ufac"cm",7) # mask inflow
 	
 	grid
 end
 
 # ╔═╡ 107a6fa3-60cb-43f0-8b21-50cd1eb5065a
-const dim = 2
+const dim = 3
 
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═╡ skip_as_script = true
@@ -98,7 +96,7 @@ let
 	elseif dim == 2
 		gridplot(grid2D(), resolution=(660,300), aspect=4.0, zoom=2.8)
 	else
-		gridplot(grid3D(); xplane=xcut, show=true, outlinealpha=0.0 )
+		gridplot(grid3D(); resolution=(660,600), zoom=1.4,xplane=xcut, show=true, outlinealpha=0.0 )
 	end
 end
   ╠═╡ =#
@@ -116,16 +114,10 @@ begin
 		const Γ_sym = 4		
 		const Γ_top_inner = 5
 	else
-		# mask inflow
-		const Γ_left = 7 
-		const Γ_right = 3
-		# mask outflow
-		# const Γ_left = 1 
-		# const Γ_right = 7		
-		const Γ_front = 2
-		const Γ_back = 4
+		const Γ_sides = 1
 		const Γ_bottom = 5
-		const Γ_top = 6
+		const Γ_top_outer = 6
+		const Γ_top_inner = 7
 	end
 end;
 
@@ -200,10 +192,9 @@ function radiosity_window(f,u,bnode,data)
     Tglass = u[iTw] # local tempererature of quartz window
     G1_bot_IR = eps1*ph"σ"*Tglass^4
 	G1_bot_vis = 0.0
-    if bnode.region==Γ_top_inner # catalyst layer (2)
-		# flux profile measured behind quarz in plane of cat layer
-		G1_bot_vis += G_lamp
-
+    #if bnode.region==Γ_top_inner
+	if bnode.region==Γ_top_inner || bnode.region==Γ_top_outer
+		G1_bot_vis += G_lamp # flux behind quartz window, in plane of cat layer
     end
     return G1_bot_vis,G1_bot_IR
 end
@@ -593,7 +584,7 @@ function side(f,u,bnode,data)
 	ng=ngas(data)
 	
 	# all sides for complete domain
-	if bnode.region==Γ_outer
+	if bnode.region==Γ_sides
 
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
 		X=MVector{ng,eltype(u)}(undef)
@@ -657,22 +648,13 @@ end
 function bcond(f,u,bnode,data)
 	(;p,ip,iT,Tamb,mfluxin,X0,W0,m,mmix0)=data
 	ng=ngas(data)
-		
-	if dim==2		
-		top(f,u,bnode,data)
-		side(f,u,bnode,data)
-		bottom(f,u,bnode,data)
-		
-		boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_bottom,value=p)
-	else
-		boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_left,value=Tamb)
-		for i=1:(ng-1)
-		boundary_neumann!(f,u,bnode, species=i,region=Γ_left,value=r_mfluxin*W0[i])
-		end
-		boundary_neumann!(f,u,bnode, species=ip, region=Γ_left, value=r_mfluxin)
-		boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
-		boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_right,value=Tamb)
-	end
+
+	top(f,u,bnode,data)
+	side(f,u,bnode,data)
+	bottom(f,u,bnode,data)
+	
+	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_bottom,value=p)
+	
 end
 
 # ╔═╡ c29f9187-e79c-4e56-8063-c76c98839523
@@ -828,13 +810,8 @@ end
 # ╔═╡ 1224970e-8a59-48a9-b0ef-76ed776ca15d
 function checkinout(sys,sol)	
 	tfact=TestFunctionFactory(sys)
-	if dim == 2
-		tf_in=testfunction(tfact,[Γ_bottom],[Γ_top_inner,Γ_top_outer])
-		tf_out=testfunction(tfact,[Γ_top_inner,Γ_top_outer],[Γ_bottom])
-	else
-		tf_in=testfunction(tfact,[Γ_right],[Γ_left])
-		tf_out=testfunction(tfact,[Γ_left],[Γ_right])
-	end
+	tf_in=testfunction(tfact,[Γ_bottom],[Γ_top_inner,Γ_top_outer])
+	tf_out=testfunction(tfact,[Γ_top_inner,Γ_top_outer],[Γ_bottom])	
 
 	(;in=integrate(sys,tf_in,sol),out=integrate(sys,tf_out,sol) )
 end
@@ -865,20 +842,10 @@ end
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
 #=╠═╡
 begin
-	
-	if dim == 1
-		mygrid=grid1D()
-		strategy = nothing
-		times=[0,10]
-	elseif dim == 2
-		mygrid=grid2D()
-		strategy = nothing
-		times=[0,12.0]
-	else
-		mygrid=grid3D()
-		strategy = GMRESIteration(UMFPACKFactorization())
-		times=[0,20.0]
-	end
+	mygrid=grid3D()
+	strategy = GMRESIteration(UMFPACKFactorization())
+	times=[0,12.0]
+
 	mydata=ModelData()
 	(;p,ip,Tamb,iT,iTw,iTp,X0)=mydata
 	ng=ngas(mydata)
@@ -892,8 +859,7 @@ begin
 							bflux=bflux,
 							bstorage=bstorage,
 							boutflow=boutflow,
-							outflowboundaries=
-								[dim == 2 ? Γ_bottom : Γ_right],
+							outflowboundaries=[Γ_bottom],
 							assembly=:edgewise
 							)
 	
@@ -944,15 +910,6 @@ The simulation is setup as a transient simulation. An initialisation strategy is
 
 The mass flow boundary condition into the reactor domain is "ramped up" starting from a low value and linearly increasing until the final value is reached. A time delay is given to let the flow stabilize. Once the flow field is established, heat transport is ramped up until a stable temperature field is established. Finally, the reactivity of the catalyst is "ramped up" until its final reactivity value is reached.
 """
-  ╠═╡ =#
-
-# ╔═╡ 9a61cf12-9d92-4fdc-9093-79d3fa1f8b90
-#=╠═╡
-let
-	(;lcat,mcat)=mydata
-	catvol = mcat/lcat
-	1.0*ufac"mol/hr"/catvol
-end
   ╠═╡ =#
 
 # ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
@@ -1072,19 +1029,19 @@ end
 let
 	(;iT,iTw,iTp)=mydata
 	vis=GridVisualizer(layout=(3,1), resolution=(680,900))
-	scalarplot!(vis[1,1],mygrid, sol[iT,:] .- 273.15, zoom = 2.8, aspect=4.0)
+	scalarplot!(vis[1,1],mygrid, sol[iT,:] .- 273.15, zoom = 2.0)
 
 	# plot temperature of window / boundary species
-	function _2to1(a,b)
+	function _3to2(a,b)
 		a[1]=b[1]
-		#a[2]=b[2]
+		a[2]=b[2]
 	end
     # window
-	bgridw = subgrid(mygrid, [Γ_top_inner]; boundary = true, transform = _2to1)
+	bgridw = subgrid(mygrid, [Γ_top_inner,Γ_top_outer]; boundary = true, transform = _3to2)
 	bsolw=view(sol[iTw, :], bgridw)
 	scalarplot!(vis[2,1],bgridw, bsolw.-273.15, resolution=(680,200))
 	# bottom plate
-	bgridp = subgrid(mygrid, [Γ_bottom]; boundary = true, transform = _2to1)
+	bgridp = subgrid(mygrid, [Γ_bottom]; boundary = true, transform = _3to2)
 	bsolp=view(sol[iTp, :], bgridp)
 	scalarplot!(vis[3,1],bgridp, bsolp.-273.15,resolution=(680,200),show=true)	
 end
@@ -1248,7 +1205,6 @@ end
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─6da83dc0-3b0c-4737-833c-6ee91552ff5c
 # ╠═d3278ac7-db94-4119-8efd-4dd18107e248
-# ╠═83fa22fa-451d-4c30-a4b7-834974245996
 # ╠═4dae4173-0363-40bc-a9ca-ce5b4d5224cd
 # ╠═561e96e2-2d48-4eb6-bb9d-ae167a622aeb
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
@@ -1276,7 +1232,6 @@ end
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
-# ╠═9a61cf12-9d92-4fdc-9093-79d3fa1f8b90
 # ╠═b13a76c9-509d-4367-8428-7b5b316ff1ed
 # ╠═7c7d2f10-d8d2-447e-874b-7be365e0b00c
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
