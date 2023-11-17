@@ -57,9 +57,9 @@ function grid2D()
 	grid=simplexgrid(R,Z)
 	circular_symmetric!(grid)
 
-	cellmask!(grid,[0.0,0.45].*ufac"cm",[7.0,0.5].*ufac"cm",2) # catalyst region	
-	#cellmask!(grid,[0.0,0.4].*ufac"cm",[5.0,0.5].*ufac"cm",2) # catalyst region
-	#bfacemask!(grid, [0.0,0.5].*ufac"cm",[5.0,0.5].*ufac"cm",5) # inflow	
+	#cellmask!(grid,[0.0,0.4].*ufac"cm",[7.0,0.5].*ufac"cm",2) # catalyst region	
+	cellmask!(grid,[0.0,0.45].*ufac"cm",[5.0,0.5].*ufac"cm",2) # catalyst region
+	bfacemask!(grid, [0.0,0.5].*ufac"cm",[5.0,0.5].*ufac"cm",5) # inflow	
 	grid
 end
 
@@ -111,10 +111,10 @@ begin
 	elseif dim == 2
 		const Γ_bottom = 1
 		const Γ_outer = 2
-		#const Γ_top_mask = 3
-		const Γ_top_in = 3
+		const Γ_top_mask = 3
+		#const Γ_top_in = 3
 		const Γ_sym = 4		
-		#const Γ_top_in = 5
+		const Γ_top_in = 5
 	else
 		# mask inflow
 		const Γ_left = 7 
@@ -200,7 +200,7 @@ function radiosity_window(f,u,bnode,data)
     Tglass = u[iTw] # local tempererature of quartz window
     G1_bot_IR = eps1*ph"σ"*Tglass^4
 	G1_bot_vis = 0.0
-    if bnode.region==Γ_top_in # catalyst layer (2)
+    if bnode.region==Γ_top_in || bnode.region==Γ_top_mask
 		# flux profile measured behind quarz in plane of cat layer
 		G1_bot_vis += G_lamp
 
@@ -211,8 +211,8 @@ end
 # ╔═╡ ee797850-f5b5-4178-be07-28192c04252d
 function bflux(f,u,bedge,data)
 	# window temperature distribution
-	#if bedge.region == Γ_top_in || bedge.region == Γ_top_mask
-	if bedge.region == Γ_top_in
+	if bedge.region == Γ_top_in || bedge.region == Γ_top_mask
+	#if bedge.region == Γ_top_in
 		(;iTw,lambda_window) = data
 		f[iTw] = lambda_window * (u[iTw, 1] - u[iTw, 2])
 	elseif bedge.region == Γ_bottom
@@ -223,7 +223,7 @@ end
 
 # ╔═╡ b375a26d-3ee6-4b69-9bd8-c69c3e193dc9
 function bstorage(f,u,bnode,data)
-	if bnode.region == Γ_top_in
+	if bnode.region == Γ_top_in || bnode.region == Γ_top_mask
 		(;iTw) = data
 		f[iTw] = u[iTw]
 	elseif bnode.region == Γ_bottom
@@ -545,14 +545,17 @@ function top(f,u,bnode,data)
 	G1_vis, G1_IR = radiosity_window(f,u,bnode,data)
 	
 	# top boundaries (inlet and mask cross-sections)
-	if bnode.region==Γ_top_in
+	if bnode.region==Γ_top_in || bnode.region==Γ_top_mask
 
 		r_mfluxin = mfluxin*ramp(bnode.time; du=(0.01,1), dt=(0.0,1.0))
+	
+		if bnode.region==Γ_top_in
+			f[ip] = -r_mfluxin # total mass flux
+			for i=1:(ng-1)
+				f[i] = -r_mfluxin*W0[i] # species mass flux
+			end
+		end
 		
-		f[ip] = -r_mfluxin # total mass flux
-		for i=1:(ng-1)
-			f[i] = -r_mfluxin*W0[i] # species mass flux
-		end		
 		# heatflux from enthalpy inflow
 		@inline r_hf_enth = mfluxin/mmix0 * enthalpy_mix(data.Fluids, Tamb+100, X0) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
 		
@@ -566,8 +569,12 @@ function top(f,u,bnode,data)
 		dh=2*uc_h
 		kconv=Nu*λf/dh*ufac"W/(m^2*K)"
 		hflux_conv = kconv*(u[iT]-Tm)
-		
-		f[iT] = -r_hf_enth +(-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+
+		if bnode.region==Γ_top_in
+			f[iT] = -r_hf_enth +(-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+		else
+			f[iT] = (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+		end
 		
 		# calculate local window temperature from (local) flux balance
 		hflux_conv_top_w = k_nat_conv*(u[iTw]-Tamb)
@@ -851,7 +858,6 @@ function areas(sol,sys,grid,data)
 	integrate(sys,area,sol; boundary=true)[iT,:]
 end
 
-
 # ╔═╡ 0a0f0c58-1bca-4f40-93b1-8174892cc4d8
 function bareas(bfaceregion,sys,grid)
 	area = 0.0
@@ -901,7 +907,8 @@ begin
 							)
 	
 	enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
-	enable_boundary_species!(sys, iTw, [Γ_top_in]) # window temperature as boundary species in upper chamber
+	#enable_boundary_species!(sys, iTw, [Γ_top_in]) # window temperature as boundary species in upper chamber
+	enable_boundary_species!(sys, iTw, [Γ_top_in,Γ_top_mask]) # window temperature as boundary species in upper chamber
 	enable_boundary_species!(sys, iTp, [Γ_bottom]) # plate temperature as boundary species in lower chamber
 	inival=unknowns(sys)
 
@@ -915,7 +922,7 @@ begin
 	nd_ids = unique(mygrid[CellNodes][:,mygrid[CellRegions] .== 2])
 	cat_vol = sum(nodevolumes(sys)[nd_ids])
 	mydata.lcat = mydata.mcat/cat_vol
-    area_in = bareas(Γ_top_in,sys,mygrid)
+	area_in = bareas(Γ_top_in,sys,mygrid)
 	mydata.mfluxin = mydata.mflowin / area_in
 	
 	control = SolverControl(strategy, sys;)
@@ -1058,7 +1065,6 @@ let
 	scalarplot!(vis, solt.t[2:end], stored_amount, label="Stored amount", color=:green, clear=false, )
 	reveal(vis)	
 end
-
   ╠═╡ =#
 
 # ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
@@ -1273,9 +1279,9 @@ end
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
 # ╠═b13a76c9-509d-4367-8428-7b5b316ff1ed
 # ╠═7c7d2f10-d8d2-447e-874b-7be365e0b00c
-# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
+# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═99b59260-7651-45d0-b364-4f86db9927f8
 # ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
 # ╟─111b1b1f-51a5-4069-a365-a713c92b79f4

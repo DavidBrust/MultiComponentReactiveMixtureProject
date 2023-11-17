@@ -654,7 +654,7 @@ $(LocalResource("../img/SideBCConv_gap.png", :width=>400))
 md"""
 ```math
 \begin{align}
-\dot q_{\text{side}}=\frac{\dot Q}{A_{\text{frit}}}&=\frac{1}{W_{\text{cond}}^{\text{gap}}+W^{\text{wall}}_{\text{cond}}+W_{\text{conv}}}(T-T_{\text{amb}})\\
+\dot q_{\text{side}}=\frac{\dot Q}{A_{\text{frit}}}&=\frac{1}{A_{\text{frit}}}\frac{1}{W_{\text{cond}}^{\text{gap}}+W^{\text{wall}}_{\text{cond}}+W_{\text{conv}}}(T-T_{\text{amb}})\\
 &=\frac{1}{A_{\text{frit}}}\frac{1}{\frac{\delta_{\text{gap}}}{A_{\text{frit}} \lambda_{\text{gap}}}+\frac{\delta_{\text{wall}}}{A_{\text{frit}} \lambda_{\text{wall}}}+\frac{1}{A_{\text{frit}} k^{\text{nat}}_{\text{conv}}}}(T-T_{\text{amb}}), \quad \text{with} \frac{\delta_{\text{wall}}}{\lambda_{\text{wall}}} \ll \frac{\delta_{\text{gap}}}{\lambda_{\text{gap}}} \approx \frac{1}{k^{\text{nat}}_{\text{conv}}}\\
 &\approx \frac{T-T_{\text{amb}}}{\frac{\delta_{\text{gap}}}{\lambda_{\text{gap}}}+  \frac{1}{k^{\text{nat}}_{\text{conv}}}}\\
 \end{align}
@@ -2386,8 +2386,8 @@ Due to missing information on the flow field that develops in the chambers, only
 # ╟─652497ee-d07b-45e2-aeaf-87ad5bcc23ad
 # ╟─6bd59a54-f059-4646-b053-0fa41ead87fd
 # ╟─f5d78670-a98b-46a1-8bf3-3d2599cfdd88
-# ╟─162122bc-12ae-4a81-8df6-86498041be40
-# ╟─221a1ee4-f7e9-4233-b45c-a715c9edae5f
+# ╠═162122bc-12ae-4a81-8df6-86498041be40
+# ╠═221a1ee4-f7e9-4233-b45c-a715c9edae5f
 # ╟─2228bbd4-bc84-4617-a837-2bf9bba76793
 # ╟─09d976a7-f6c6-465b-86f4-9bc654ae158c
 # ╟─5c9aad13-914a-4f5e-af32-a9c6403c52d0
