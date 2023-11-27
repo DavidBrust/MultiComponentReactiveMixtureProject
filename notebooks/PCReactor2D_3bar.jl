@@ -40,16 +40,6 @@ __Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=false))
 PlutoUI.TableOfContents(title="M-S Transport + Darcy")
   ╠═╡ =#
 
-# ╔═╡ 83fa22fa-451d-4c30-a4b7-834974245996
-function grid1D()
-	X=(0:0.02:1)*ufac"cm"
-	grid=simplexgrid(X)
-	# catalyst region
-	cellmask!(grid,[0.4]*ufac"cm",[0.6]*ufac"cm",2)	
-	#cellmask!(grid,[0.0]*ufac"cm",[0.2]*ufac"cm",2)	
-	grid
-end
-
 # ╔═╡ 4dae4173-0363-40bc-a9ca-ce5b4d5224cd
 function grid2D()
 	R=(0:1:7)*ufac"cm"
@@ -57,76 +47,29 @@ function grid2D()
 	grid=simplexgrid(R,Z)
 	circular_symmetric!(grid)
 
-	#cellmask!(grid,[0.0,0.4].*ufac"cm",[7.0,0.5].*ufac"cm",2) # catalyst region	
+	#cellmask!(grid,[0.0,0.45].*ufac"cm",[7.0,0.5].*ufac"cm",2) # catalyst region	
 	cellmask!(grid,[0.0,0.45].*ufac"cm",[5.0,0.5].*ufac"cm",2) # catalyst region
 	bfacemask!(grid, [0.0,0.5].*ufac"cm",[5.0,0.5].*ufac"cm",5) # inflow	
 	grid
 end
 
-# ╔═╡ 561e96e2-2d48-4eb6-bb9d-ae167a622aeb
-function grid3D()
-	X=(0:1:14)*ufac"cm"
-	Y=(0:0.05:0.5)*ufac"cm"
-	Z=(0:1:14)*ufac"cm"
-	grid=simplexgrid(X,Y,Z)
-
-	# catalyst region
-	cellmask!(grid,[2,0.0,2].*ufac"cm",[12,0.1,12].*ufac"cm",2)
-	#bfacemask!(grid, [2,1,2].*ufac"cm",[12,1,12].*ufac"cm",7) # mask outflow
-	bfacemask!(grid, [2,0,2].*ufac"cm",[12,0,12].*ufac"cm",7) # mask inflow
-	
-	grid
-end
+# ╔═╡ a995f83c-6ff7-4b95-a798-ea636ccb1d88
+# ╠═╡ skip_as_script = true
+#=╠═╡
+gridplot(grid2D(), resolution=(660,300), aspect=4.0, zoom=2.8)
+  ╠═╡ =#
 
 # ╔═╡ 107a6fa3-60cb-43f0-8b21-50cd1eb5065a
 const dim = 2
 
-# ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
-# ╠═╡ skip_as_script = true
-#=╠═╡
-if dim == 3
-	@bind xcut Slider(linspace(0,14,21)*ufac"cm",show_value=true,default=6.5*ufac"cm")
-end
-  ╠═╡ =#
-
-# ╔═╡ a995f83c-6ff7-4b95-a798-ea636ccb1d88
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	if dim == 1
-		gridplot(grid1D(), resolution=(600,200))
-	elseif dim == 2
-		gridplot(grid2D(), resolution=(660,300), aspect=4.0, zoom=2.8)
-	else
-		gridplot(grid3D(); xplane=xcut, show=true, outlinealpha=0.0 )
-	end
-end
-  ╠═╡ =#
-
 # ╔═╡ 832f3c15-b75a-4afe-8cc5-75ff3b4704d6
 begin
-	if dim == 1
-		const Γ_left = 1
-		const Γ_right = 2
-	elseif dim == 2
-		const Γ_bottom = 1
-		const Γ_outer = 2
-		const Γ_top_mask = 3
-		#const Γ_top_in = 3
-		const Γ_sym = 4		
-		const Γ_top_in = 5
-	else
-		# mask inflow
-		const Γ_left = 7 
-		const Γ_right = 3
-		# mask outflow
-		# const Γ_left = 1 
-		# const Γ_right = 7		
-		const Γ_front = 2
-		const Γ_back = 4
-		const Γ_bottom = 5
-		const Γ_top = 6
-	end
+	const Γ_bottom = 1
+	const Γ_outer = 2
+	const Γ_top_mask = 3
+	#const Γ_top_in = 3
+	const Γ_sym = 4		
+	const Γ_top_in = 5
 end;
 
 # ╔═╡ a078e1e1-c9cd-4d34-86d9-df4a052b6b96
@@ -223,6 +166,7 @@ end
 # ╔═╡ b375a26d-3ee6-4b69-9bd8-c69c3e193dc9
 function bstorage(f,u,bnode,data)
 	if bnode.region == Γ_top_in || bnode.region == Γ_top_mask
+	#if bnode.region == Γ_top_in
 		(;iTw) = data
 		f[iTw] = u[iTw]
 	elseif bnode.region == Γ_bottom
@@ -230,6 +174,11 @@ function bstorage(f,u,bnode,data)
 		f[iTp] = u[iTp]
 	end
 end
+
+# ╔═╡ 8af95926-dbf4-43f1-aa99-0fd6384de83d
+md"""
+## Integrated Quantities
+"""
 
 # ╔═╡ 98468f9e-6dee-4b0b-8421-d77ac33012cc
 md"""
@@ -244,6 +193,7 @@ md"""
 ### Molar fractions
 1) CO
 2) CO2
+3) CH4
 """
 
 # ╔═╡ eb9dd385-c4be-42a2-8565-cf3cc9b2a078
@@ -372,8 +322,8 @@ const lc_plate = SurfaceOpticalProps(
 begin	
 Base.@kwdef mutable struct ModelData{NG}
 	dt_mf::Tuple{Float64, Float64}=(0.0,1.0)
-	dt_hf_enth::Tuple{Float64, Float64}=(2.0,10.0)
-	dt_hf_irrad::Tuple{Float64, Float64}=(5.0,15.0)
+	dt_hf_enth::Tuple{Float64, Float64}=(2.0,80.0)
+	dt_hf_irrad::Tuple{Float64, Float64}=(5.0,80.0)
 	
 	kinpar::FixedBed.KinData{nreac(XuFroment)} = XuFroment
 	mcat::Float64=500.0*ufac"mg"
@@ -496,7 +446,6 @@ function storage(f,u,node,data)
 	ng=ngas(data)
 
 	c = u[ip]/(ph"R"*u[iT])
-	#c = u[ip]/(ph"R"*T)
 	for i=1:ng
 		f[i]=c*u[i]*m[i]*poros
 	end
@@ -513,7 +462,7 @@ function storage(f,u,node,data)
 
 	# solid heat capacity is 4 orders of magnitude larger than gas phase heat cap
 	#f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros)
-	f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros) / 200
+	f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros) / 50
 	
 end
 
@@ -532,16 +481,11 @@ function top(f,u,bnode,data)
 	alpha2_IR=uc_cat.alpha_IR
 	eps2=uc_cat.eps
 
-	#rho3_vis=uc_mask.rho_vis
-	#rho3_IR=uc_mask.rho_IR
-	#alpha3_vis=uc_mask.alpha_vis
-	#alpha3_IR=uc_mask.alpha_IR
-	#eps3=uc_mask.eps
-
 	G1_vis, G1_IR = radiosity_window(f,u,bnode,data)
 	
 	# top boundaries (inlet and mask cross-sections)
 	if bnode.region==Γ_top_in || bnode.region==Γ_top_mask
+	#if bnode.region==Γ_top_in
 
 		r_mfluxin = mfluxin*ramp(bnode.time; du=(0.1,1), dt=(0.0,1.0))
 	
@@ -580,14 +524,6 @@ function top(f,u,bnode,data)
 		hflux_emit_w = uc_window.eps*ph"σ"*u[iTw]^4
 		f[iTw] = -hflux_conv -hflux_abs_w +hflux_conv_top_w +2*hflux_emit_w
 		
-	# elseif bnode.region==Γ_top_mask
-	#
-	#	flux_irrad = -eps3*ph"σ"*u[iT]^4 + alpha3_vis*G1_vis + alpha3_IR*G1_IR
-	#	G3_vis = rho3_vis*G1_vis		
-	#	G3_IR = eps3*ph"σ"*u[iT]^4 + rho3_IR*G1_IR
-	#	flux_abs_w = alpha1_vis*G3_vis + alpha1_IR*G3_IR
-	#
-	#	f[iT] = -flux_irrad
 	end
 	
 end
@@ -664,21 +600,11 @@ function bcond(f,u,bnode,data)
 	(;p,ip,iT,Tamb,mfluxin,X0,W0,m,mmix0)=data
 	ng=ngas(data)
 		
-	if dim==2		
-		top(f,u,bnode,data)
-		side(f,u,bnode,data)
-		bottom(f,u,bnode,data)
-		
-		boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_bottom,value=p)
-	else
-		boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_left,value=Tamb)
-		for i=1:(ng-1)
-		boundary_neumann!(f,u,bnode, species=i,region=Γ_left,value=r_mfluxin*W0[i])
-		end
-		boundary_neumann!(f,u,bnode, species=ip, region=Γ_left, value=r_mfluxin)
-		boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
-		boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_right,value=Tamb)
-	end
+	top(f,u,bnode,data)
+	side(f,u,bnode,data)
+	bottom(f,u,bnode,data)
+	
+	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_bottom,value=p)
 end
 
 # ╔═╡ c29f9187-e79c-4e56-8063-c76c98839523
@@ -870,22 +796,12 @@ end
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
 #=╠═╡
 begin
-	
-	if dim == 1
-		mygrid=grid1D()
-		strategy = nothing
-		times=[0,10]
-	elseif dim == 2
-		mygrid=grid2D()
-		strategy = nothing
-		times=[0,12.0]
-	else
-		mygrid=grid3D()
-		strategy = GMRESIteration(UMFPACKFactorization())
-		times=[0,20.0]
-	end
-	mydata=ModelData()
-	#mydata=ModelData(p=2.0*ufac"bar")
+	mygrid=grid2D()
+	strategy = nothing
+	times=[0,100.0]
+
+	#mydata=ModelData()
+	mydata=ModelData(p=4.0*ufac"bar")
 	
 	(;p,ip,Tamb,iT,iTw,iTp,X0)=mydata
 	ng=ngas(mydata)
@@ -924,16 +840,16 @@ begin
 	mydata.mfluxin = mydata.mflowin / area_in
 	
 	control = SolverControl(strategy, sys;)
-		#control.Δt_max=0.1
+		control.Δt_max=2.0
 		control.maxiters=200
 		control.handle_exceptions=true
-		control.Δu_opt=1000.0
+		control.Δu_opt=100.0
 	function post(sol,oldsol, t, Δt)
 		@info "t= "*string(round(t,sigdigits=2))*"\t Δt= "*string(round(Δt,sigdigits=2))		 
 	end
 
 	if RunSim
-		solt=solve(sys;inival=inival,times,control,post,verbose="n")
+		solt=solve(sys;inival=inival,times,control,post,verbose="ne")
 	end
 end;
   ╠═╡ =#
@@ -1231,11 +1147,8 @@ end
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─6da83dc0-3b0c-4737-833c-6ee91552ff5c
 # ╠═d3278ac7-db94-4119-8efd-4dd18107e248
-# ╠═83fa22fa-451d-4c30-a4b7-834974245996
 # ╠═4dae4173-0363-40bc-a9ca-ce5b4d5224cd
-# ╠═561e96e2-2d48-4eb6-bb9d-ae167a622aeb
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
-# ╠═4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═107a6fa3-60cb-43f0-8b21-50cd1eb5065a
 # ╠═832f3c15-b75a-4afe-8cc5-75ff3b4704d6
 # ╟─a078e1e1-c9cd-4d34-86d9-df4a052b6b96
@@ -1261,6 +1174,7 @@ end
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
 # ╠═b13a76c9-509d-4367-8428-7b5b316ff1ed
 # ╠═7c7d2f10-d8d2-447e-874b-7be365e0b00c
+# ╟─8af95926-dbf4-43f1-aa99-0fd6384de83d
 # ╠═5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
