@@ -124,21 +124,12 @@ end
 #Implementation follows the notation in __VDI Heat Atlas 2010, ch. D6.3 eqs. (5a-5e).__
 #"""
 # calculate fixed bed (porous material) effective thermal conductivity
-function kbed(data)
-	(;poros,lambdas,Fluid,Tin) = data
-	lambdaf=thermcond_gas(Fluid, Tin)
-	B=1.25*((1.0-poros)/poros)^(10.0/9.0)
-	kp=lambdas/lambdaf
-	N=1.0-(B/kp)
-	kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
-	1.0-sqrt(1.0-poros)+sqrt(1.0-poros)*kc
-end
 
 
-function kbed(data, lambdaf)
-	(;poros,lambdas) = data
+function kbed(data, thermal_cond_fluid)
+	(;poros,thermal_cond_solid) = data
 	B=1.25*((1.0-poros)/poros)^(10.0/9.0)
-	kp=lambdas/lambdaf
+	kp=thermal_cond_solid/thermal_cond_fluid
 	N=1.0-(B/kp)
 	kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
 	1.0-sqrt(1.0-poros)+sqrt(1.0-poros)*kc
@@ -329,48 +320,166 @@ function DiffCoeffsMass(ng,m)
 	D
 end
 
-#Base.@kwdef struct MD_test{NG, S}
 mutable struct MD_test{NG, KP}
     
     kinetics::Symbol
+    isreactive::Int64
     kinpar::KP
     ng::Int64
-
+    dt_mf::Tuple{Float64, Float64}
+	dt_hf_enth::Tuple{Float64, Float64}
+	dt_hf_irrad::Tuple{Float64, Float64}
+    mcat::Float64
+	Vcat::Float64
+	lcat::Float64
+	uc_h::Float64
+	lc_h::Float64
+	Nu::Float64
     ip::Int64
+    iT::Int64
+	iTw::Int64
+	iTp::Int64
 	p::Float64
-	T::Float64
+	Tamb::Float64
+    gn::Dict{Int, Symbol}
+	gni::Dict{Symbol, Int}
+	Fluids::Vector{FluidProps}
 	m::Vector{Float64}    
-	perm::Float64
 	X0::Vector{Float64}	
 	mmix0::Float64
 	W0::Vector{Float64}	
+	nflowin::Float64
+	mflowin::Float64
 	mfluxin::Float64
-	isreactive::Int64
-	kp::Float64
-	km::Float64
+    G_lamp::Float64
+    uc_window::SurfaceOpticalProps
+	uc_cat::SurfaceOpticalProps
+	uc_mask::SurfaceOpticalProps
+	lc_frit::SurfaceOpticalProps
+	lc_plate::SurfaceOpticalProps
+    delta_gap::Float64
+	k_nat_conv::Float64
+    dp::Float64
+	poros::Float64
+	perm::Float64
+	constriction_tourtuosity_fac::Float64
+    density_solid::Float64
+	thermal_cond_solid::Float64
+	heatcap_solid::Float64
+    thermal_cond_window::Float64
+	thermal_cond_reactorwall::Float64	
 
     function MD_test(;
         kinetics=:XuFroment,
-        ng=nothing,
-        #ip=ng+1,
-        p=1.0*ufac"bar",
-        T=273.15*ufac"K",
-        m=[2.0,6.0,21.0]*ufac"g/mol",
-        perm=1.23e-11*ufac"m^2",
-        X0=[0.2, 0.8, 0.0],
-        mmix0=sum(X0 .* m),
-        W0=m.*X0./mmix0,
-        mfluxin=0.01*ufac"kg/(m^2*s)",
         isreactive=1,
-        kp=5.0,
-        km=1.0e-3
+        ng=nothing,
+        dt_mf=(0.0,1.0),
+        dt_hf_enth=(2.0,10.0),
+        dt_hf_irrad=(3.0,10.0),
+        mcat=500.0*ufac"mg",
+        Vcat=100.0*ufac"cm^2"*1.0*ufac"mm",
+        lcat=mcat/Vcat,
+        uc_h=17.0*ufac"mm",
+        lc_h=18.0*ufac"mm",
+        Nu=4.861,
+        p=1.0*ufac"bar",
+        Tamb=298.15*ufac"K",
+        m=nothing,
+        X0=nothing,        
+        nflowin=7.4*ufac"mol/hr",
+        G_lamp=70.0*ufac"kW/m^2",
+        uc_window=uc_window,
+        uc_cat=uc_cat,
+        lc_frit=lc_frit,
+        lc_plate=lc_plate,
+        delta_gap=1.5*ufac"mm",
+        k_nat_conv=17.5*ufac"W/(m^2*K)",
+        dp=200.0*ufac"μm",
+        poros=0.33,
+        perm=1.23e-11*ufac"m^2",
+        constriction_tourtuosity_fac=poros^1.5,
+        density_solid=2.23e3*ufac"kg/m^3",
+        thermal_cond_solid=1.13*ufac"W/(m*K)",
+        heatcap_solid=0.8e3*ufac"J/(kg*K)",
+        thermal_cond_window=1.38*ufac"W/(m*K)",
+        thermal_cond_reactorwall=235.0*ufac"W/(m*K)"
         )
-        kinobj = FixedBed.kin_obj(kinetics)
-        KP = FixedBed.KinData{nreac(kinobj)}
-        ng = isnothing(ng) ? kinobj.ng : ng
-        ip = ng+1
 
-        new{ng,KP}(kinetics,kinobj,ng,ip,p,T,m,perm,X0,mmix0,W0,mfluxin,isreactive,kp,km)
+        kinpar = FixedBed.kin_obj(kinetics)
+        KP = FixedBed.KinData{nreac(kinpar)}
+        ng = isnothing(ng) ? kinpar.ng : ng
+        ip = ng+1
+        iT = ip+1
+        iTw = iT+1
+        iTp = iTw+1
+        (;gn,gni,Fluids) = kinpar
+        if isnothing(m)
+            m=Vector{Float64}(undef,ng)
+            for i=1:ng
+                m[i] = Fluids[i].MW
+            end
+        end
+        if isnothing(X0)
+            X0=zeros(Float64, ng)
+            X0[gni[:H2]] = 1.0
+            X0[gni[:CO2]] = 1.0
+            #X0[gni[:N2]] = 1.0
+            X0 /= sum(X0)
+        end
+        @assert length(X0) == length(m) "X0 and m must have same length"
+        mmix0 = sum(X0 .* m)
+        W0 = @. m*X0/mmix0
+
+        mflowin = nflowin*mmix0
+        mfluxin = mflowin/(100*ufac"cm^2")*ufac"kg/(m^2*s)"
+
+        new{ng,KP}(
+            kinetics,
+            isreactive,
+            kinpar,
+            ng,
+            dt_mf,
+            dt_hf_enth,
+            dt_hf_irrad,
+            mcat,
+            Vcat,
+            lcat,
+            uc_h,
+            lc_h,
+            Nu,
+            ip,
+            iT,
+            iTw,
+            iTp,
+            p,
+            Tamb,
+            gn,
+            gni,
+            Fluids,
+            m,
+            X0,
+            mmix0,
+            W0,
+            nflowin,
+            mflowin,
+            mfluxin,
+            G_lamp,
+            uc_window,
+            uc_cat,
+            uc_mask,
+            lc_frit,
+            lc_plate,
+            delta_gap,
+            k_nat_conv,
+            dp,
+            poros,
+            perm,
+            constriction_tourtuosity_fac,
+            density_solid,
+            thermal_cond_solid,
+            heatcap_solid,
+            thermal_cond_window,
+            thermal_cond_reactorwall)
     end
 
 end

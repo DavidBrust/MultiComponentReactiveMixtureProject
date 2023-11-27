@@ -37,7 +37,7 @@ __Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=false))
 # ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
 # ╠═╡ skip_as_script = true
 #=╠═╡
-PlutoUI.TableOfContents(title="M-S Transport + Darcy")
+PlutoUI.TableOfContents(title="Photo Catalytic (PC) Reactor")
   ╠═╡ =#
 
 # ╔═╡ 83fa22fa-451d-4c30-a4b7-834974245996
@@ -187,7 +187,7 @@ function reaction(f,u,node,data)
 	(;m,ip,iT,isreactive)=data
 	ng=ngas(data)
 
-	if node.region == 2 && isreactive # catalyst layer
+	if node.region == 2 && isreactive==1 # catalyst layer
 		(;lcat,kinpar,gni)=data
 		(;rni,nuij)=kinpar
 		
@@ -214,7 +214,7 @@ end
 
 # ╔═╡ 4af1792c-572e-465c-84bf-b67dd6a7bc93
 function storage(f,u,node,data)
-	(;ip,iT,m,poros,rhos,cs)=data
+	(;ip,iT,m,poros,density_solid,heatcap_solid)=data
 	ng=ngas(data)
 
 	c = u[ip]/(ph"R"*u[iT])
@@ -236,7 +236,7 @@ function storage(f,u,node,data)
 
 	# solid heat capacity is 4 orders of magnitude larger than gas phase heat cap
 	#f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros)
-	f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros) / 200
+	f[iT] = u[iT] * (density_solid*heatcap_solid*(1-poros) + cpmix*c*poros) / 200
 	
 end
 
@@ -354,6 +354,71 @@ function side(f,u,bnode,data)
 	end
 end
 
+# ╔═╡ 85439b96-fe21-4b2c-8695-f7088305112f
+function bottom(f,u,bnode,data)
+	(;iT,iTp,k_nat_conv,Tamb,lc_h,Nu,dt_hf_irrad,lc_frit,lc_plate) = data
+	ng=ngas(data)
+	if bnode.region == Γ_bottom
+
+		# irradiation heat flux
+		rho1_IR=lc_frit.rho_IR
+		alpha1_IR=lc_frit.alpha_IR
+		eps1=lc_frit.eps
+		rho2_IR=lc_plate.rho_IR
+		alpha2_IR=lc_plate.alpha_IR
+		eps2=lc_plate.eps
+
+		# heatflux from irradiation exchange with bottom plate
+		Tplate = u[iTp]	
+		hflux_irrad = -eps1*ph"σ"*u[iT]^4 + alpha1_IR/(1-rho1_IR*rho2_IR)*(eps2*ph"σ"*Tplate^4+rho2_IR*eps1*ph"σ"*u[iT]^4)
+	
+		# heatflux from convective/conductive heat exchange with bottom plate
+		Tm=0.5*(u[iT] + Tplate)
+
+		X=MVector{ng,eltype(u)}(undef)
+		@inline MoleFrac!(X,u,data)
+        # thermal conductivity at Tm and outlet composition X
+        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X)
+
+        # flux_cond = -λf*(u[iT]-Tplate)/lc_h # positive flux in positive z coord.
+		dh=2*lc_h
+		kconv=Nu*λf/dh*ufac"W/(m^2*K)"
+		hflux_conv = kconv*(u[iT]-Tm) # positive flux in negative z coord. (towards plate)
+
+		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
+		f[iT] = (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+		
+		# calculate (local) plate temperature from (local) flux balance
+		hflux_conv_bot_p = k_nat_conv*(u[iTp]-Tamb)*2
+		hflux_emit_p = lc_plate.eps*ph"σ"*u[iTp]^4
+		G1_IR = (eps1*ph"σ"*u[iT]^4 + rho1_IR*eps2*ph"σ"*u[iTp]^4)/(1-rho1_IR*rho2_IR)
+		hflux_abs_p = alpha2_IR*G1_IR + alpha2_IR*ph"σ"*Tamb^4
+		f[iTp] = -hflux_conv -hflux_abs_p +2*hflux_emit_p +hflux_conv_bot_p		
+	end
+end
+
+# ╔═╡ 5f88937b-5802-4a4e-81e2-82737514b9e4
+function bcond(f,u,bnode,data)
+	(;p,ip,iT,Tamb,mfluxin,X0,W0,m,mmix0)=data
+	ng=ngas(data)
+		
+	if dim==2		
+		top(f,u,bnode,data)
+		side(f,u,bnode,data)
+		bottom(f,u,bnode,data)
+		
+		boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_bottom,value=p)
+	else
+		boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_left,value=Tamb)
+		for i=1:(ng-1)
+		boundary_neumann!(f,u,bnode, species=i,region=Γ_left,value=r_mfluxin*W0[i])
+		end
+		boundary_neumann!(f,u,bnode, species=ip, region=Γ_left, value=r_mfluxin)
+		boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
+		boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_right,value=Tamb)
+	end
+end
+
 # ╔═╡ 389a4798-a9ee-4e9c-8b44-a06201b4c457
 function boutflow(f,u,edge,data)
 	(;iT,iTp,ip,m,lc_frit,lc_plate,dt_hf_enth)=data
@@ -384,11 +449,11 @@ function bflux(f,u,bedge,data)
 	# window temperature distribution
 	if bedge.region == Γ_top_inner || bedge.region == Γ_top_outer
 	#if bedge.region == Γ_top_inner
-		(;iTw,lambda_window) = data
-		f[iTw] = lambda_window * (u[iTw, 1] - u[iTw, 2])
+		(;iTw,thermal_cond_window) = data
+		f[iTw] = thermal_cond_window * (u[iTw, 1] - u[iTw, 2])
 	elseif bedge.region == Γ_bottom
-		(;iTp,lambda_Al) = data
-		f[iTp] = lambda_Al * (u[iTp, 1] - u[iTp, 2])
+		(;iTp,thermal_cond_reactorwall) = data
+		f[iTp] = thermal_cond_reactorwall * (u[iTp, 1] - u[iTp, 2])
 	end
 end
 
@@ -487,127 +552,14 @@ md"""
 ## Model Data
 """
 
-# ╔═╡ a53197e9-504f-46e0-9c88-37b6f4bad0f6
-# optical parameters for quartz window in upper chamber (uc)
-const uc_window = SurfaceOpticalProps(	
-	alpha_IR=0.3,
-	tau_IR=0.7,	
-	alpha_vis=0.0,
-	tau_vis=0.9,
-)
-
-# ╔═╡ fb70db70-33a5-4191-a6c6-0b888aa2dd4a
-#  optical parameters for catalyst layer in upper chamber (uc)
-const uc_cat = SurfaceOpticalProps(
-	alpha_IR=0.45, # measurement (ideally at high T) integrated over IR
-	tau_IR=0.0, # opaque surface
-	alpha_vis=0.45, # measurement (ideally at high T) integrated over vis
-	tau_vis=0.0 # opaque surface	
-)
-
-# ╔═╡ be64e957-87f9-42bb-a423-ed6b511060ff
-# optical parameters for uncoated frit in upper chamber (uc)
-const uc_mask = SurfaceOpticalProps(
-	alpha_IR=0.2, # measurement (ideally at high T) integrated over IR
-	tau_IR=0.0, # opaque surface
-	alpha_vis=0.2, # measurement (ideally at high T) integrated over vis
-	tau_vis=0.0 # opaque surface	
-)
-
-# ╔═╡ 9131ec72-0c9b-49ee-baf4-e0bb4bc3a581
-# optical parameters for uncoated frit in lower chamber (lc) = frit in upper chamber
-const lc_frit = uc_mask
-
-# ╔═╡ e215d9f4-4ca8-4d6f-8049-ac387eca9ce3
-# optical parameters for Al bottom plate in lower chamber (lc)
-const lc_plate = SurfaceOpticalProps(
-	# aluminium bottom plate (machined surface)
-	alpha_IR=0.1, # see in lit, assume large reflectivity
-	tau_IR=0.0, # opaque surface
-	alpha_vis=0.1, # see in lit, assume large reflectivity
-	tau_vis=0.0 # opaque surface	
-)
-
-# ╔═╡ 85439b96-fe21-4b2c-8695-f7088305112f
-function bottom(f,u,bnode,data)
-	(;iT,iTp,k_nat_conv,Tamb,lc_h,Nu,dt_hf_irrad) = data
-	ng=ngas(data)
-	if bnode.region == Γ_bottom
-
-		# irradiation heat flux
-		rho1_IR=lc_frit.rho_IR
-		alpha1_IR=lc_frit.alpha_IR
-		eps1=lc_frit.eps
-		rho2_IR=lc_plate.rho_IR
-		alpha2_IR=lc_plate.alpha_IR
-		eps2=lc_plate.eps
-
-		# heatflux from irradiation exchange with bottom plate
-		Tplate = u[iTp]	
-		hflux_irrad = -eps1*ph"σ"*u[iT]^4 + alpha1_IR/(1-rho1_IR*rho2_IR)*(eps2*ph"σ"*Tplate^4+rho2_IR*eps1*ph"σ"*u[iT]^4)
-	
-		# heatflux from convective/conductive heat exchange with bottom plate
-		Tm=0.5*(u[iT] + Tplate)
-
-		X=MVector{ng,eltype(u)}(undef)
-		@inline MoleFrac!(X,u,data)
-        # thermal conductivity at Tm and outlet composition X
-        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X)
-
-        # flux_cond = -λf*(u[iT]-Tplate)/lc_h # positive flux in positive z coord.
-		dh=2*lc_h
-		kconv=Nu*λf/dh*ufac"W/(m^2*K)"
-		hflux_conv = kconv*(u[iT]-Tm) # positive flux in negative z coord. (towards plate)
-
-		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
-		f[iT] = (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
-		
-		# calculate (local) plate temperature from (local) flux balance
-		hflux_conv_bot_p = k_nat_conv*(u[iTp]-Tamb)*2
-		hflux_emit_p = lc_plate.eps*ph"σ"*u[iTp]^4
-		G1_IR = (eps1*ph"σ"*u[iT]^4 + rho1_IR*eps2*ph"σ"*u[iTp]^4)/(1-rho1_IR*rho2_IR)
-		hflux_abs_p = alpha2_IR*G1_IR + alpha2_IR*ph"σ"*Tamb^4
-		f[iTp] = -hflux_conv -hflux_abs_p +2*hflux_emit_p +hflux_conv_bot_p		
-	end
-end
-
-# ╔═╡ 5f88937b-5802-4a4e-81e2-82737514b9e4
-function bcond(f,u,bnode,data)
-	(;p,ip,iT,Tamb,mfluxin,X0,W0,m,mmix0)=data
-	ng=ngas(data)
-		
-	if dim==2		
-		top(f,u,bnode,data)
-		side(f,u,bnode,data)
-		bottom(f,u,bnode,data)
-		
-		boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_bottom,value=p)
-	else
-		boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_left,value=Tamb)
-		for i=1:(ng-1)
-		boundary_neumann!(f,u,bnode, species=i,region=Γ_left,value=r_mfluxin*W0[i])
-		end
-		boundary_neumann!(f,u,bnode, species=ip, region=Γ_left, value=r_mfluxin)
-		boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
-		boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_right,value=Tamb)
-	end
-end
-
-# ╔═╡ ab395450-5b1e-40cd-a184-265a2100ca35
-ModelData{}()
-
-# ╔═╡ b872acc7-c07c-4d5e-b1bc-32fea369d6a5
-typeof(KinData{}())
-
 # ╔═╡ f4dba346-61bc-420d-b419-4ea2d46be6da
 function D_matrix!(data, D, T, p)
-	(;m,γ_τ)=data
+	(;m,constriction_tourtuosity_fac)=data
 	ng=ngas(data)
 	@inbounds for i=1:(ng-1)
 		for j=(i+1):ng
 			Dji = binary_diff_coeff_gas(data.Fluids[j], data.Fluids[i], T, p)
-			#Dji *= m[i]*m[j]
-			Dji *= m[i]*m[j]*γ_τ # porosity corrected eff. diffusivity
+			Dji *= m[i]*m[j]*constriction_tourtuosity_fac # eff. diffusivity
 			D[j,i] = Dji
 			D[i,j] = Dji
 		end
@@ -661,40 +613,6 @@ function flux(f,u,edge,data)
 	
 	Bp,Bm = fbernoulli_pm(hf_conv/lambda_bed/Tm)
 	f[iT] = lambda_bed*(Bm*u[iT,1]-Bp*u[iT,2])
-end
-
-# ╔═╡ 37b5908c-dd4e-4fb8-9d5b-68402493e10d
-function DiffCoeffsMass(ng,m)
-	k=0
-	D=zeros(Float64, ng,ng)
-	for i=1:(ng-1)
-		for j=(i+1):ng
-			k +=1
-			#Dji = k*1.0e-5*ufac"m^2/s"
-			Dji = k*1.0e-5*ufac"m^2/s"
-			Dji *= m[i]*m[j]
-			D[j,i] = Dji
-			D[i,j] = Dji
-		end			
-	end
-	D
-end
-
-# ╔═╡ 2cbd3e87-289c-47a2-b837-10133974ae82
-function DiffCoeffs(data)
-	(;m,γ_τ,Tamb,p)=data
-	ng=ngas(data)
-	D=zeros(Float64, ng,ng)
-	for i=1:(ng-1)
-		for j=(i+1):ng
-
-			Dji = binary_diff_coeff_gas(data.Fluids[j], data.Fluids[i], Tamb, p)
-			Dji *= γ_τ # porosity corrected eff. diffusivity
-			D[j,i] = Dji
-			D[i,j] = Dji
-		end			
-	end
-	D
 end
 
 # ╔═╡ 1224970e-8a59-48a9-b0ef-76ed776ca15d
@@ -800,7 +718,7 @@ begin
 	end
 
 	if RunSim
-		solt=solve(sys;inival=inival,times,control,post)
+		solt=solve(sys;inival=inival,times,control,verbose="nae")
 	end
 end;
   ╠═╡ =#
@@ -817,6 +735,11 @@ The simulation is setup as a transient simulation. An initialisation strategy is
 
 The mass flow boundary condition into the reactor domain is "ramped up" starting from a low value and linearly increasing until the final value is reached. A time delay is given to let the flow stabilize. Once the flow field is established, heat transport is ramped up until a stable temperature field is established. Finally, the reactivity of the catalyst is "ramped up" until its final reactivity value is reached.
 """
+  ╠═╡ =#
+
+# ╔═╡ fc1fe62b-49ea-4c1e-942b-194b35c61c51
+#=╠═╡
+mydata
   ╠═╡ =#
 
 # ╔═╡ 9a61cf12-9d92-4fdc-9093-79d3fa1f8b90
@@ -1147,6 +1070,7 @@ end
 # ╠═ee797850-f5b5-4178-be07-28192c04252d
 # ╠═b375a26d-3ee6-4b69-9bd8-c69c3e193dc9
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
+# ╠═fc1fe62b-49ea-4c1e-942b-194b35c61c51
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
 # ╠═9a61cf12-9d92-4fdc-9093-79d3fa1f8b90
@@ -1170,16 +1094,7 @@ end
 # ╟─0d507c5e-eb0f-4094-a30b-a4a82fd5c302
 # ╠═5bbe72b2-2f80-4dae-9706-7ddb0b8b6dbe
 # ╟─67adda35-6761-4e3c-9d05-81e5908d9dd2
-# ╠═a53197e9-504f-46e0-9c88-37b6f4bad0f6
-# ╠═fb70db70-33a5-4191-a6c6-0b888aa2dd4a
-# ╠═be64e957-87f9-42bb-a423-ed6b511060ff
-# ╠═9131ec72-0c9b-49ee-baf4-e0bb4bc3a581
-# ╠═e215d9f4-4ca8-4d6f-8049-ac387eca9ce3
-# ╠═ab395450-5b1e-40cd-a184-265a2100ca35
-# ╠═b872acc7-c07c-4d5e-b1bc-32fea369d6a5
 # ╠═f4dba346-61bc-420d-b419-4ea2d46be6da
-# ╠═37b5908c-dd4e-4fb8-9d5b-68402493e10d
-# ╠═2cbd3e87-289c-47a2-b837-10133974ae82
 # ╠═1224970e-8a59-48a9-b0ef-76ed776ca15d
 # ╠═b55e2a48-5a2d-4e29-9f3b-219854461d09
 # ╠═0a0f0c58-1bca-4f40-93b1-8174892cc4d8

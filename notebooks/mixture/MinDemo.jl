@@ -42,7 +42,7 @@ __Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=false))
 """
 
 # ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
-PlutoUI.TableOfContents(title="M-S Transport + Darcy")
+PlutoUI.TableOfContents(title="Demo")
 
 # ╔═╡ 83fa22fa-451d-4c30-a4b7-834974245996
 function grid1D()
@@ -161,7 +161,7 @@ where $\rho$ is the (total) mixture density, $\vec v$ is the mass-averaged (bary
 
 # ╔═╡ 5547d7ad-dd58-4b00-8238-6e1abb32874e
 function flux(f,u,edge,data)
-	(;m,ip,T)=data
+	(;m,ip,Tamb)=data
 	ng=ngas(data)
 
 	F = MVector{ng-1,eltype(u)}(undef)
@@ -172,7 +172,7 @@ function flux(f,u,edge,data)
 	
 	δp = u[ip,1]-u[ip,2]
 	pm = 0.5*(u[ip,1]+u[ip,2])
-	c = pm/(ph"R"*T)
+	c = pm/(ph"R"*Tamb)
 
 	@inline MoleFrac!(X,u,data)
 	@inline mmix = molarweight_mix(X,data)
@@ -213,12 +213,14 @@ $A \rightarrow 3 B$
 
 # ╔═╡ 3bb2deff-7816-4749-9f1e-c1e451372b1e
 function reaction(f,u,node,data)
-	(;kp,km,p,m,ip,T, isreactive)=data
+	(;p,m,ip,Tamb,isreactive)=data
 	if node.region == 2 && isreactive == 1 # catalyst layer		
 
+		kp=5.0
+        km=1.0e-3
 		
 		# 1 u2 -> 3 u1 
-		c = u[ip]/(ph"R"*T)
+		c = u[ip]/(ph"R"*Tamb)
 		c1 = u[1]*c
 		c2 = u[2]*c
 		c3 = u[3]*c
@@ -239,10 +241,10 @@ end
 
 # ╔═╡ 4af1792c-572e-465c-84bf-b67dd6a7bc93
 function storage(f,u,node,data)
-	(;T,ip,m)=data
+	(;Tamb,ip,m)=data
 	ng=ngas(data)
 
-	c = u[ip]/(ph"R"*T)
+	c = u[ip]/(ph"R"*Tamb)
 	for i=1:ng
 		f[i]=c*u[i]*m[i]
 	end
@@ -297,13 +299,13 @@ end
 
 # ╔═╡ 389a4798-a9ee-4e9c-8b44-a06201b4c457
 function boutflow(f,u,edge,data)
-	(;T,ip,m)=data
+	(;Tamb,ip,m)=data
 	ng=ngas(data)
 
 	k=outflownode(edge)
 
 	pout = u[ip,k]
-	cout = pout/(ph"R"*T)
+	cout = pout/(ph"R"*Tamb)
 	
 	for i=1:(ng-1)
 		# specify flux at boundary
@@ -330,7 +332,12 @@ begin
 		times=[0,50]
 	end
 	#mydata=ModelData()
-	mydata = FixedBed.MD_test(ng=3)
+	mydata = FixedBed.MD_test(;
+		ng = 3,
+		Tamb = 273.15,
+		m = [2.0,6.0,21.0]*ufac"g/mol",
+		X0 = [0.2, 0.8, 0.0]
+	)
 	
 	(;p,ip,X0)=mydata
 	ng=ngas(mydata)
