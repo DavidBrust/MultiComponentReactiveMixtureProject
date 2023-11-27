@@ -38,7 +38,7 @@ end;
 md"""
 Check the box to start the simulation:
 
-__Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=true))
+__Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=false))
 """
 
 # ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
@@ -46,7 +46,7 @@ PlutoUI.TableOfContents(title="M-S Transport + Darcy")
 
 # ╔═╡ 83fa22fa-451d-4c30-a4b7-834974245996
 function grid1D()
-	X=(0:0.01:1)*ufac"cm"
+	X=(0:0.02:1)*ufac"cm"
 	grid=simplexgrid(X)
 	# catalyst region
 	cellmask!(grid,[0.4]*ufac"cm",[0.6]*ufac"cm",2)	
@@ -81,7 +81,7 @@ function grid3D()
 end
 
 # ╔═╡ 107a6fa3-60cb-43f0-8b21-50cd1eb5065a
-const dim = 1
+const dim = 3
 
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
 if dim == 3
@@ -159,6 +159,51 @@ md"""
 where $\rho$ is the (total) mixture density, $\vec v$ is the mass-averaged (barycentric)  mixture velocity calculated with the Darcy equation, $x_i$, $w_i$ and $M_i$ are the molar fraction, mass fraction and molar mass of species $i$ respectively, $\vec \Phi_i$ is the mass flux of species $i$ ($\frac{\text{kg}}{\text{m}^2 \text{s}}$) and $R_i$ is the species mass volumetric source/sink ($\frac{\text{mol}}{\text{m}^3 \text{s}}$) of gas phase species $i$.
 """
 
+# ╔═╡ 5547d7ad-dd58-4b00-8238-6e1abb32874e
+function flux(f,u,edge,data)
+	(;m,ip,T)=data
+	ng=ngas(data)
+
+	F = MVector{ng-1,eltype(u)}(undef)
+	X = MVector{ng,eltype(u)}(undef)
+	W = MVector{ng,eltype(u)}(undef)
+	M = MMatrix{ng-1,ng-1,eltype(u)}(undef)
+	D = MMatrix{ng,ng,eltype(u)}(undef)
+	
+	δp = u[ip,1]-u[ip,2]
+	pm = 0.5*(u[ip,1]+u[ip,2])
+	c = pm/(ph"R"*T)
+
+	@inline MoleFrac!(X,u,data)
+	@inline mmix = molarweight_mix(X,data)
+	@inline MassFrac!(X,W,data)
+	
+	rho = c*mmix
+	mumix = 2.0e-5*ufac"Pa*s"
+	v = DarcyVelo(u,data,mumix)
+	
+	
+	f[ip] = -rho*v
+	
+	@inline FixedBed.D_matrix!(D, data)
+	@inline M_matrix!(M, W, D, data)
+
+
+	@inbounds for i=1:(ng-1)
+		F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm )*c/mmix
+	end				
+	
+
+	@inline inplace_linsolve!(M,F)
+
+	@inbounds for i=1:(ng-1)
+		#f[i] = -(F[i] + c*X[i]*m[i]*v)
+		#f[i] = -F[i]
+		f[i] = u[i,1]-u[i,2] # quadr. conv
+	end
+
+end
+
 # ╔═╡ 3440d4d8-3e03-4ff3-93f1-9afd7aaf9c41
 md"""
 Reaction leading to increase in moles.
@@ -192,21 +237,31 @@ function reaction(f,u,node,data)
 	f[3] = f[3] - 1.0
 end
 
+# ╔═╡ 4af1792c-572e-465c-84bf-b67dd6a7bc93
+function storage(f,u,node,data)
+	(;T,ip,m)=data
+	ng=ngas(data)
+
+	c = u[ip]/(ph"R"*T)
+	for i=1:ng
+		f[i]=c*u[i]*m[i]
+	end
+	
+	# total pressure
+	mmix = u[1]*m[1]+u[2]*m[2]+u[3]*m[3]
+	f[ng+1] = mmix*c
+end
+
 # ╔═╡ 5f88937b-5802-4a4e-81e2-82737514b9e4
 function bcond(f,u,bnode,data)
-	(;p,ip,mfluxin,X0)=data
-
-	
+	(;p,ip,mfluxin,X0)=data	
 	boundary_dirichlet!(f,u,bnode, species=1,region=Γ_left,value=X0[1])
 	boundary_dirichlet!(f,u,bnode, species=2,region=Γ_left,value=X0[2])
 	
-	#boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_left,value=p)
 	#boundary_neumann!(f,u,bnode, species=ip, region=Γ_left, value=mfluxin*embedparam(bnode))
 	boundary_neumann!(f,u,bnode, species=ip, region=Γ_left, value=mfluxin)
 
-
 	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
-
 end
 
 # ╔═╡ 05949759-2bb9-475b-b2f4-900b32c30e00
@@ -238,144 +293,6 @@ function darcyvelo(u,data)
 
 	μ = 2.0e-5*ufac"Pa*s"
 	-perm/μ*(u[ip,1]-u[ip,2])	
-end
-
-# ╔═╡ 37b5908c-dd4e-4fb8-9d5b-68402493e10d
-function DiffCoeffsMass(ng,m)
-	k=0
-	D=zeros(Float64, ng,ng)
-	for i=1:(ng-1)
-		for j=(i+1):ng
-			k +=1
-			#Dji = k*1.0e-5*ufac"m^2/s"
-			Dji = k*1.0e-5*ufac"m^2/s"
-			Dji *= m[i]*m[j]
-			D[j,i] = Dji
-			D[i,j] = Dji
-		end			
-	end
-	D
-end
-
-# ╔═╡ f40a8111-b5cb-40f0-8b12-f57cf59637f1
-begin
-	
-Base.@kwdef mutable struct ModelData{NG}
-	#ng::Int64 = 3
-	ip::Int64 = NG+1
-	p::Float64 = 1.0*ufac"bar"
-	T::Float64 = 273.15*ufac"K"
-	m::Vector{Float64} = [2.0,6.0,21.0]*ufac"g/mol"
-	perm::Float64=1.23e-11*ufac"m^2" # perm. of porous medium, use in Darcy Eq.
-
-	#X0::Vector{Float64} = [0.1, 0.7, 0.2]
-	X0::Vector{Float64} = [0.2, 0.8, 0.0]
-
-	Dcoeff::Matrix{Float64} = DiffCoeffsMass(NG,m)
-	
-	mmix0::Float64 = sum(X0 .* m)
-	W0::Vector{Float64} = @. m*X0/mmix0
-	
-	mfluxin::Float64=0.01*ufac"kg/(m^2*s)"
-
-	#isreactive::Int64 = 0
-	isreactive::Int64 = 1
-	kp::Float64=5.0e-0
-	km::Float64=1.0e-3
-end
-
-ModelData(;ng=3, kwargs...) = ModelData{ng}(;kwargs...)
-
-ngas(::ModelData{NG}) where NG = NG
-end
-
-# ╔═╡ 5547d7ad-dd58-4b00-8238-6e1abb32874e
-function flux(f,u,edge,data)
-	(;m,ip,T,Dcoeff)=data
-	ng=ngas(data)
-
-	F = MVector{ng-1,eltype(u)}(undef)
-	X = MVector{ng,eltype(u)}(undef)
-	W = MVector{ng,eltype(u)}(undef)
-	M = MMatrix{ng-1,ng-1,eltype(u)}(undef)
-	D = MMatrix{ng,ng,eltype(u)}(undef)
-	
-	δp = u[ip,1]-u[ip,2]
-	pm = 0.5*(u[ip,1]+u[ip,2])
-	c = pm/(ph"R"*T)
-
-	@inline MoleFrac!(X,u,data)
-	@inline mmix = molarweight_mix(X,data)
-	@inline MassFrac!(X,W,data)
-	
-	#x1 = 0.5*(u[1,1]+u[1,2])
-	#x2 = 0.5*(u[2,1]+u[2,2])
-	#x3 = 0.5*(u[3,1]+u[3,2])
-	#mmix = x1*m[1]+x2*m[2]+x3*m[3]
-
-	rho = c*mmix
-	mumix = 2.0e-5*ufac"Pa*s"
-	v = DarcyVelo(u,data,mumix)
-	#v = darcyvelo(u,data)
-	
-	f[ip] = -rho*v
-	
-	#w1 = m[1]*x1/mmix
-	#w2 = m[2]*x2/mmix
-	#w3 = m[3]*x3/mmix
-
-	@inline M_matrix!(M, W, Dcoeff, data)
-
-	
-	#M[1,1] = -w2/Dcoeff[1,2] - (w1+w3)/Dcoeff[1,3]
-	#M[1,2] = w1/Dcoeff[1,2] - w1/Dcoeff[1,3]
-	#M[2,1] = w2*(1/Dcoeff[2,1] - 1/Dcoeff[2,3])
-	#M[2,2] = -w1/Dcoeff[2,1] - (w2+w3)/Dcoeff[2,3]
-	
-	#M[1,1] = -w2/D[1,2] - (w1+w3)/D[1,3]
-	#M[1,2] = w1/D[1,2] - w1/D[1,3]
-	#M[2,1] = w2*(1/D[2,1] - 1/D[2,3])
-	#M[2,2] = -w1/D[2,1] - (w2+w3)/D[2,3]
-
-	@inbounds for i=1:(ng-1)
-		F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm )*c/mmix
-	end				
-	
-	#δx1 = u[1,1]-u[1,2]
-	#δx2 = u[2,1]-u[2,2]
-	
-
-	#F[1] = ( δx1 + (x1-w1)*δp/pm )*c/mmix
-	#F[2] = ( δx2 + (x2-w2)*δp/pm )*c/mmix
-	#F[1] = (u[1,1]-u[1,2])*c/mmix
-	#F[2] = (u[2,1]-u[2,2])*c/mmix
-
-	@inline inplace_linsolve!(M,F)
-
-	@inbounds for i=1:(ng-1)
-		f[i] = -(F[i] + c*X[i]*m[i]*v)
-	end
-	## central difference flux
-	##f[1] = -(F[1] + rho*w1*v)
-	##f[2] = -(F[2] + rho*w2*v)
-	#f[1] = -(F[1] + c*x1*m[1]*v)
-	#f[2] = -(F[2] + c*x2*m[2]*v)
-
-end
-
-# ╔═╡ 4af1792c-572e-465c-84bf-b67dd6a7bc93
-function storage(f,u,node,data)
-	(;T,ip,m)=data
-	ng=ngas(data)
-
-	c = u[ip]/(ph"R"*T)
-	for i=1:ng
-		f[i]=c*u[i]*m[i]
-	end
-	
-	# total pressure
-	mmix = u[1]*m[1]+u[2]*m[2]+u[3]*m[3]
-	f[ng+1] = mmix*c
 end
 
 # ╔═╡ 389a4798-a9ee-4e9c-8b44-a06201b4c457
@@ -410,9 +327,11 @@ begin
 	else
 		mygrid=grid3D()
 		strategy = GMRESIteration(UMFPACKFactorization())
-		times=[0,1]
+		times=[0,50]
 	end
-	mydata=ModelData()
+	#mydata=ModelData()
+	mydata = FixedBed.MD_test(ng=3)
+	
 	(;p,ip,X0)=mydata
 	ng=ngas(mydata)
 	
@@ -438,8 +357,7 @@ begin
 	end
 
 	control = SolverControl(strategy, sys;)
-	#control = SolverControl(GMRESIteration(UMFPACKFactorization()), sys;)
-		control.Δt=1.0e-4
+		#control.Δt=1.0e-4
 		control.handle_exceptions=true
 		control.Δu_opt=1.0e5
 
@@ -527,17 +445,21 @@ let
 	reveal(vis)
 end
 
-# ╔═╡ ca08d9a2-8148-441e-a149-b9d0c5232a6d
-function D_matrix!(data, D)
-	(;m,Dcoeff)=data
-	ng=ngas(data)
-	
+# ╔═╡ 37b5908c-dd4e-4fb8-9d5b-68402493e10d
+function DiffCoeffsMass(ng,m)
+	k=0
+	D=zeros(Float64, ng,ng)
 	for i=1:(ng-1)
 		for j=(i+1):ng
-			@views D[j,i] = one(eltype(D))
-			@views D[i,j] = one(eltype(D))
-		end
+			k +=1
+			#Dji = k*1.0e-5*ufac"m^2/s"
+			Dji = k*1.0e-5*ufac"m^2/s"
+			Dji *= m[i]*m[j]
+			D[j,i] = Dji
+			D[i,j] = Dji
+		end			
 	end
+	D
 end
 
 # ╔═╡ 2cbd3e87-289c-47a2-b837-10133974ae82
@@ -639,10 +561,8 @@ integrate(sys,check_reaction,sol)
 # ╠═370ebbae-9caf-4e56-ad77-020048bf7aa8
 # ╟─db77fca9-4118-4825-b023-262d4073b2dd
 # ╠═ae8c7993-a89f-438a-a72a-d4a0c9a8ce57
-# ╠═f40a8111-b5cb-40f0-8b12-f57cf59637f1
 # ╠═e183587f-db01-4f04-85fc-8d1a21bc0526
 # ╠═389a4798-a9ee-4e9c-8b44-a06201b4c457
-# ╠═ca08d9a2-8148-441e-a149-b9d0c5232a6d
 # ╠═37b5908c-dd4e-4fb8-9d5b-68402493e10d
 # ╠═2cbd3e87-289c-47a2-b837-10133974ae82
 # ╠═1224970e-8a59-48a9-b0ef-76ed776ca15d

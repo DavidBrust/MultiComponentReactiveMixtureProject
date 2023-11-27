@@ -1,5 +1,104 @@
 abstract type AbstractModelData end
 
+@doc raw"""
+## Overall Mass Continuity
+Mixture mass flow (overall mass flow) through the pore space of the porous medium. Mixture mass averaged velocity is calculated from Darcy equation. The void fraction (porosity) is given by $\epsilon$.
+
+```math
+\begin{align}
+	\frac{\partial \epsilon \rho}{\partial t} + \nabla \cdot \left ( \rho \vec v \right)  &= 0\\
+	\vec v  &= -\frac{\kappa}{\mu} \vec \nabla p\\
+\end{align}
+```
+
+
+## Species Mass Continuity and Transport
+```math
+\begin{align}
+	\frac{\partial \epsilon \rho_i}{\partial t} + \nabla \cdot \left( \vec \Phi_i + \rho_i \vec v \right ) - R_i &= 0 ~, \qquad i = 1 ... \nu \\
+		\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} \right) &= -\sum_{j=1 \atop j \neq i}^{\nu} \frac{w_j \vec \Phi_i-w_i \vec \Phi_j}{D_{ij} M_i M_j} \\
+		\sum_{i=1}^\nu x_i &= 1
+\end{align}
+```
+
+
+"""
+function M_matrix!(M, W, D, data)
+	ng=ngas(data)
+	@inbounds for i=1:(ng-1)
+		for j=1:(ng-1)
+			M[i,j] = zero(eltype(W))
+		end
+		 for j=1:ng
+			if i != j
+				M[i,i] -= W[j]/D[i,j]
+				if j == ng
+					 for k=1:(ng-1)
+						M[i,k] -= W[i]/D[i,ng]
+					end
+				else
+					M[i,j] += W[i]/D[i,j]
+				end
+			end
+		end
+	end			
+end
+
+
+function D_matrix!(D,data)
+	ng=ngas(data)
+	(;m) = data
+	@inbounds for i=1:(ng-1)
+		for j=(i+1):ng
+            Dji = one(eltype(D)) *1.0e-5*ufac"m^2/s" * m[i]*m[j]
+			@views D[j,i] = Dji
+			@views D[i,j] = Dji
+		end
+	end
+end
+
+@doc raw"""
+Mixture mass flow (bulk convective mass flow) through the pore space of the porous medium. Mixture mass averaged (barycentric) velocity for convective bulk mass flow through the porous medium is calculated from Darcy equation. 
+
+```math
+	\vec v  = -\frac{\kappa}{\mu} \vec \nabla p
+```
+"""
+
+function DarcyVelo(u,data,mu)
+	(;ip,perm) = data
+	-perm/mu*(u[ip,1]-u[ip,2])	
+end
+
+function MoleFrac!(X,u::VoronoiFVM.EdgeUnknowns,data)
+	@inbounds for i=1:ngas(data)
+		X[i] = 0.5*(u[i,1]+u[i,2])
+	end
+	nothing
+end
+
+function MoleFrac!(X,u::VoronoiFVM.BNodeUnknowns,data)
+	@inbounds for i=1:ngas(data)
+		X[i] = u[i]
+	end
+	nothing
+end
+
+function MoleFrac!(X,u::VoronoiFVM.NodeUnknowns,data)
+	@inbounds for i=1:ngas(data)
+		X[i] = u[i]
+	end
+	nothing
+end
+
+function MassFrac!(X,W,data)
+	(;m) = data
+	@inline mmix = molarweight_mix(X,data)
+	@inbounds for i=1:ngas(data)
+		W[i] = X[i]*m[i]/mmix
+	end
+	nothing
+end
 
 # calculate non-dimensional numbers: Reynolds, Prandtl, Peclet
 function RePrPe(data,T,p,x)
@@ -68,6 +167,215 @@ function lambda_eff_AC(data,lambdaf)
     Ψ=1/ky*(poros-1)*(lambdas-lambdaf)/(lambdas*lambdaf)*(lambdaf*(poros-1)-lambdas*poros)
 	λeff = (lambdas*lambdaf/(lambdas*poros+lambdaf*(1-poros)))*(poros*lambdas/lambdaf+(1-poros)+Ψ)*(poros+lambdaf/lambdas*(1-poros)+Ψ)/(poros*lambdas/lambdaf+2*Ψ+(1-poros)*lambdaf/lambdas+1)
 end
+
+Base.@kwdef struct SurfaceOpticalProps
+	alpha_IR::Float64 = 0.2 # absorptance: obtain from datasheet/measurement
+	tau_IR::Float64 = 0.5 # transmittance: obtain from datasheet/measurement
+	rho_IR::Float64 = 1.0 - tau_IR - alpha_IR
+	eps::Float64 = alpha_IR
+	# effective opt. par. integrated over visible spectrum (vis)
+	alpha_vis::Float64 = 0.0
+	tau_vis::Float64 = 0.9 # obtain from datasheet, transmittance
+	rho_vis::Float64 = 1.0 - tau_vis - alpha_vis 
+end;
+
+# optical parameters for quartz window in upper chamber (uc)
+const uc_window = SurfaceOpticalProps(	
+	alpha_IR=0.3,
+	tau_IR=0.7,	
+	alpha_vis=0.0,
+	tau_vis=0.9,
+)
+
+#  optical parameters for catalyst layer in upper chamber (uc)
+const uc_cat = SurfaceOpticalProps(
+	alpha_IR=0.45, # measurement (ideally at high T) integrated over IR
+	tau_IR=0.0, # opaque surface
+	alpha_vis=0.45, # measurement (ideally at high T) integrated over vis
+	tau_vis=0.0 # opaque surface	
+)
+
+# optical parameters for uncoated frit in upper chamber (uc)
+const uc_mask = SurfaceOpticalProps(
+	alpha_IR=0.2, # measurement (ideally at high T) integrated over IR
+	tau_IR=0.0, # opaque surface
+	alpha_vis=0.2, # measurement (ideally at high T) integrated over vis
+	tau_vis=0.0 # opaque surface	
+)
+
+# optical parameters for uncoated frit in lower chamber (lc) = frit in upper chamber
+const lc_frit = uc_mask
+
+# optical parameters for Al bottom plate in lower chamber (lc)
+const lc_plate = SurfaceOpticalProps(
+	# aluminium bottom plate (machined surface)
+	alpha_IR=0.1, # see in lit, assume large reflectivity
+	tau_IR=0.0, # opaque surface
+	alpha_vis=0.1, # see in lit, assume large reflectivity
+	tau_vis=0.0 # opaque surface	
+)
+
+Base.@kwdef mutable struct ModelData{NG}
+    
+	dt_mf::Tuple{Float64, Float64}=(0.0,1.0)
+	dt_hf_enth::Tuple{Float64, Float64}=(2.0,10.0)
+	dt_hf_irrad::Tuple{Float64, Float64}=(3.0,10.0)
+    kinetics::Symbol = :XuFroment
+	#kinpar::FixedBed.KinData{nreac(FixedBed.kin_obj(kinetics))} = FixedBed.kin_obj(kinetics)
+    kinpar::FixedBed.KinData{} = XuFroment
+    ng::Int64 = kinpar.ng
+	mcat::Float64=500.0*ufac"mg"
+	Vcat::Float64=1.0*ufac"m^2"*0.02*ufac"cm"
+	lcat::Float64=mcat/Vcat
+
+	# upper and lower chamber heights for calculation of conduction/convection b.c.
+	uc_h::Float64=17.0*ufac"mm"
+	lc_h::Float64=18.0*ufac"mm"
+	Nu::Float64=4.861
+	
+	#isreactive::Bool = 0
+	isreactive::Bool = 1
+	
+	#ip::Int64 = NG+1
+    ip::Int64 = ng+1
+	iT::Int64 = ip+1
+	# inlcude window & plate temperatures as boundary species
+	iTw::Int64=iT+1 # index of window Temperature (upper chamber)
+	iTp::Int64=iTw+1 # index of plate Temperature (lower chamber)
+	
+	p::Float64 = 1.0*ufac"bar"
+	Tamb::Float64 = 298.15*ufac"K"
+
+	gn::Dict{Int, Symbol} = kinpar.gn # names and fluid indices
+	gni::Dict{Symbol, Int} = kinpar.gni # inverse names and fluid indices
+	Fluids::Vector{FluidProps} = kinpar.Fluids # fluids and respective properties in system
+	
+	m::Vector{Float64} = let
+		#m=zeros(Float64, NG)
+        m=zeros(Float64, ng)
+		#for i=1:NG
+        for i=1:ng
+			m[i] = Fluids[i].MW
+		end
+		m
+	end
+	
+	X0::Vector{Float64} = let
+		#x=zeros(Float64, NG)
+        x=zeros(Float64, ng)
+		x[gni[:H2]] = 1.0
+		x[gni[:CO2]] = 1.0
+		#x[gni[:N2]] = 1.0
+		x/sum(x)
+	end # inlet composition
+	
+	mmix0::Float64 = sum(X0 .* m)
+	W0::Vector{Float64} = @. m*X0/mmix0
+
+	nflowin::Float64 = 7.4*ufac"mol/hr"
+	mflowin::Float64 = nflowin*mmix0
+	mfluxin::Float64 = mflowin/(100*ufac"cm^2")*ufac"kg/(m^2*s)"
+	#mfluxin::Float64 = 0.007*ufac"kg/(m^2*s)"
+	#nfluxin::Float64 = mfluxin/mmix0
+
+	G_lamp::Float64 = 70.0*ufac"kW/m^2"
+	
+	# optical properties of surfaces in IR/visible ranges
+	uc_window::SurfaceOpticalProps = uc_window
+	uc_cat::SurfaceOpticalProps = uc_cat
+	uc_mask::SurfaceOpticalProps = uc_mask
+	lc_frit::SurfaceOpticalProps = lc_frit
+	lc_plate::SurfaceOpticalProps = lc_plate
+
+	# reactor data
+	delta_gap::Float64=1.5*ufac"mm" # gas gap between frit and reactor wall
+	k_nat_conv::Float64=17.5*ufac"W/(m^2*K)" # natural convection heat transfer coeff.
+
+	# VitraPor data
+	dp::Float64=200.0*ufac"μm" # average pore size, por class 0
+	poros::Float64=0.33 # porosity, VitraPor sintetered filter class 0
+	perm::Float64=1.23e-10*ufac"m^2" # perm. of porous medium, use in Darcy Eq.
+	γ_τ::Float64=poros^1.5 # constriction/tourtuosity factor
+	
+	# Solid (non-porous) Borosilica glass (frit material)
+	rhos::Float64=2.23e3*ufac"kg/m^3" # density of non-porous Boro-Solikatglas 3.3
+	lambdas::Float64=1.13*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2
+	cs::Float64=0.8e3*ufac"J/(kg*K)" # heat capacity of non-porous SiO2
+
+	# quartz window / Al bottom plate thermal conductivities
+	lambda_window::Float64=1.38*ufac"W/(m*K)"
+	lambda_Al::Float64=235.0*ufac"W/(m*K)"
+
+    ModelData(dt_mf,dt_hf_enth,dt_hf_irrad,kinetics,kinpar,ng,mcat,Vcat,lcat,uc_h,lc_h,Nu,isreactive,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,G_lamp,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,k_nat_conv,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al) = 
+    new{ng}(dt_mf,dt_hf_enth,dt_hf_irrad,kinetics,kinpar,ng,mcat,Vcat,lcat,uc_h,lc_h,Nu,isreactive,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,G_lamp,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,k_nat_conv,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+end
+
+ngas(::ModelData{NG}) where NG = NG
+
+
+function DiffCoeffsMass(ng,m)
+	k=0
+	D=zeros(Float64, ng,ng)
+	for i=1:(ng-1)
+		for j=(i+1):ng
+			k +=1
+			#Dji = k*1.0e-5*ufac"m^2/s"
+			Dji = k*1.0e-5*ufac"m^2/s"
+			Dji *= m[i]*m[j]
+			D[j,i] = Dji
+			D[i,j] = Dji
+		end			
+	end
+	D
+end
+
+#Base.@kwdef struct MD_test{NG, S}
+mutable struct MD_test{NG, KP}
+    
+    kinetics::Symbol
+    kinpar::KP
+    ng::Int64
+
+    ip::Int64
+	p::Float64
+	T::Float64
+	m::Vector{Float64}    
+	perm::Float64
+	X0::Vector{Float64}	
+	mmix0::Float64
+	W0::Vector{Float64}	
+	mfluxin::Float64
+	isreactive::Int64
+	kp::Float64
+	km::Float64
+
+    function MD_test(;
+        kinetics=:XuFroment,
+        ng=nothing,
+        #ip=ng+1,
+        p=1.0*ufac"bar",
+        T=273.15*ufac"K",
+        m=[2.0,6.0,21.0]*ufac"g/mol",
+        perm=1.23e-11*ufac"m^2",
+        X0=[0.2, 0.8, 0.0],
+        mmix0=sum(X0 .* m),
+        W0=m.*X0./mmix0,
+        mfluxin=0.01*ufac"kg/(m^2*s)",
+        isreactive=1,
+        kp=5.0,
+        km=1.0e-3
+        )
+        kinobj = FixedBed.kin_obj(kinetics)
+        KP = FixedBed.KinData{nreac(kinobj)}
+        ng = isnothing(ng) ? kinobj.ng : ng
+        ip = ng+1
+
+        new{ng,KP}(kinetics,kinobj,ng,ip,p,T,m,perm,X0,mmix0,W0,mfluxin,isreactive,kp,km)
+    end
+
+end
+
+ngas(::MD_test{NG,KP}) where {NG,KP} = NG
 
 #"""
 #When working with a heterogeneous phase model (separate energy balances for both fluid and porous solid material), the exchange of energe between the phases can be described by an interfacial heat transfer coefficient. It can be calculated according to:

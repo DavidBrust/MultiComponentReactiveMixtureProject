@@ -383,9 +383,9 @@ end
 #
 # By default, ngas(data) returns data.ng. For the ModelData type from FixAllocations
 # it uses the definition from the notebook
-function ngas(data::Any)
-    data.ng
-end
+# function ngas(data::Any)
+#     data.ng
+# end
 
 
 #combined function returning mixture dynamic viscosity as well as thermal conductivity
@@ -456,7 +456,7 @@ end
 function heatcap_mix(Fluids::AbstractVector, T, x)
     cpmix = zero(eltype(x))
     ng=length(x)
-    for i=1:ng
+    @inbounds for i=1:ng
         cpmix += x[i] * heatcap_gas(Fluids[i], T)
     end
     cpmix
@@ -493,16 +493,30 @@ end
 
 
 
-
-function molarweight_mix(Fluids, x)
-    # wmix =0
-    wmix=zero(eltype(x))
-    ng=length(x)
-    for i=1:ng
-        wmix += x[i] * Fluids[i].MW
-    end
-    wmix
+function molarweight_mix(X,data)
+	mmix = zero(eltype(X))
+	@inbounds for i=1:ngas(data)
+		mmix += X[i]*data.m[i]
+	end
+	mmix
 end
+
+function molarweight_mix(u::VoronoiFVM.BNodeUnknowns,data)
+	mmix = zero(eltype(u))
+	@inbounds for i=1:ngas(data)
+		mmix += u[i]*data.m[i]
+	end
+	mmix
+end
+
+function molarweight_mix(u::VoronoiFVM.NodeUnknowns,data)
+	mmix = zero(eltype(u))
+	@inbounds for i=1:ngas(data)
+		mmix += u[i]*data.m[i]
+	end
+	mmix
+end
+
 
 function density_idealgas(Fluids, T, p, x)
 	#p/(ph"R"*T)*data.MW*ufac"kg/m^3"
