@@ -291,8 +291,6 @@ function flux(f,u,edge,data)
 
 	@inbounds for i=1:(ng-1)
 		f[i] = -(F[i] + c*X[i]*m[i]*v)
-		#f[i] = -F[i]
-		#f[i] = u[i,1]-u[i,2] # quadr. conv
 	end
 
 end

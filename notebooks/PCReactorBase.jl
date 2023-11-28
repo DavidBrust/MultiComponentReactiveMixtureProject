@@ -754,7 +754,6 @@ md"""
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	mydata = ModelData()
 	(;p,m,ip,iT,Tamb,mfluxin) = mydata
 	ng = ngas(mydata)
 	mmix = []
@@ -978,16 +977,6 @@ let
 end
   ╠═╡ =#
 
-# ╔═╡ b55e2a48-5a2d-4e29-9f3b-219854461d09
-function areas(sol,sys,grid,data)
-	iT = data.iT
-	function area(f,u,bnode,data)
-		f[iT] = one(eltype(u)) # use temperature index to hold area information
-	end	
-	integrate(sys,area,sol; boundary=true)[iT,:]
-end
-
-
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─6da83dc0-3b0c-4737-833c-6ee91552ff5c
@@ -1040,4 +1029,3 @@ end
 # ╠═5bbe72b2-2f80-4dae-9706-7ddb0b8b6dbe
 # ╟─67adda35-6761-4e3c-9d05-81e5908d9dd2
 # ╠═1224970e-8a59-48a9-b0ef-76ed776ca15d
-# ╠═b55e2a48-5a2d-4e29-9f3b-219854461d09
