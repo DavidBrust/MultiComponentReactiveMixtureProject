@@ -43,19 +43,24 @@ function M_matrix!(M, W, D, data)
 		end
 	end			
 end
-
-
-function D_matrix!(D,data)
+@doc raw"""
+Assemble symmetric Maxwell-Stefan diffusivity matrix D. Account for porous material
+through the constriction and tourtuosity factor γ_τ which lowers the diffusivities
+ ~1 order of magnitude compared to diffusion through free space.
+"""
+function D_matrix!(D, T, p, data)
+	(;m,γ_τ)=data
 	ng=ngas(data)
-	(;m) = data
 	@inbounds for i=1:(ng-1)
 		for j=(i+1):ng
-            Dji = one(eltype(D)) *1.0e-5*ufac"m^2/s" * m[i]*m[j]
-			@views D[j,i] = Dji
-			@views D[i,j] = Dji
+			Dji = binary_diff_coeff_gas(data.Fluids[j], data.Fluids[i], T, p)
+			Dji *= m[i]*m[j]*γ_τ # eff. diffusivity
+			D[j,i] = Dji
+			D[i,j] = Dji
 		end
 	end
 end
+
 
 @doc raw"""
 Mixture mass flow (bulk convective mass flow) through the pore space of the porous medium. Mixture mass averaged (barycentric) velocity for convective bulk mass flow through the porous medium is calculated from Darcy equation. 
@@ -126,10 +131,10 @@ end
 # calculate fixed bed (porous material) effective thermal conductivity
 
 
-function kbed(data, thermal_cond_fluid)
-	(;poros,thermal_cond_solid) = data
+function kbed(data, lambdaf)
+	(;poros,lambdas) = data
 	B=1.25*((1.0-poros)/poros)^(10.0/9.0)
-	kp=thermal_cond_solid/thermal_cond_fluid
+	kp=lambdas/lambdaf
 	N=1.0-(B/kp)
 	kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
 	1.0-sqrt(1.0-poros)+sqrt(1.0-poros)*kc
@@ -206,14 +211,31 @@ const lc_plate = SurfaceOpticalProps(
 	tau_vis=0.0 # opaque surface	
 )
 
-Base.@kwdef mutable struct ModelData{NG}
-    
-	dt_mf::Tuple{Float64, Float64}=(0.0,1.0)
+
+
+
+function DiffCoeffsMass(ng,m)
+	k=0
+	D=zeros(Float64, ng,ng)
+	for i=1:(ng-1)
+		for j=(i+1):ng
+			k +=1
+			#Dji = k*1.0e-5*ufac"m^2/s"
+			Dji = k*1.0e-5*ufac"m^2/s"
+			Dji *= m[i]*m[j]
+			D[j,i] = Dji
+			D[i,j] = Dji
+		end			
+	end
+	D
+end
+
+
+@kwdef mutable struct ReactorData{NG, KP}
+    dt_mf::Tuple{Float64, Float64}=(0.0,1.0)
 	dt_hf_enth::Tuple{Float64, Float64}=(2.0,10.0)
 	dt_hf_irrad::Tuple{Float64, Float64}=(3.0,10.0)
-    kinetics::Symbol = :XuFroment
-	#kinpar::FixedBed.KinData{nreac(FixedBed.kin_obj(kinetics))} = FixedBed.kin_obj(kinetics)
-    kinpar::FixedBed.KinData{} = XuFroment
+    kinpar::KP = XuFroment
     ng::Int64 = kinpar.ng
 	mcat::Float64=500.0*ufac"mg"
 	Vcat::Float64=1.0*ufac"m^2"*0.02*ufac"cm"
@@ -297,194 +319,14 @@ Base.@kwdef mutable struct ModelData{NG}
 	lambda_window::Float64=1.38*ufac"W/(m*K)"
 	lambda_Al::Float64=235.0*ufac"W/(m*K)"
 
-    ModelData(dt_mf,dt_hf_enth,dt_hf_irrad,kinetics,kinpar,ng,mcat,Vcat,lcat,uc_h,lc_h,Nu,isreactive,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,G_lamp,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,k_nat_conv,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al) = 
-    new{ng}(dt_mf,dt_hf_enth,dt_hf_irrad,kinetics,kinpar,ng,mcat,Vcat,lcat,uc_h,lc_h,Nu,isreactive,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,G_lamp,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,k_nat_conv,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
-end
-
-ngas(::ModelData{NG}) where NG = NG
-
-
-function DiffCoeffsMass(ng,m)
-	k=0
-	D=zeros(Float64, ng,ng)
-	for i=1:(ng-1)
-		for j=(i+1):ng
-			k +=1
-			#Dji = k*1.0e-5*ufac"m^2/s"
-			Dji = k*1.0e-5*ufac"m^2/s"
-			Dji *= m[i]*m[j]
-			D[j,i] = Dji
-			D[i,j] = Dji
-		end			
-	end
-	D
-end
-
-mutable struct MD_test{NG, KP}
-    
-    kinetics::Symbol
-    isreactive::Int64
-    kinpar::KP
-    ng::Int64
-    dt_mf::Tuple{Float64, Float64}
-	dt_hf_enth::Tuple{Float64, Float64}
-	dt_hf_irrad::Tuple{Float64, Float64}
-    mcat::Float64
-	Vcat::Float64
-	lcat::Float64
-	uc_h::Float64
-	lc_h::Float64
-	Nu::Float64
-    ip::Int64
-    iT::Int64
-	iTw::Int64
-	iTp::Int64
-	p::Float64
-	Tamb::Float64
-    gn::Dict{Int, Symbol}
-	gni::Dict{Symbol, Int}
-	Fluids::Vector{FluidProps}
-	m::Vector{Float64}    
-	X0::Vector{Float64}	
-	mmix0::Float64
-	W0::Vector{Float64}	
-	nflowin::Float64
-	mflowin::Float64
-	mfluxin::Float64
-    G_lamp::Float64
-    uc_window::SurfaceOpticalProps
-	uc_cat::SurfaceOpticalProps
-	uc_mask::SurfaceOpticalProps
-	lc_frit::SurfaceOpticalProps
-	lc_plate::SurfaceOpticalProps
-    delta_gap::Float64
-	k_nat_conv::Float64
-    dp::Float64
-	poros::Float64
-	perm::Float64
-	constriction_tourtuosity_fac::Float64
-    density_solid::Float64
-	thermal_cond_solid::Float64
-	heatcap_solid::Float64
-    thermal_cond_window::Float64
-	thermal_cond_reactorwall::Float64	
-
-    function MD_test(;
-        kinetics=:XuFroment,
-        isreactive=1,
-        ng=nothing,
-        dt_mf=(0.0,1.0),
-        dt_hf_enth=(2.0,10.0),
-        dt_hf_irrad=(3.0,10.0),
-        mcat=500.0*ufac"mg",
-        Vcat=100.0*ufac"cm^2"*1.0*ufac"mm",
-        lcat=mcat/Vcat,
-        uc_h=17.0*ufac"mm",
-        lc_h=18.0*ufac"mm",
-        Nu=4.861,
-        p=1.0*ufac"bar",
-        Tamb=298.15*ufac"K",
-        m=nothing,
-        X0=nothing,        
-        nflowin=7.4*ufac"mol/hr",
-        G_lamp=70.0*ufac"kW/m^2",
-        uc_window=uc_window,
-        uc_cat=uc_cat,
-        lc_frit=lc_frit,
-        lc_plate=lc_plate,
-        delta_gap=1.5*ufac"mm",
-        k_nat_conv=17.5*ufac"W/(m^2*K)",
-        dp=200.0*ufac"μm",
-        poros=0.33,
-        perm=1.23e-11*ufac"m^2",
-        constriction_tourtuosity_fac=poros^1.5,
-        density_solid=2.23e3*ufac"kg/m^3",
-        thermal_cond_solid=1.13*ufac"W/(m*K)",
-        heatcap_solid=0.8e3*ufac"J/(kg*K)",
-        thermal_cond_window=1.38*ufac"W/(m*K)",
-        thermal_cond_reactorwall=235.0*ufac"W/(m*K)"
-        )
-
-        kinpar = FixedBed.kin_obj(kinetics)
+    function ReactorData(dt_mf,dt_hf_enth,dt_hf_irrad,kinpar,ng,mcat,Vcat,lcat,uc_h,lc_h,Nu,isreactive,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,G_lamp,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,k_nat_conv,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
         KP = FixedBed.KinData{nreac(kinpar)}
-        ng = isnothing(ng) ? kinpar.ng : ng
-        ip = ng+1
-        iT = ip+1
-        iTw = iT+1
-        iTp = iTw+1
-        (;gn,gni,Fluids) = kinpar
-        if isnothing(m)
-            m=Vector{Float64}(undef,ng)
-            for i=1:ng
-                m[i] = Fluids[i].MW
-            end
-        end
-        if isnothing(X0)
-            X0=zeros(Float64, ng)
-            X0[gni[:H2]] = 1.0
-            X0[gni[:CO2]] = 1.0
-            #X0[gni[:N2]] = 1.0
-            X0 /= sum(X0)
-        end
-        @assert length(X0) == length(m) "X0 and m must have same length"
-        mmix0 = sum(X0 .* m)
-        W0 = @. m*X0/mmix0
+        new{ng,KP}(dt_mf,dt_hf_enth,dt_hf_irrad,kinpar,ng,mcat,Vcat,lcat,uc_h,lc_h,Nu,isreactive,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,G_lamp,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,k_nat_conv,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
 
-        mflowin = nflowin*mmix0
-        mfluxin = mflowin/(100*ufac"cm^2")*ufac"kg/(m^2*s)"
-
-        new{ng,KP}(
-            kinetics,
-            isreactive,
-            kinpar,
-            ng,
-            dt_mf,
-            dt_hf_enth,
-            dt_hf_irrad,
-            mcat,
-            Vcat,
-            lcat,
-            uc_h,
-            lc_h,
-            Nu,
-            ip,
-            iT,
-            iTw,
-            iTp,
-            p,
-            Tamb,
-            gn,
-            gni,
-            Fluids,
-            m,
-            X0,
-            mmix0,
-            W0,
-            nflowin,
-            mflowin,
-            mfluxin,
-            G_lamp,
-            uc_window,
-            uc_cat,
-            uc_mask,
-            lc_frit,
-            lc_plate,
-            delta_gap,
-            k_nat_conv,
-            dp,
-            poros,
-            perm,
-            constriction_tourtuosity_fac,
-            density_solid,
-            thermal_cond_solid,
-            heatcap_solid,
-            thermal_cond_window,
-            thermal_cond_reactorwall)
     end
-
 end
 
-ngas(::MD_test{NG,KP}) where {NG,KP} = NG
+ngas(::ReactorData{NG,KP}) where {NG,KP} = NG
 
 #"""
 #When working with a heterogeneous phase model (separate energy balances for both fluid and porous solid material), the exchange of energe between the phases can be described by an interfacial heat transfer coefficient. It can be calculated according to:
@@ -501,6 +343,20 @@ function hsf(data,T,p,x)
 	_,lambdaf = dynvisc_thermcond_mix(data, T, x)
     (;poros,d) = data
 	lambdaf/d*((1.0 + 4*(1.0-poros)/poros) + 0.5*(1.0-poros)^0.5*Re^0.6*Pr^(1.0/3.0))*ufac"W/(m^2*K)"
+end
+
+# Function to calculate surface areas of boundaries. Used for calculation of 
+# flows / fluxes through boundaries
+function bareas(bfaceregion,sys,grid)
+	area = 0.0
+	for ibface =1:VoronoiFVM.num_bfaces(grid)
+        for inode=1:VoronoiFVM.num_nodes(grid[VoronoiFVM.ExtendableGrids.BFaceGeometries][1])
+			if grid[VoronoiFVM.ExtendableGrids.BFaceRegions][ibface] == bfaceregion
+                area +=bfacenodefactors(sys)[inode,ibface]
+			end
+		end
+	end
+	area
 end
 
 

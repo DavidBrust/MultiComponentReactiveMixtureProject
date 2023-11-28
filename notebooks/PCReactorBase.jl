@@ -40,16 +40,6 @@ __Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=false))
 PlutoUI.TableOfContents(title="Photo Catalytic (PC) Reactor")
   ╠═╡ =#
 
-# ╔═╡ 83fa22fa-451d-4c30-a4b7-834974245996
-function grid1D()
-	X=(0:0.02:1)*ufac"cm"
-	grid=simplexgrid(X)
-	# catalyst region
-	cellmask!(grid,[0.4]*ufac"cm",[0.6]*ufac"cm",2)	
-	#cellmask!(grid,[0.0]*ufac"cm",[0.2]*ufac"cm",2)	
-	grid
-end
-
 # ╔═╡ 4dae4173-0363-40bc-a9ca-ce5b4d5224cd
 function grid2D()
 	R=(0:1:7)*ufac"cm"
@@ -93,9 +83,7 @@ end
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	if dim == 1
-		gridplot(grid1D(), resolution=(600,200))
-	elseif dim == 2
+	if dim == 2
 		gridplot(grid2D(), resolution=(660,300), aspect=4.0, zoom=2.8)
 	else
 		gridplot(grid3D(); xplane=xcut, show=true, outlinealpha=0.0 )
@@ -105,10 +93,7 @@ end
 
 # ╔═╡ 832f3c15-b75a-4afe-8cc5-75ff3b4704d6
 begin
-	if dim == 1
-		const Γ_left = 1
-		const Γ_right = 2
-	elseif dim == 2
+	if dim == 2
 		const Γ_bottom = 1
 		const Γ_outer = 2
 		#const Γ_top_mask = 3
@@ -131,7 +116,12 @@ end;
 
 # ╔═╡ a078e1e1-c9cd-4d34-86d9-df4a052b6b96
 md"""
+# Introduction
 Reactor Simulation of PC reactor for cylindrical symmetrical geometry (2D).
+
+This notebook covers overall mass transport through porous material based on Darcy equation, multicomponent species transport based on Maxwell-Stefan equations for diffusion and superimposed by convective (bulk) transport with the velocity field obtained by Darcy equation.
+
+Also the thermal energy equation is solved, taking into account convective-diffusive heat fluxes and irradiation boundary conditions.
 """
 
 # ╔═╡ 0fadb9d2-1ccf-4d44-b748-b76d911784ca
@@ -182,6 +172,56 @@ where $\lambda_{\text{eff}}$ is the effective thermal conductivity. The heat rel
 As part of the initialisation strategy (see next section) the convective contribution of heat flux is ramped up at the same time with the heat transport boundary conditions after the flow field has been established.
 """
 
+# ╔═╡ 5547d7ad-dd58-4b00-8238-6e1abb32874e
+function flux(f,u,edge,data)
+	(;m,ip,iT,dt_hf_enth)=data
+	ng=ngas(data)
+		
+	F = MVector{ng-1,eltype(u)}(undef)
+	X = MVector{ng,eltype(u)}(undef)
+	W = MVector{ng,eltype(u)}(undef)
+	M = MMatrix{ng-1,ng-1,eltype(u)}(undef)
+	D = MMatrix{ng,ng,eltype(u)}(undef)
+
+	pm = 0.5*(u[ip,1]+u[ip,2])
+	Tm = 0.5*(u[iT,1]+u[iT,2])
+	c = pm/(ph"R"*Tm)
+	
+	δp = u[ip,1]-u[ip,2]
+	
+	@inline MoleFrac!(X,u,data)
+	@inline mmix = molarweight_mix(X,data)
+	@inline MassFrac!(X,W,data)
+	
+	
+	#@inline D_matrix!(data, D, Tm, pm)
+	@inline D_matrix!(D, Tm, pm, data)
+	@inline mumix, lambdamix = dynvisc_thermcond_mix(data, Tm, X)
+	lambda_bed=kbed(data,lambdamix)*lambdamix
+	
+	rho = c*mmix
+	v = DarcyVelo(u,data,mumix)
+	
+	f[ip] = -rho*v
+
+	@inline M_matrix!(M, W, D, data)
+	
+	@inbounds for i=1:(ng-1)
+		F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm )*c/mmix
+	end				
+
+	@inline inplace_linsolve!(M,F)
+
+	hf_conv = zero(eltype(u))
+	@inbounds for i=1:(ng-1)
+		f[i] = -(F[i] + c*X[i]*m[i]*v)
+	end
+	@inline hf_conv = f[ip] * enthalpy_mix(data.Fluids, Tm, X) / mmix * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth) 
+	
+	Bp,Bm = fbernoulli_pm(hf_conv/lambda_bed/Tm)
+	f[iT] = lambda_bed*(Bm*u[iT,1]-Bp*u[iT,2])
+end
+
 # ╔═╡ 3bb2deff-7816-4749-9f1e-c1e451372b1e
 function reaction(f,u,node,data)
 	(;m,ip,iT,isreactive)=data
@@ -214,7 +254,7 @@ end
 
 # ╔═╡ 4af1792c-572e-465c-84bf-b67dd6a7bc93
 function storage(f,u,node,data)
-	(;ip,iT,m,poros,density_solid,heatcap_solid)=data
+	(;ip,iT,m,poros,rhos,cs)=data
 	ng=ngas(data)
 
 	c = u[ip]/(ph"R"*u[iT])
@@ -227,16 +267,12 @@ function storage(f,u,node,data)
 	X=MVector{ng,eltype(u)}(undef)
 	@inline MoleFrac!(X,u,data)
 	@inline cpmix = heatcap_mix(data.Fluids, u[iT], X)
-	#cpmix = 0.0
-	#for i=1:ng
-	#	@inline cpmix += heatcap_gas(data.Fluids[i], u[iT])*u[i]
-	#end
 	
 	f[ip] = mmix*c*poros
 
 	# solid heat capacity is 4 orders of magnitude larger than gas phase heat cap
 	#f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros)
-	f[iT] = u[iT] * (density_solid*heatcap_solid*(1-poros) + cpmix*c*poros) / 200
+	f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros) / 200
 	
 end
 
@@ -399,7 +435,7 @@ end
 
 # ╔═╡ 5f88937b-5802-4a4e-81e2-82737514b9e4
 function bcond(f,u,bnode,data)
-	(;p,ip,iT,Tamb,mfluxin,X0,W0,m,mmix0)=data
+	(;p,ip,iT,Tamb,mfluxin,X0,W0,m,mmix0,dt_mf)=data
 	ng=ngas(data)
 		
 	if dim==2		
@@ -409,13 +445,14 @@ function bcond(f,u,bnode,data)
 		
 		boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_bottom,value=p)
 	else
-		boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_left,value=Tamb)
+		#boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_left,value=Tamb)
+		r_mfluxin = mfluxin*ramp(bnode.time; du=(0.1,1), dt=dt_mf)
 		for i=1:(ng-1)
 		boundary_neumann!(f,u,bnode, species=i,region=Γ_left,value=r_mfluxin*W0[i])
 		end
 		boundary_neumann!(f,u,bnode, species=ip, region=Γ_left, value=r_mfluxin)
 		boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
-		boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_right,value=Tamb)
+		#boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_right,value=Tamb)
 	end
 end
 
@@ -449,11 +486,11 @@ function bflux(f,u,bedge,data)
 	# window temperature distribution
 	if bedge.region == Γ_top_inner || bedge.region == Γ_top_outer
 	#if bedge.region == Γ_top_inner
-		(;iTw,thermal_cond_window) = data
-		f[iTw] = thermal_cond_window * (u[iTw, 1] - u[iTw, 2])
+		(;iTw,lambda_window) = data
+		f[iTw] = lambda_window * (u[iTw, 1] - u[iTw, 2])
 	elseif bedge.region == Γ_bottom
-		(;iTp,thermal_cond_reactorwall) = data
-		f[iTp] = thermal_cond_reactorwall * (u[iTp, 1] - u[iTp, 2])
+		(;iTp,lambda_Al) = data
+		f[iTp] = lambda_Al * (u[iTp, 1] - u[iTp, 2])
 	end
 end
 
@@ -468,190 +505,6 @@ function bstorage(f,u,bnode,data)
 	end
 end
 
-# ╔═╡ 98468f9e-6dee-4b0b-8421-d77ac33012cc
-md"""
-### Temperature
-1) Porous frit + catalyst layer domain
-2) Window inner surface
-3) Bottom plate
-"""
-
-# ╔═╡ c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
-md"""
-### Molar fractions
-1) CO
-2) CO2
-"""
-
-# ╔═╡ eb9dd385-c4be-42a2-8565-cf3cc9b2a078
-md"""
-### Flow field
-1. Pressure
-2. Density
-3. Velocity X
-4. Velocity Y
-"""
-
-# ╔═╡ 68ca72ae-3b24-4c09-ace1-5e340c8be3d4
-function len(grid)
-	coord = grid[Coordinates]
-	L=0.0
-	if dim == 1
-		L=coord[end]
-	elseif dim == 2
-		L=coord[1,end]
-	else
-		L=coord[2,end]
-	end
-	L*ufac"m"
-end
-
-# ╔═╡ db77fca9-4118-4825-b023-262d4073b2dd
-md"""
-### Peclet Number
-```math
-\text{Pe}_L= \frac{L \vec v}{D}
-
-```
-"""
-
-# ╔═╡ e7497364-75ef-4bd9-87ca-9a8c2d97064c
-md"""
-### Damköhler Number
-```math
-\text{Da}= \frac{k_{\text{react}}}{k_{\text{conv}}} = \frac{\dot r}{c_0} \tau = \frac{\dot r L}{c_0 v}
-
-```
-"""
-
-# ╔═╡ f6e54602-b63e-4ce5-b8d5-f626fbe5ae7a
-md"""
-### Reynolds Number
-```math
-\text{Re} = \frac{\rho v D}{\eta}  
-```
-where $\rho$ is the density of the fluid, ideal gas in this case, $v$ is the magnitufe of the velocity, $D$ is a representative length scale, here it is the mean pore diameter, and $\eta$ is the dynamic viscosity of the fluid.
-"""
-
-# ╔═╡ 0d507c5e-eb0f-4094-a30b-a4a82fd5c302
-md"""
-### Knudsen Number
-```math
-\text{Kn} = \frac{\lambda}{l} = \frac{k_{\text B}T}{\sqrt 2 \pi \sigma^2pl}
-```
-where $\lambda$ is the mean free path length of the fluid, ideal gas in this case and $l$ is the pore diameter of the porous medium. Determine the mean free path length for ideal gas from kinetic gas theory and kinetic collision cross-sections (diameter).
-
--  $\text{Kn} < 0.01$: Continuum flow
--  $0.01 <\text{Kn} < 0.1$: Slip flow
--  $0.1 < \text{Kn} < 10$: Transitional flow
--  $\text{Kn} > 10$: Free molecular flow
-"""
-
-# ╔═╡ 67adda35-6761-4e3c-9d05-81e5908d9dd2
-md"""
-## Model Data
-"""
-
-# ╔═╡ f4dba346-61bc-420d-b419-4ea2d46be6da
-function D_matrix!(data, D, T, p)
-	(;m,constriction_tourtuosity_fac)=data
-	ng=ngas(data)
-	@inbounds for i=1:(ng-1)
-		for j=(i+1):ng
-			Dji = binary_diff_coeff_gas(data.Fluids[j], data.Fluids[i], T, p)
-			Dji *= m[i]*m[j]*constriction_tourtuosity_fac # eff. diffusivity
-			D[j,i] = Dji
-			D[i,j] = Dji
-		end
-	end
-end
-
-# ╔═╡ 5547d7ad-dd58-4b00-8238-6e1abb32874e
-function flux(f,u,edge,data)
-	(;m,ip,iT,dt_hf_enth)=data
-	ng=ngas(data)
-		
-	F = MVector{ng-1,eltype(u)}(undef)
-	X = MVector{ng,eltype(u)}(undef)
-	W = MVector{ng,eltype(u)}(undef)
-	M = MMatrix{ng-1,ng-1,eltype(u)}(undef)
-	D = MMatrix{ng,ng,eltype(u)}(undef)
-
-	pm = 0.5*(u[ip,1]+u[ip,2])
-	Tm = 0.5*(u[iT,1]+u[iT,2])
-	c = pm/(ph"R"*Tm)
-	
-	δp = u[ip,1]-u[ip,2]
-	
-	@inline MoleFrac!(X,u,data)
-	@inline mmix = molarweight_mix(X,data)
-	@inline MassFrac!(X,W,data)
-	
-	
-	@inline D_matrix!(data, D, Tm, pm)
-	@inline mumix, lambdamix = dynvisc_thermcond_mix(data, Tm, X)
-	lambda_bed=kbed(data,lambdamix)*lambdamix
-	
-	rho = c*mmix
-	v = DarcyVelo(u,data,mumix)
-	
-	f[ip] = -rho*v
-
-	@inline M_matrix!(M, W, D, data)
-	
-	@inbounds for i=1:(ng-1)
-		F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm )*c/mmix
-	end				
-
-	@inline inplace_linsolve!(M,F)
-
-	hf_conv = zero(eltype(u))
-	@inbounds for i=1:(ng-1)
-		f[i] = -(F[i] + c*X[i]*m[i]*v)
-	end
-	@inline hf_conv = f[ip] * enthalpy_mix(data.Fluids, Tm, X) / mmix * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth) 
-	
-	Bp,Bm = fbernoulli_pm(hf_conv/lambda_bed/Tm)
-	f[iT] = lambda_bed*(Bm*u[iT,1]-Bp*u[iT,2])
-end
-
-# ╔═╡ 1224970e-8a59-48a9-b0ef-76ed776ca15d
-function checkinout(sys,sol)	
-	tfact=TestFunctionFactory(sys)
-	if dim == 2
-		tf_in=testfunction(tfact,[Γ_bottom],[Γ_top_inner,Γ_top_outer])
-		tf_out=testfunction(tfact,[Γ_top_inner,Γ_top_outer],[Γ_bottom])
-	else
-		tf_in=testfunction(tfact,[Γ_right],[Γ_left])
-		tf_out=testfunction(tfact,[Γ_left],[Γ_right])
-	end
-
-	(;in=integrate(sys,tf_in,sol),out=integrate(sys,tf_out,sol) )
-end
-
-# ╔═╡ b55e2a48-5a2d-4e29-9f3b-219854461d09
-function areas(sol,sys,grid,data)
-	iT = data.iT
-	function area(f,u,bnode,data)
-		f[iT] = one(eltype(u)) # use temperature index to hold area information
-	end	
-	integrate(sys,area,sol; boundary=true)[iT,:]
-end
-
-
-# ╔═╡ 0a0f0c58-1bca-4f40-93b1-8174892cc4d8
-function bareas(bfaceregion,sys,grid)
-	area = 0.0
-	for ibface =1:num_bfaces(grid)
-        for inode=1:num_nodes(grid[BFaceGeometries][1])
-			if grid[BFaceRegions][ibface] == bfaceregion
-                area +=bfacenodefactors(sys)[inode,ibface]
-			end
-		end
-	end
-	area
-end
-
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
 #=╠═╡
 begin
@@ -659,7 +512,7 @@ begin
 	if dim == 1
 		mygrid=grid1D()
 		strategy = nothing
-		times=[0,10]
+		times=[0,0.1]
 	elseif dim == 2
 		mygrid=grid2D()
 		strategy = nothing
@@ -670,7 +523,7 @@ begin
 		times=[0,20.0]
 	end
 	#mydata=ModelData()
-	mydata=FixedBed.MD_test()
+	mydata=ReactorData()
 	(;p,ip,Tamb,iT,iTw,iTp,X0)=mydata
 	ng=ngas(mydata)
 	
@@ -687,7 +540,7 @@ begin
 								[dim == 2 ? Γ_bottom : Γ_right],
 							assembly=:edgewise
 							)
-	
+
 	enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
 	enable_boundary_species!(sys, iTw, [Γ_top_inner,Γ_top_outer]) # window temperature as boundary species in upper chamber
 	enable_boundary_species!(sys, iTp, [Γ_bottom]) # plate temperature as boundary species in lower chamber
@@ -695,10 +548,11 @@ begin
 
 	inival[ip,:].=p
 	inival[[iT,iTw,iTp],:] .= Tamb
-	
+		
 	for i=1:ng
 		inival[i,:] .= X0[i]
 	end
+
 
 	nd_ids = unique(mygrid[CellNodes][:,mygrid[CellRegions] .== 2])
 	cat_vol = sum(nodevolumes(sys)[nd_ids])
@@ -706,19 +560,19 @@ begin
     area_inner = bareas(Γ_top_inner,sys,mygrid)
     area_outer = bareas(Γ_top_outer,sys,mygrid)
 	mydata.mfluxin = mydata.mflowin / (area_inner+area_outer)
-	
+		
 	control = SolverControl(strategy, sys;)
 		control.Δt_min=1.0e-6
 		control.Δt_max=1.0
 		#control.maxiters=200
 		control.handle_exceptions=true
 		control.Δu_opt=100.0
+
 	function post(sol,oldsol, t, Δt)
 		@info "t= "*string(round(t,sigdigits=2))*"\t Δt= "*string(round(Δt,sigdigits=2))		 
 	end
-
 	if RunSim
-		solt=solve(sys;inival=inival,times,control,verbose="nae")
+		solt=solve(sys;inival=inival,times,control,post,verbose="nae")
 	end
 end;
   ╠═╡ =#
@@ -726,7 +580,7 @@ end;
 # ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
 #=╠═╡
 md"""
-## Initialisation and Solve
+# Initialisation and Solve
 The simulation is setup as a transient simulation. An initialisation strategy is employed where different physics are enabled step by step once a stationary state is established. Initially, no heat is transported and no chemical reactions take place. 
 
 1. Velocity field (mass flow is ramped up from 1-100 % in T=$(mydata.dt_mf) s)
@@ -735,20 +589,6 @@ The simulation is setup as a transient simulation. An initialisation strategy is
 
 The mass flow boundary condition into the reactor domain is "ramped up" starting from a low value and linearly increasing until the final value is reached. A time delay is given to let the flow stabilize. Once the flow field is established, heat transport is ramped up until a stable temperature field is established. Finally, the reactivity of the catalyst is "ramped up" until its final reactivity value is reached.
 """
-  ╠═╡ =#
-
-# ╔═╡ fc1fe62b-49ea-4c1e-942b-194b35c61c51
-#=╠═╡
-mydata
-  ╠═╡ =#
-
-# ╔═╡ 9a61cf12-9d92-4fdc-9093-79d3fa1f8b90
-#=╠═╡
-let
-	(;lcat,mcat)=mydata
-	catvol = mcat/lcat
-	1.0*ufac"mol/hr"/catvol
-end
   ╠═╡ =#
 
 # ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
@@ -761,50 +601,6 @@ end
 # ╠═╡ skip_as_script = true
 #=╠═╡
 sol = solt(t);
-  ╠═╡ =#
-
-# ╔═╡ b13a76c9-509d-4367-8428-7b5b316ff1ed
-#=╠═╡
-checkinout(sys,sol)
-  ╠═╡ =#
-
-# ╔═╡ 7c7d2f10-d8d2-447e-874b-7be365e0b00c
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	(;gn,gni,m,nflowin,X0) = mydata
-	ng=ngas(mydata)
-	in_,out_=checkinout(sys,sol)
-
-	nout(i) = -out_[i]/m[i]
-	nin(i) = nflowin*X0[i]
-	nout_dry = 0.0
-	
-	println("Molar species in- & outflows:")
-	for i = 1:ng
-		@printf "%s\tIN: %2.2f\t OUT: %2.2f mol/hr\n" gn[i] nin(i)/ufac"mol/hr" nout(i)/ufac"mol/hr"
-		if i != gni[:H2O] 
-			nout_dry += nout(i)
-		end
-	end
-
-
-	println("\nDry Product Molar Fractions:")
-	for i=1:ng
-		if i != gni[:H2O] && i != gni[:N2] 
-		@printf "%3s: %2.1f%%\n" gn[i] nout(i)/nout_dry*100
-		end
-	end
-	
-	println("\nConversion:")
-	for i in(gni[:CO2],gni[:H2])
-		@printf "X%4s: %2.2f\n" gn[i] (nin(i)-nout(i))/nin(i)
-	end
-	println("\nYield & Selectivity (CO2 based):")
-	for i in(gni[:CO],gni[:CH4])
-		@printf "Y%4s: %2.2f \tS%4s: %2.2f\n" gn[i] nout(i)/nin(gni[:CO2]) gn[i] nout(i)/(nin(gni[:CO2])-nout(gni[:CO2]))
-	end
-end
   ╠═╡ =#
 
 # ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
@@ -862,6 +658,14 @@ end
 
   ╠═╡ =#
 
+# ╔═╡ 98468f9e-6dee-4b0b-8421-d77ac33012cc
+md"""
+### Temperature
+1) Porous frit + catalyst layer domain
+2) Window inner surface
+3) Bottom plate
+"""
+
 # ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
 # ╠═╡ skip_as_script = true
 #=╠═╡
@@ -885,6 +689,13 @@ let
 	scalarplot!(vis[3,1],bgridp, bsolp.-273.15,resolution=(680,200),show=true)	
 end
   ╠═╡ =#
+
+# ╔═╡ c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
+md"""
+### Molar fractions
+1) CO
+2) CO2
+"""
 
 # ╔═╡ 111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╠═╡ skip_as_script = true
@@ -929,6 +740,15 @@ let
 	reveal(vis)
 end
   ╠═╡ =#
+
+# ╔═╡ eb9dd385-c4be-42a2-8565-cf3cc9b2a078
+md"""
+### Flow field
+1. Pressure
+2. Density
+3. Velocity X
+4. Velocity Y
+"""
 
 # ╔═╡ de69f808-2618-4add-b092-522a1d7e0bb7
 # ╠═╡ skip_as_script = true
@@ -979,6 +799,29 @@ let
 end
   ╠═╡ =#
 
+# ╔═╡ 68ca72ae-3b24-4c09-ace1-5e340c8be3d4
+function len(grid)
+	coord = grid[Coordinates]
+	L=0.0
+	if dim == 1
+		L=coord[end]
+	elseif dim == 2
+		L=coord[1,end]
+	else
+		L=coord[2,end]
+	end
+	L*ufac"m"
+end
+
+# ╔═╡ db77fca9-4118-4825-b023-262d4073b2dd
+md"""
+### Peclet Number
+```math
+\text{Pe}_L= \frac{L \vec v}{D}
+
+```
+"""
+
 # ╔═╡ ae8c7993-a89f-438a-a72a-d4a0c9a8ce57
 # ╠═╡ skip_as_script = true
 #=╠═╡
@@ -992,6 +835,15 @@ let
 	Pe = L*v0 / minimum(D[D.>0])
 end
   ╠═╡ =#
+
+# ╔═╡ e7497364-75ef-4bd9-87ca-9a8c2d97064c
+md"""
+### Damköhler Number
+```math
+\text{Da}= \frac{k_{\text{react}}}{k_{\text{conv}}} = \frac{\dot r}{c_0} \tau = \frac{\dot r L}{c_0 v}
+
+```
+"""
 
 # ╔═╡ e000c100-ee46-454e-b049-c1c29daa9a56
 # ╠═╡ skip_as_script = true
@@ -1008,6 +860,15 @@ let
 	Da = maximum(RR)/c0[gni[:H2]] * tau
 end
   ╠═╡ =#
+
+# ╔═╡ f6e54602-b63e-4ce5-b8d5-f626fbe5ae7a
+md"""
+### Reynolds Number
+```math
+\text{Re} = \frac{\rho v D}{\eta}  
+```
+where $\rho$ is the density of the fluid, ideal gas in this case, $v$ is the magnitufe of the velocity, $D$ is a representative length scale, here it is the mean pore diameter, and $\eta$ is the dynamic viscosity of the fluid.
+"""
 
 # ╔═╡ f690c19f-22e3-4428-bc1c-3ed7d1646e71
 # ╠═╡ skip_as_script = true
@@ -1029,6 +890,20 @@ let
 end
   ╠═╡ =#
 
+# ╔═╡ 0d507c5e-eb0f-4094-a30b-a4a82fd5c302
+md"""
+### Knudsen Number
+```math
+\text{Kn} = \frac{\lambda}{l} = \frac{k_{\text B}T}{\sqrt 2 \pi \sigma^2pl}
+```
+where $\lambda$ is the mean free path length of the fluid, ideal gas in this case and $l$ is the pore diameter of the porous medium. Determine the mean free path length for ideal gas from kinetic gas theory and kinetic collision cross-sections (diameter).
+
+-  $\text{Kn} < 0.01$: Continuum flow
+-  $0.01 <\text{Kn} < 0.1$: Slip flow
+-  $0.1 < \text{Kn} < 10$: Transitional flow
+-  $\text{Kn} > 10$: Free molecular flow
+"""
+
 # ╔═╡ 5bbe72b2-2f80-4dae-9706-7ddb0b8b6dbe
 # ╠═╡ skip_as_script = true
 #=╠═╡
@@ -1040,11 +915,83 @@ let
 end
   ╠═╡ =#
 
+# ╔═╡ 67adda35-6761-4e3c-9d05-81e5908d9dd2
+md"""
+## Auxiliary
+"""
+
+# ╔═╡ 1224970e-8a59-48a9-b0ef-76ed776ca15d
+function checkinout(sys,sol)	
+	tfact=TestFunctionFactory(sys)
+	if dim == 2
+		tf_in=testfunction(tfact,[Γ_bottom],[Γ_top_inner,Γ_top_outer])
+		tf_out=testfunction(tfact,[Γ_top_inner,Γ_top_outer],[Γ_bottom])
+	else
+		tf_in=testfunction(tfact,[Γ_right],[Γ_left])
+		tf_out=testfunction(tfact,[Γ_left],[Γ_right])
+	end
+
+	(;in=integrate(sys,tf_in,sol),out=integrate(sys,tf_out,sol) )
+end
+
+# ╔═╡ b13a76c9-509d-4367-8428-7b5b316ff1ed
+#=╠═╡
+checkinout(sys,sol)
+  ╠═╡ =#
+
+# ╔═╡ 7c7d2f10-d8d2-447e-874b-7be365e0b00c
+# ╠═╡ skip_as_script = true
+#=╠═╡
+let
+	(;gn,gni,m,nflowin,X0) = mydata
+	ng=ngas(mydata)
+	in_,out_=checkinout(sys,sol)
+
+	nout(i) = -out_[i]/m[i]
+	nin(i) = nflowin*X0[i]
+	nout_dry = 0.0
+	
+	println("Molar species in- & outflows:")
+	for i = 1:ng
+		@printf "%s\tIN: %2.2f\t OUT: %2.2f mol/hr\n" gn[i] nin(i)/ufac"mol/hr" nout(i)/ufac"mol/hr"
+		if i != gni[:H2O] 
+			nout_dry += nout(i)
+		end
+	end
+
+
+	println("\nDry Product Molar Fractions:")
+	for i=1:ng
+		if i != gni[:H2O] && i != gni[:N2] 
+		@printf "%3s: %2.1f%%\n" gn[i] nout(i)/nout_dry*100
+		end
+	end
+	
+	println("\nConversion:")
+	for i in(gni[:CO2],gni[:H2])
+		@printf "X%4s: %2.2f\n" gn[i] (nin(i)-nout(i))/nin(i)
+	end
+	println("\nYield & Selectivity (CO2 based):")
+	for i in(gni[:CO],gni[:CH4])
+		@printf "Y%4s: %2.2f \tS%4s: %2.2f\n" gn[i] nout(i)/nin(gni[:CO2]) gn[i] nout(i)/(nin(gni[:CO2])-nout(gni[:CO2]))
+	end
+end
+  ╠═╡ =#
+
+# ╔═╡ b55e2a48-5a2d-4e29-9f3b-219854461d09
+function areas(sol,sys,grid,data)
+	iT = data.iT
+	function area(f,u,bnode,data)
+		f[iT] = one(eltype(u)) # use temperature index to hold area information
+	end	
+	integrate(sys,area,sol; boundary=true)[iT,:]
+end
+
+
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─6da83dc0-3b0c-4737-833c-6ee91552ff5c
 # ╠═d3278ac7-db94-4119-8efd-4dd18107e248
-# ╠═83fa22fa-451d-4c30-a4b7-834974245996
 # ╠═4dae4173-0363-40bc-a9ca-ce5b4d5224cd
 # ╠═561e96e2-2d48-4eb6-bb9d-ae167a622aeb
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
@@ -1070,10 +1017,8 @@ end
 # ╠═ee797850-f5b5-4178-be07-28192c04252d
 # ╠═b375a26d-3ee6-4b69-9bd8-c69c3e193dc9
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
-# ╠═fc1fe62b-49ea-4c1e-942b-194b35c61c51
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
-# ╠═9a61cf12-9d92-4fdc-9093-79d3fa1f8b90
 # ╠═b13a76c9-509d-4367-8428-7b5b316ff1ed
 # ╠═7c7d2f10-d8d2-447e-874b-7be365e0b00c
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
@@ -1094,7 +1039,5 @@ end
 # ╟─0d507c5e-eb0f-4094-a30b-a4a82fd5c302
 # ╠═5bbe72b2-2f80-4dae-9706-7ddb0b8b6dbe
 # ╟─67adda35-6761-4e3c-9d05-81e5908d9dd2
-# ╠═f4dba346-61bc-420d-b419-4ea2d46be6da
 # ╠═1224970e-8a59-48a9-b0ef-76ed776ca15d
 # ╠═b55e2a48-5a2d-4e29-9f3b-219854461d09
-# ╠═0a0f0c58-1bca-4f40-93b1-8174892cc4d8
