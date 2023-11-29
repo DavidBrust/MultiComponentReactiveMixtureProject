@@ -357,20 +357,16 @@ let
 		sys=asys[end]
 		in_,out_=checkinout(sys,sol)
 	
-		nout(i) = -out_[i]/m[i]
+		nout(i) = out_[i]/m[i]
 		nin(i) = mfluxin/mmix0 *1.0*ufac"m^2"*X0[i]
-		nout_dry = 0.0
 		RI=sum(integrate(sys,reaction,sol),dims=2) # reaction integral
 
 		println("Total mass inflows and outflows:")
-		@printf "IN: %2.6e \t OUT: %2.6e \t REACT: %2.6e kg/hr \n\n" in_[ip]/ufac"kg/hr" out_[ip]/ufac"kg/hr" RI[ip]/ufac"kg/hr"
+		@printf "IN: %2.6e \t OUT: %2.6e \t REACT: %2.6e kg/hr \nSUM: %2.6e kg/hr\n\n" in_[ip]/ufac"kg/hr" out_[ip]/ufac"kg/hr" RI[ip]/ufac"kg/hr" (in_[ip]+out_[ip]+RI[ip])/ufac"kg/hr"
 		
 		println("Molar species inflows, outflows and reaction integrals:")
 		for i = 1:ng
-			@printf "%s\tIN: %2.6e \t OUT: %2.6e \t REACT: %2.6e mol/hr \n"			gn[i] nin(i)/ufac"mol/hr" nout(i)/ufac"mol/hr" -RI[i]/m[i]/ufac"mol/hr"
-			if i != gni[:H2O] 
-				nout_dry += nout(i)
-			end
+			@printf "%s\tIN: %2.6e \t OUT: %2.6e \t REACT: %2.6e mol/hr \n\tSUM: %2.6e mol/hr\n" gn[i] nin(i)/ufac"mol/hr" nout(i)/ufac"mol/hr" -RI[i]/m[i]/ufac"mol/hr" (nin(i)+nout(i)-RI[i]/m[i])/ufac"mol/hr"
 		end
 	end
 end

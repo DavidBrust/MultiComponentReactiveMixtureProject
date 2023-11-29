@@ -351,7 +351,7 @@ function checkinout(sys,sol)
 	(;in=integrate(sys,tf_in,sol),out=integrate(sys,tf_out,sol) )
 end
 
-# ╔═╡ 75f31cb8-94fb-450c-88fb-e6853088a293
+# ╔═╡ 3ffbe1ba-d5aa-4bf0-a5c4-92cec7e0c199
 let
 	if RunSim
 		(;ip,gn,gni,m,mfluxin,mmix0,X0,ng) = data_res
@@ -361,20 +361,16 @@ let
 		
 		in_,out_=checkinout(sys,sol)
 	
-		nout(i) = -out_[i]/m[i]
+		nout(i) = out_[i]/m[i]
 		nin(i) = mfluxin/mmix0 *bareas(Γ_left,sys,grid)*X0[i]
-		nout_dry = 0.0
 		RI=sum(integrate(sys,reaction,sol),dims=2) # reaction integral
 
 		println("Total mass inflows and outflows:")
-		@printf "IN: %2.6e \t OUT: %2.6e \t REACT: %2.6e kg/hr \n\n" in_[ip]/ufac"kg/hr" out_[ip]/ufac"kg/hr" RI[ip]/ufac"kg/hr"
+		@printf "IN: %2.6e \t OUT: %2.6e \t REACT: %2.6e kg/hr \nSUM: %2.6e kg/hr\n\n" in_[ip]/ufac"kg/hr" out_[ip]/ufac"kg/hr" RI[ip]/ufac"kg/hr" (in_[ip]+out_[ip]+RI[ip])/ufac"kg/hr"
 		
 		println("Molar species inflows, outflows and reaction integrals:")
 		for i = 1:ng
-			@printf "%i\tIN: %2.6e \t OUT: %2.6e \t REACT: %2.6e mol/hr \n" i nin(i)/ufac"mol/hr" nout(i)/ufac"mol/hr" -RI[i]/m[i]/ufac"mol/hr"
-			if i != gni[:H2O] 
-				nout_dry += nout(i)
-			end
+			@printf "%i\tIN: %2.6e \t OUT: %2.6e \t REACT: %2.6e mol/hr \n\tSUM: %2.6e mol/hr\n" i nin(i)/ufac"mol/hr" nout(i)/ufac"mol/hr" -RI[i]/m[i]/ufac"mol/hr" (nin(i)+nout(i)-RI[i]/m[i])/ufac"mol/hr"
 		end
 	end
 end
@@ -399,7 +395,7 @@ end
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╟─184f70a9-f049-4017-ad28-027ae606d0ca
 # ╟─abedcbf9-c99c-4969-b97a-3bc0295061bb
-# ╟─75f31cb8-94fb-450c-88fb-e6853088a293
+# ╠═3ffbe1ba-d5aa-4bf0-a5c4-92cec7e0c199
 # ╟─7dd363bf-d6e0-4dfb-b29f-85aa1fb62429
 # ╠═c5190db5-ed3d-4084-ba16-496cc825fa9d
 # ╠═bb2ef3c0-96fc-4a90-a714-a0cfa08ac178

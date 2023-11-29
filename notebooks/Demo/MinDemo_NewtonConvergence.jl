@@ -177,7 +177,8 @@ function reaction(f,u,node,data)
 	for i=1:ng
 		f[ng] += u[i]
 	end
-	f[ng] = f[ng] - 1.0
+	#f[ng] = f[ng] - 1.0
+	f[ng] = f[ng] - one(eltype(u))
 end
 
 # ╔═╡ 4af1792c-572e-465c-84bf-b67dd6a7bc93
@@ -201,9 +202,10 @@ function bcond(f,u,bnode,data)
 	(;p,ip,mfluxin,W0,X0,dt_mf,ng)=data
 
 	r_mfluxin = mfluxin*ramp(bnode.time; du=(0.1,1), dt=dt_mf)
+	
 	for i=1:(ng-1)
-		boundary_neumann!(f,u,bnode, species=i,region=Γ_left,value=r_mfluxin*W0[i])
-		#boundary_dirichlet!(f,u,bnode, species=i,region=Γ_left,value=X0[i])
+		#boundary_neumann!(f,u,bnode, species=i,region=Γ_left,value=r_mfluxin*W0[i])
+		boundary_dirichlet!(f,u,bnode, species=i,region=Γ_left,value=X0[i])
 	end	
 	boundary_neumann!(f,u,bnode, species=ip, region=Γ_left, value=r_mfluxin)
 	#boundary_neumann!(f,u,bnode, species=ip, region=Γ_left, value=mfluxin)
@@ -292,8 +294,8 @@ function flux(f,u,edge,data)
 	@inline inplace_linsolve!(M,F)
 
 	@inbounds for i=1:(ng-1)
-		f[i] = -(F[i] + c*X[i]*m[i]*v)
-		#f[i] = u[i,1]-u[i,2]
+		#f[i] = -(F[i] + c*X[i]*m[i]*v)
+		f[i] = u[i,1]-u[i,2]
 	end
 
 end
@@ -319,7 +321,8 @@ begin
 		Tamb = 273.15,
 		m = [2.0,6.0,21.0]*ufac"g/mol",
 		X0 = [0.2, 0.8, 0.0],
-		mfluxin = 0.01*ufac"kg/(m^2*s)"
+		mfluxin = 0.01*ufac"kg/(m^2*s)",
+		#isreactive = 0
 	)
 	
 	(;p,ip,X0)=mydata
@@ -442,7 +445,7 @@ end
 # ╔═╡ e29848dd-d787-438e-9c32-e9c2136aec4f
 checkinout(sys,sol)
 
-# ╔═╡ a8160553-6ca8-40df-a5ec-8a32a2b9de0f
+# ╔═╡ dac0610e-63d8-409e-961c-caa160d38cca
 let
 	if RunSim
 		(;ip,gn,gni,m,mfluxin,mmix0,X0,ng) = mydata
@@ -450,8 +453,8 @@ let
 		in_,out_=checkinout(sys,sol)
 	
 		nout(i) = out_[i]/m[i]
-		nin(i) = mfluxin/mmix0 *bareas(Γ_left,sys,mygrid)*X0[i]
-
+		#nin(i) = mfluxin/mmix0 *bareas(Γ_left,sys,mygrid)*X0[i]
+		nin(i) = in_[i]/m[i]
 		RI=sum(integrate(sys,reaction,sol),dims=2) # reaction integral
 
 		println("Total mass inflows and outflows:")
@@ -487,7 +490,7 @@ end
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═e29848dd-d787-438e-9c32-e9c2136aec4f
-# ╠═a8160553-6ca8-40df-a5ec-8a32a2b9de0f
+# ╠═dac0610e-63d8-409e-961c-caa160d38cca
 # ╟─05949759-2bb9-475b-b2f4-900b32c30e00
 # ╠═111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╟─d4aaf146-e551-444a-a2f1-e70b05104b53
