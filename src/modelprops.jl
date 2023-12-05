@@ -49,12 +49,16 @@ through the constriction and tourtuosity factor γ_τ which lowers the diffusivi
  ~1 order of magnitude compared to diffusion through free space.
 """
 function D_matrix!(D, T, p, data)
-	(;m,γ_τ)=data
+	(;m,γ_τ,constant_properties)=data
 	ng=ngas(data)
 	@inbounds for i=1:(ng-1)
 		for j=(i+1):ng
-			Dji = binary_diff_coeff_gas(data.Fluids[j], data.Fluids[i], T, p)
-			Dji *= m[i]*m[j]*γ_τ # eff. diffusivity
+            if !constant_properties
+			    Dji = binary_diff_coeff_gas(data.Fluids[j], data.Fluids[i], T, p)
+			    Dji *= m[i]*m[j]*γ_τ # eff. diffusivity
+            else
+                Dji = 2.0e-5*m[i]*m[j]
+            end
 			D[j,i] = Dji
 			D[i,j] = Dji
 		end
@@ -103,6 +107,165 @@ function MassFrac!(X,W,data)
 		W[i] = X[i]*m[i]/mmix
 	end
 	nothing
+end
+
+@doc raw"""
+Flux function definition for use with VoronoiFVM.jl for the Darcy-Maxwell-Stefan
+    (DMS) model for Multi-component gas transport in porous media.
+"""
+function DMS_flux(f,u,edge,data)
+	(;m,ip,iT,dt_hf_enth,solve_T_equation,Tamb)=data
+	ng=ngas(data)
+		
+	F = MVector{ng-1,eltype(u)}(undef)
+	X = MVector{ng,eltype(u)}(undef)
+	W = MVector{ng,eltype(u)}(undef)
+	M = MMatrix{ng-1,ng-1,eltype(u)}(undef)
+	D = MMatrix{ng,ng,eltype(u)}(undef)
+
+	pm = 0.5*(u[ip,1]+u[ip,2])
+    Tm = solve_T_equation ? 0.5*(u[iT,1]+u[iT,2]) : one(eltype(u))*Tamb
+	#Tm = 0.5*(u[iT,1]+u[iT,2])
+	c = pm/(ph"R"*Tm)
+	
+	δp = u[ip,1]-u[ip,2]
+	
+	@inline MoleFrac!(X,u,data)
+	@inline mmix = molarweight_mix(X,data)
+	@inline MassFrac!(X,W,data)
+	
+	
+	@inline D_matrix!(D, Tm, pm, data)
+	@inline mumix, lambdamix = dynvisc_thermcond_mix(data, Tm, X)
+		
+	rho = c*mmix
+	v = DarcyVelo(u,data,mumix)
+	
+	f[ip] = -rho*v
+
+	@inline M_matrix!(M, W, D, data)
+	
+	@inbounds for i=1:(ng-1)
+		F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm )*c/mmix
+	end				
+
+	@inline inplace_linsolve!(M,F)
+
+	@inbounds for i=1:(ng-1)
+		f[i] = -(F[i] + c*X[i]*m[i]*v)
+	end
+
+    if solve_T_equation
+        lambda_bed=kbed(data,lambdamix)*lambdamix
+        hf_conv = zero(eltype(u))
+        @inline hf_conv = f[ip] * enthalpy_mix(data.Fluids, Tm, X) / mmix * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth) 
+        
+        Bp,Bm = fbernoulli_pm(hf_conv/lambda_bed/Tm)
+        f[iT] = lambda_bed*(Bm*u[iT,1]-Bp*u[iT,2])
+    end
+end
+
+@doc raw"""
+Reaction function definition for use with VoronoiFVM.jl for the Darcy-Maxwell-Stefan
+    (DMS) model for Multi-component gas transport in porous media.
+"""
+function DMS_reaction(f,u,node,data)
+	(;m,ip,is_reactive)=data
+	ng=ngas(data)
+
+	if node.region == 2 && is_reactive # catalyst layer
+		(;lcat,kinpar,iT,Tamb,solve_T_equation)=data
+		(;nuij)=kinpar
+		
+		pi = MVector{ng,eltype(u)}(undef)
+		for i=1:ng
+            pi[i] = u[ip]*u[i]
+		end
+
+        T = solve_T_equation ? u[iT] : one(eltype(u))*Tamb
+        RR = @inline -lcat*ri(data,T,pi)
+        #RR = @inline -lcat*ri(data,u[iT],pi)
+		
+		for i=1:ng
+			f[i] = zero(eltype(u))
+			for j=1:nreac(kinpar)
+				f[i] += nuij[(j-1)*ng+i] * RR[j] * m[i]
+			end			
+		end
+	end
+	
+	for i=1:ng
+		f[ng] += u[i]
+	end
+	f[ng] = f[ng] - 1.0
+end
+
+@doc raw"""
+Storage function definition for use with VoronoiFVM.jl for the Darcy-Maxwell-Stefan
+    (DMS) model for Multi-component gas transport in porous media.
+"""
+function DMS_storage(f,u,node,data)
+	(;ip,iT,Tamb,m,poros,rhos,cs,solve_T_equation)=data
+	ng=ngas(data)
+
+    T = solve_T_equation ? u[iT] : one(eltype(u))*Tamb
+	#c = u[ip]/(ph"R"*u[iT])
+    c = u[ip]/(ph"R"*T)
+    mmix = zero(eltype(u))
+	for i=1:ng
+		f[i]=c*u[i]*m[i]*poros
+        mmix += u[i]*m[i]
+	end
+	
+	# total pressure
+	f[ip] = mmix*c*poros
+
+    if solve_T_equation
+       	#@inline mmix = molarweight_mix(u,data)
+        X=MVector{ng,eltype(u)}(undef)
+        @inline MoleFrac!(X,u,data)
+        #@inline cpmix = heatcap_mix(data.Fluids, u[iT], X)
+        @inline cpmix = heatcap_mix(data, T, X)
+        # solid heat capacity is 4 orders of magnitude larger than gas phase heat cap
+        f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros)
+        #f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros) / 200
+    end
+	
+end
+
+@doc raw"""
+Storage function definition for use with VoronoiFVM.jl for the Darcy-Maxwell-Stefan
+    (DMS) model for Multi-component gas transport in porous media.
+"""
+function DMS_boutflow(f,u,edge,data)
+	(;iT,ip,m,dt_hf_enth,Tamb,solve_T_equation)=data
+	ng=ngas(data)
+
+	k=outflownode(edge)
+	pout = u[ip,k]
+    Tout = solve_T_equation ? u[iT,k] : one(eltype(u))*Tamb
+    cout = pout/(ph"R"*Tout)
+	#cout = pout/(ph"R"*u[iT,k])
+	X = MVector{ng,eltype(u)}(undef)
+	
+	for i=1:ng
+		X[i] = u[i,k]
+	end
+	#@inline mumix, _ = dynvisc_thermcond_mix(data, u[iT,k], X)
+    @inline mumix, _ = dynvisc_thermcond_mix(data, Tout, X)
+	v = DarcyVelo(u,data,mumix)
+	
+	for i=1:(ng-1)
+		f[i] = v*cout*u[i,k]*m[i] # species mass flux at outflow
+	end
+
+    if solve_T_equation
+        # convective heat flux
+        @inline r_hf_conv = v *cout * enthalpy_mix(data.Fluids, Tout, X) * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth)
+        #@inline r_hf_conv = v *cout * enthalpy_mix(data.Fluids, u[iT,k], X) * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth)
+
+        f[iT] = r_hf_conv
+    end
 end
 
 # calculate non-dimensional numbers: Reynolds, Prandtl, Peclet
@@ -246,8 +409,10 @@ end
 	lc_h::Float64=18.0*ufac"mm"
 	Nu::Float64=4.861
 	
-	#isreactive::Bool = 0
-	isreactive::Bool = 1
+	# switches to control the simulation
+	is_reactive::Bool = true
+    solve_T_equation::Bool = true
+    constant_properties::Bool = false
 	
 	#ip::Int64 = NG+1
     ip::Int64 = ng+1
@@ -319,9 +484,9 @@ end
 	lambda_window::Float64=1.38*ufac"W/(m*K)"
 	lambda_Al::Float64=235.0*ufac"W/(m*K)"
 
-    function ReactorData(dt_mf,dt_hf_enth,dt_hf_irrad,kinpar,ng,mcat,Vcat,lcat,uc_h,lc_h,Nu,isreactive,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,G_lamp,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,k_nat_conv,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+    function ReactorData(dt_mf,dt_hf_enth,dt_hf_irrad,kinpar,ng,mcat,Vcat,lcat,uc_h,lc_h,Nu,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,G_lamp,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,k_nat_conv,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
         KP = FixedBed.KinData{nreac(kinpar)}
-        new{ng,KP}(dt_mf,dt_hf_enth,dt_hf_irrad,kinpar,ng,mcat,Vcat,lcat,uc_h,lc_h,Nu,isreactive,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,G_lamp,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,k_nat_conv,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+        new{ng,KP}(dt_mf,dt_hf_enth,dt_hf_irrad,kinpar,ng,mcat,Vcat,lcat,uc_h,lc_h,Nu,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,G_lamp,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,k_nat_conv,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
 
     end
 end

@@ -174,85 +174,6 @@ const Riedel_rWGS = KinData{}(;
     TKi_ref = Dict( [:R1] .=> [693.0]*ufac"K"),
 )
 
-function kin_obj(kinetics::Symbol)
-    if kinetics == :XuFroment
-        return KinData{}(;
-        ng = ng,
-        gnames = gnames,
-        Fluids = [CO,H2,CH4,H2O,CO2,N2],
-        gn = gn,
-        gni = Dict(value => key for (key, value) in gn),    
-        nr = nr,
-        rnames = rnames,
-        rn = rn,
-        rni = Dict(value => key for (key, value) in rn),
-    
-        nuij = vcat(
-            [1, 3, -1, -1, 0, 0], #R1 : CH4 + H2O -> 3 H2 + CO
-            [-1, 1, 0, -1, 1, 0], #R2 : CO + H2O -> CO2 + H2
-            [0, 4, -1, -2, 1, 0], #R3 : CH4 + 2 H2O -> 4 H2 + CO2
-            
-        ),
-        # # values of reaction rate constants @ Tref
-        ki_ref = Dict( rnames .=>  log.(1.225*[1.842e-4, 7.558, 2.193e-5]) ),
-        Tki_ref = Dict( rnames .=> [648.0, 648.0, 648.0]*ufac"K"),
-        # # Activation energies
-        Ei = Dict( rnames .=> [240.1, 67.13, 243.9]*ufac"kJ/mol"),
-        # # equilibrium constants Ki
-        Ki_ref = Dict( rnames .=> [1.913e-4, 10.18, 1.947e-3]),
-        TKi_ref = Dict( rnames .=> [693.0, 693.0, 693.0]*ufac"K"),
-        # # reaction enthalpies
-        ΔHi = Dict( rnames .=> [220.01, -37.92, 182.09]*ufac"kJ/mol"),
-        # values of gas phase species adsorption coefficients @ Tref
-        Kj_ref = Dict( gnames .=> [40.91, 0.0296, 0.1791, 0.4152, 0.0, 0.0]),
-        TKj_ref = Dict( gnames .=> [648.0, 648.0, 823.0, 823.0, 823.0, 823.0]*ufac"K" ),
-        ΔHj = Dict( gnames .=> [-70.65, -82.9, -38.28, 88.68, 0.0, 0.0]*ufac"kJ/mol")
-        )
-    elseif kinetics == :Wolf_rWGS
-        return KinData{}(;
-        nr = 1,
-        rnames = [:R1],
-        rn = Dict(1:1 .=> [:R1]),
-        rni = Dict(value => key for (key, value) in Dict(1:1 .=> [:R1])),
-        nuij = vcat(
-            [1, -1, 0, 1, -1, 0], #R1 : CO2 + H2 -> CO + H2O
-        ),
-        # # values of reaction rate constants
-        ki_ref = Dict( [:R1] .=> log.([3100.0]) ),
-        Tki_ref = Dict( [:R1] .=> [Inf]*ufac"K"),
-
-        # # Activation energies
-        Ei = Dict( [:R1] .=> [82.0]*ufac"kJ/mol"),
-        # # reaction enthalpies
-        ΔHi = Dict( [:R1] .=> [-37.92]*ufac"kJ/mol"),
-        # # equilibrium constants Ki
-        Ki_ref = Dict( [:R1] .=> [10.18]),
-        TKi_ref = Dict( [:R1] .=> [693.0]*ufac"K"),
-    )
-    elseif kinetics == :Riedel_rWGS
-        return KinData{}(;
-        nr = 1,
-        rnames = [:R1],
-        rn = Dict(1:1 .=> [:R1]),
-        rni = Dict(value => key for (key, value) in Dict(1:1 .=> [:R1])),
-        nuij = vcat(
-            [1, -1, 0, 1, -1, 0], #R1 : CO2 + H2 -> CO + H2O
-        ),
-        # # values of reaction rate constants
-        ki_ref = Dict( [:R1] .=>  log.([1.51e7]) ),
-        Tki_ref = Dict( [:R1] .=> [Inf]*ufac"K"),
-    
-        # # Activation energies
-        Ei = Dict( [:R1] .=> [55.0]*ufac"kJ/mol"),
-        # # reaction enthalpies
-        ΔHi = Dict( [:R1] .=> [-37.92]*ufac"kJ/mol"),
-        # # equilibrium constants Ki
-        Ki_ref = Dict( [:R1] .=> [10.18]),
-        TKi_ref = Dict( [:R1] .=> [693.0]*ufac"K"),
-        )
-
-    end
-end
 
 # By default, nreac(data) returns data.kinpar.nr. 
 function nreac(data::Any)
@@ -374,6 +295,21 @@ function ri(data,T,p_)
         p ./= ufac"MPa"
         unitc *=ufac"mol/(s*g)"
         pexp[1] = @inbounds @inline (p[n[:CO2]]*p[n[:H2]] - p[n[:CO]]*p[n[:H2O]]*Kequil_WGS_Zimmermann(T)) / (p[n[:CO]] + 65.0*p[n[:H2O]] + 7.4*p[n[:CO2]])
+    else # ad-hoc defined kinetics, apply mass action law
+        (;nuij) = kinpar
+        c=MVector{ngas(data),eltype(p)}(undef)
+        c .= p ./ (ph"R"*T)
+
+        @inbounds for i=1:nreac(kinpar)
+            pexp[i] = zero(eltype(pexp))
+            for j=1:ngas(data) 
+                if nuij[j,i] > 0 # product, contrib of backward reaction
+                    pexp[i] -= c[j]^nuij[j,i]/Ki_[j]
+                elseif nuij[j,i] < 0 # reactant, contrib of forward reaction
+                    pexp[i] += c[j]^(-nuij[j,i])
+                end
+            end
+        end        
     end
     
     ri_ = @inline ki(data,T) .* pexp * unitc

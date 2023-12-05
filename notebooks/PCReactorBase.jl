@@ -224,10 +224,10 @@ end
 
 # ╔═╡ 3bb2deff-7816-4749-9f1e-c1e451372b1e
 function reaction(f,u,node,data)
-	(;m,ip,iT,isreactive)=data
+	(;m,ip,iT,is_reactive)=data
 	ng=ngas(data)
 
-	if node.region == 2 && isreactive==1 # catalyst layer
+	if node.region == 2 && is_reactive # catalyst layer
 		(;lcat,kinpar,gni)=data
 		(;rni,nuij)=kinpar
 		
@@ -523,19 +523,23 @@ begin
 		times=[0,20.0]
 	end
 	#mydata=ModelData()
-	mydata=ReactorData()
+	mydata=ReactorData(rhos=10.0*ufac"kg/m^3") # set solid density to low value to reduce thermal inertia of system
 	(;p,ip,Tamb,iT,iTw,iTp,X0)=mydata
 	ng=ngas(mydata)
 	
 	sys=VoronoiFVM.System( 	mygrid;
 							data=mydata,
-							flux=flux,
-							reaction=reaction,
-							storage=storage,
+							flux=FixedBed.DMS_flux,
+							#flux=flux,
+							reaction=FixedBed.DMS_reaction,
+							#reaction=reaction,
+							storage=FixedBed.DMS_storage,
+							#storage=storage,
 							bcondition=bcond,
 							bflux=bflux,
 							bstorage=bstorage,
-							boutflow=boutflow,
+							boutflow=FixedBed.DMS_boutflow,
+							#boutflow=boutflow,	
 							outflowboundaries=
 								[dim == 2 ? Γ_bottom : Γ_right],
 							assembly=:edgewise
@@ -575,6 +579,18 @@ begin
 		solt=solve(sys;inival=inival,times,control,post,verbose="nae")
 	end
 end;
+  ╠═╡ =#
+
+# ╔═╡ 8923e9e0-14df-4033-a4f7-0b36c316a22c
+#=╠═╡
+let
+	(;X0,Tamb,ng,gni,Fluids) = mydata
+	X = zeros(ng)
+	X[gni[:N2]] = 1.0
+	X
+	#@time heatcap_mix(Fluids, Tamb, X)
+	#@time heatcap_mix(mydata, Tamb, X)
+end
   ╠═╡ =#
 
 # ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
@@ -987,6 +1003,7 @@ end
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═107a6fa3-60cb-43f0-8b21-50cd1eb5065a
 # ╠═832f3c15-b75a-4afe-8cc5-75ff3b4704d6
+# ╠═8923e9e0-14df-4033-a4f7-0b36c316a22c
 # ╟─a078e1e1-c9cd-4d34-86d9-df4a052b6b96
 # ╟─0fadb9d2-1ccf-4d44-b748-b76d911784ca
 # ╟─b94513c2-c94e-4bcb-9342-47ea48fbfd14

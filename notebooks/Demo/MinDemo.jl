@@ -156,45 +156,8 @@ where $\rho$ is the (total) mixture density, $\vec v$ is the mass-averaged (bary
 md"""
 Reaction leading to increase in moles.
 
-$A \rightarrow 3 B$
+$B \rightarrow 3 A$
 """
-
-# ╔═╡ 3bb2deff-7816-4749-9f1e-c1e451372b1e
-function reaction(f,u,node,data)
-	(;p,m,ip,Tamb,isreactive)=data
-	ng=ngas(data)
-	if node.region == 2 && isreactive == 1 # catalyst layer		
-		
-		# R1: u2 -> 3 u1 
-		k1 = 5.0
-		c = u[ip]/(ph"R"*Tamb)
-		r = k1 * u[2]*c
-
-		f[1] = -3*r*m[1]
-		f[2] = r*m[2]		
-	end
-	
-	for i=1:ng
-		f[ng] += u[i]
-	end
-	f[ng] = f[ng] - 1.0
-end
-
-# ╔═╡ 4af1792c-572e-465c-84bf-b67dd6a7bc93
-function storage(f,u,node,data)
-	(;Tamb,ip,m)=data
-	ng=ngas(data)
-	mmix = zero(eltype(u))
-	c = u[ip]/(ph"R"*Tamb)
-	
-	for i=1:ng
-		f[i]=c*u[i]*m[i]
-		mmix += u[i]*m[i]
-	end
-	
-	# total pressure
-	f[ng+1] = mmix*c
-end
 
 # ╔═╡ 5f88937b-5802-4a4e-81e2-82737514b9e4
 function bcond(f,u,bnode,data)
@@ -210,93 +173,27 @@ function bcond(f,u,bnode,data)
 	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
 end
 
-# ╔═╡ 05949759-2bb9-475b-b2f4-900b32c30e00
-md"""
-## Molar Fractions
-"""
+# ╔═╡ 3d4ef76b-6494-4a43-a0f4-becb4551e1f7
+MinKin = KinData{}(;
+	ng = 3,
+	gnames = [:A, :B, :C],
+	Fluids = Vector{FluidProps}(undef,3),
+	gn = Dict(1:3 .=> [:A, :B, :C]),
+    nr = 1,
+    rnames = [:R1],
+    rn = Dict(1:1 .=> [:R1]),
+    rni = Dict(value => key for (key, value) in Dict(1:1 .=> [:R1])),
+    nuij = vcat(
+        [3, -1, 0], #R1 : B -> 3A
+    ),
+    ki_ref = Dict( [:R1] .=>  log.([5.0]) ),
+    Ei = Dict( [:R1] .=> [0.0]*ufac"kJ/mol"),
+    Ki_ref = Dict( [:R1] .=> [Inf]),
 
-# ╔═╡ d4aaf146-e551-444a-a2f1-e70b05104b53
-md"""
-## Pressure, Density, Flow
-1) Total Pressure
-2) Density
-3) Velocity - X
-4) Velocity - Y
-"""
-
-# ╔═╡ 389a4798-a9ee-4e9c-8b44-a06201b4c457
-function boutflow(f,u,edge,data)
-	(;Tamb,ip,m)=data
-	ng=ngas(data)
-
-	k=outflownode(edge)
-
-	pout = u[ip,k]
-	cout = pout/(ph"R"*Tamb)
-	mumix = 2.0e-5*ufac"Pa*s"
-	v = DarcyVelo(u,data,mumix)
-	
-	for i=1:(ng-1)
-		f[i] = v * cout*u[i,k]*m[i]
-	end	
-end
-
-# ╔═╡ 1f2d79f6-5511-4286-907f-a4cf8c547f8e
-function D_matrix!(D,data)
-	ng=ngas(data)
-	(;m) = data
-	@inbounds for i=1:(ng-1)
-		for j=(i+1):ng
-            Dji = one(eltype(D)) *1.0e-5*ufac"m^2/s" * m[i]*m[j]
-			@views D[j,i] = Dji
-			@views D[i,j] = Dji
-		end
-	end
-end
-
-# ╔═╡ 5547d7ad-dd58-4b00-8238-6e1abb32874e
-function flux(f,u,edge,data)
-	(;m,ip,Tamb)=data
-	ng=ngas(data)
-
-	F = MVector{ng-1,eltype(u)}(undef)
-	X = MVector{ng,eltype(u)}(undef)
-	W = MVector{ng,eltype(u)}(undef)
-	M = MMatrix{ng-1,ng-1,eltype(u)}(undef)
-	D = MMatrix{ng,ng,eltype(u)}(undef)
-	
-	δp = u[ip,1]-u[ip,2]
-	pm = 0.5*(u[ip,1]+u[ip,2])
-	c = pm/(ph"R"*Tamb)
-
-	@inline MoleFrac!(X,u,data)
-	@inline mmix = molarweight_mix(X,data)
-	@inline MassFrac!(X,W,data)
-	
-	rho = c*mmix
-	mumix = 2.0e-5*ufac"Pa*s"
-	v = DarcyVelo(u,data,mumix)
-	
-	
-	f[ip] = -rho*v
-	
-	@inline D_matrix!(D, data)
-	@inline M_matrix!(M, W, D, data)
-
-
-	@inbounds for i=1:(ng-1)
-		F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm )*c/mmix
-	end				
-	
-
-	@inline inplace_linsolve!(M,F)
-
-	@inbounds for i=1:(ng-1)
-		f[i] = -(F[i] + c*X[i]*m[i]*v)
-		#f[i] = u[i,1]-u[i,2]
-	end
-
-end
+	Kj_ref = Dict( [:R1] .=> 0.0 ),
+	TKj_ref = Dict( [:R1] .=>  0.0 ),
+	ΔHj = Dict( [:R1] .=> 0.0 ),
+)
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
 begin
@@ -314,12 +211,18 @@ begin
 		strategy = GMRESIteration(UMFPACKFactorization())
 		times=[0,1.0]
 	end
+
+	
 	mydata = ReactorData(;
-		ng = 3,
+		kinpar=MinKin,
+		lcat = 1.0,
 		Tamb = 273.15,
 		m = [2.0,6.0,21.0]*ufac"g/mol",
 		X0 = [0.2, 0.8, 0.0],
-		mfluxin = 0.01*ufac"kg/(m^2*s)"
+		mfluxin = 0.01*ufac"kg/(m^2*s)",
+		solve_T_equation = false,
+		constant_properties = true,
+		is_reactive = true
 	)
 	
 	(;p,ip,X0)=mydata
@@ -327,11 +230,15 @@ begin
 	
 	sys=VoronoiFVM.System( 	mygrid;
 							data=mydata,
-							flux=flux,
-							reaction=reaction,
-							storage=storage,
+							#flux=flux,
+							flux=FixedBed.DMS_flux,
+							#reaction=reaction,
+							reaction=FixedBed.DMS_reaction,
+							storage=FixedBed.DMS_storage,
+							#storage=storage,
 							bcondition=bcond,
-							boutflow=boutflow,
+							#boutflow=boutflow,
+							boutflow=FixedBed.DMS_boutflow,
 							outflowboundaries=[Γ_right],
 							assembly=:edgewise
 							)
@@ -360,6 +267,14 @@ end;
 # ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
 sol = solt(t);
 
+# ╔═╡ db7f32e9-ee7d-493a-9ed8-711d46fd94a3
+sum(sol[1:3,:])
+
+# ╔═╡ 05949759-2bb9-475b-b2f4-900b32c30e00
+md"""
+## Molar Fractions
+"""
+
 # ╔═╡ 111b1b1f-51a5-4069-a365-a713c92b79f4
 let
 	(;ip,p) = mydata
@@ -382,6 +297,15 @@ let
 	
 	reveal(vis)
 end
+
+# ╔═╡ d4aaf146-e551-444a-a2f1-e70b05104b53
+md"""
+## Pressure, Density, Flow
+1) Total Pressure
+2) Density
+3) Velocity - X
+4) Velocity - Y
+"""
 
 # ╔═╡ de69f808-2618-4add-b092-522a1d7e0bb7
 let
@@ -452,7 +376,7 @@ let
 		nout(i) = out_[i]/m[i]
 		nin(i) = mfluxin/mmix0 *bareas(Γ_left,sys,mygrid)*X0[i]
 
-		RI=sum(integrate(sys,reaction,sol),dims=2) # reaction integral
+		RI=sum(integrate(sys,sys.physics.reaction,sol),dims=2) # reaction integral
 
 		println("Total mass inflows and outflows:")
 		@printf "IN: %2.6e \t OUT: %2.6e \t REACT: %2.6e kg/hr \nSUM: %2.6e kg/hr\n\n" in_[ip]/ufac"kg/hr" out_[ip]/ufac"kg/hr" RI[ip]/ufac"kg/hr" (in_[ip]+out_[ip]+RI[ip])/ufac"kg/hr"
@@ -478,20 +402,17 @@ end
 # ╟─0fadb9d2-1ccf-4d44-b748-b76d911784ca
 # ╟─b94513c2-c94e-4bcb-9342-47ea48fbfd14
 # ╟─c886dd12-a90c-40ab-b9d0-32934c17baee
-# ╠═5547d7ad-dd58-4b00-8238-6e1abb32874e
 # ╟─3440d4d8-3e03-4ff3-93f1-9afd7aaf9c41
-# ╠═3bb2deff-7816-4749-9f1e-c1e451372b1e
-# ╠═4af1792c-572e-465c-84bf-b67dd6a7bc93
 # ╠═5f88937b-5802-4a4e-81e2-82737514b9e4
+# ╠═3d4ef76b-6494-4a43-a0f4-becb4551e1f7
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
+# ╠═db7f32e9-ee7d-493a-9ed8-711d46fd94a3
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═e29848dd-d787-438e-9c32-e9c2136aec4f
-# ╠═a8160553-6ca8-40df-a5ec-8a32a2b9de0f
+# ╟─a8160553-6ca8-40df-a5ec-8a32a2b9de0f
 # ╟─05949759-2bb9-475b-b2f4-900b32c30e00
 # ╠═111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╟─d4aaf146-e551-444a-a2f1-e70b05104b53
 # ╠═de69f808-2618-4add-b092-522a1d7e0bb7
-# ╠═389a4798-a9ee-4e9c-8b44-a06201b4c457
-# ╠═1f2d79f6-5511-4286-907f-a4cf8c547f8e
 # ╠═1224970e-8a59-48a9-b0ef-76ed776ca15d

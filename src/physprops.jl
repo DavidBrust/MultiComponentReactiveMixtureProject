@@ -396,39 +396,42 @@ end
 # Poling BE, Prausnitz JM, O’Connell JP (2001) The properties of gases and liquids, 5th ed. McGraw-Hill, New York
 function dynvisc_thermcond_mix(data, T, x)
     ng = ngas(data)
-    Fluid = data.Fluids
+    # Fluid = data.Fluids
+    (;Fluids, constant_properties) = data
 
     #  !!!ALLOC for types stubility & correctness
     #  !!!ALLOC initialize with zero(eltype) instead of 0.0
     mumix=zero(eltype(x))
     lambdamix=zero(eltype(x))
-    # mu = zeros(Float64, ng)
-    # lambda = zeros(Float64, ng)
-    # M = zeros(Float64, ng)
-
     
-    # !!!ALLOC Use MVectors with static size information instef of Vector
-    mu=MVector{ngas(data),eltype(x)}(undef)
-    lambda=MVector{ngas(data),eltype(x)}(undef)
-    M=MVector{ngas(data),eltype(x)}(undef)
+    if constant_properties
+        mumix += 2.0e-5*ufac"Pa*s"
+        lambdamix += 2.0e-2*ufac"W/(m*K)"
+    else
+        # !!!ALLOC Use MVectors with static size information instead of Vector
+        mu=MVector{ngas(data),eltype(x)}(undef)
+        lambda=MVector{ngas(data),eltype(x)}(undef)
+        M=MVector{ngas(data),eltype(x)}(undef)
 
-    for i=1:ngas(data)
-        mu[i] = dynvisc_gas(Fluid[i], T)
-        lambda[i] = thermcond_gas(Fluid[i], T)
-        M[i] = data.Fluids[i].MW
-    end
-    for i=1:ng
-        sumyFij = zero(T)
-        for j=1:ng
-            Fij = (1+(mu[i]/mu[j])^0.5*(M[j]/M[i])^0.25)^2 / sqrt(8*(1+M[i]/M[j]))
-            sumyFij += x[j]*Fij
+        for i=1:ngas(data)
+            mu[i] = dynvisc_gas(Fluids[i], T)
+            lambda[i] = thermcond_gas(Fluids[i], T)
+            M[i] = Fluids[i].MW
         end
-        if x[i] > 0
-            mumix += x[i] * mu[i] / sumyFij
-            lambdamix += x[i] * lambda[i] / sumyFij
+        for i=1:ng
+            sumyFij = zero(T)
+            for j=1:ng
+                Fij = (1+(mu[i]/mu[j])^0.5*(M[j]/M[i])^0.25)^2 / sqrt(8*(1+M[i]/M[j]))
+                sumyFij += x[j]*Fij
+            end
+            if x[i] > 0
+                mumix += x[i] * mu[i] / sumyFij
+                lambdamix += x[i] * lambda[i] / sumyFij
+            end
         end
     end
-    mumix, lambdamix
+
+    return  mumix, lambdamix
 end
 
 
@@ -460,6 +463,21 @@ function heatcap_mix(Fluids::AbstractVector, T, x)
         cpmix += x[i] * heatcap_gas(Fluids[i], T)
     end
     cpmix
+end
+
+function heatcap_mix(data, T, x)
+    (;Fluids,constant_properties) = data
+    cpmix = zero(eltype(x))
+    
+    if constant_properties
+        cpmix += 30.0*ufac"J/(mol*K)"
+    else
+        ng=ngas(data)    
+        @inbounds for i=1:ng
+            cpmix += x[i] * heatcap_gas(Fluids[i], T)
+        end
+    end
+    return cpmix
 end
 
 
