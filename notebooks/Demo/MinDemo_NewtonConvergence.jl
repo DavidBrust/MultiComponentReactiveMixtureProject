@@ -168,8 +168,10 @@ function reaction(f,u,node,data)
 		# R1: u2 -> 3 u1 
 		k1 = 5.0
 		c = u[ip]/(ph"R"*Tamb)
-		r = k1 * u[2]*c
 
+		r = k1 * u[2]*c
+		r *= ramp(node.time; du=(0.0,1), dt=(5.0,15.0))
+		
 		f[1] = -3*r*m[1]
 		f[2] = r*m[2]		
 	end
@@ -178,6 +180,7 @@ function reaction(f,u,node,data)
 		f[ng] += u[i]
 	end
 	f[ng] = f[ng] - 1.0
+	
 end
 
 # ╔═╡ 4af1792c-572e-465c-84bf-b67dd6a7bc93
@@ -205,12 +208,15 @@ function bcond(f,u,bnode,data)
 	for i=1:(ng-1)
 		# !!! QUADRATIC CONVERGENCE
 		# no more quadratic convergence of Newton's method when specifying flux through boundary (Neumann bc.)		
-		#boundary_neumann!(f,u,bnode, species=i,region=Γ_left,value=r_mfluxin*W0[i])
-		boundary_dirichlet!(f,u,bnode, species=i,region=Γ_left,value=X0[i])		
+		boundary_neumann!(f,u,bnode, species=i,region=Γ_left,value=r_mfluxin*W0[i])
+		#boundary_dirichlet!(f,u,bnode, species=i,region=Γ_left,value=X0[i])		
 		# !!! QUADRATIC CONVERGENCE
 	end	
 	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
 end
+
+# ╔═╡ ed7d1dc5-af4b-4e15-9eb8-92e346cdbb83
+SolverControl()
 
 # ╔═╡ 05949759-2bb9-475b-b2f4-900b32c30e00
 md"""
@@ -296,8 +302,8 @@ function flux(f,u,edge,data)
 	@inbounds for i=1:(ng-1)
 		# !!! QUADRATIC CONVERGENCE
 		# no more quadratic convergence of Newton's method when applying any flux other than pure diffusion with Diffusivity = 1
-		#f[i] = -(F[i] + c*X[i]*m[i]*v)
-		f[i] = u[i,1]-u[i,2]
+		f[i] = -(F[i] + c*X[i]*m[i]*v)
+		#f[i] = u[i,1]-u[i,2]
 		# !!! QUADRATIC CONVERGENCE
 	end
 
@@ -325,6 +331,7 @@ begin
 		m = [2.0,6.0,21.0]*ufac"g/mol",
 		X0 = [0.2, 0.8, 0.0],
 		mfluxin = 0.01*ufac"kg/(m^2*s)",
+		dt_mf = (0.0,15.0)
 	)
 	
 	(;p,ip,X0)=mydata
@@ -348,11 +355,13 @@ begin
 	inival[ip,:].=p
 	for i=1:ng
 		inival[i,:] .= 1.0/ng
+		#inival[i,:] .= X0[i]
 	end
 
 	control = SolverControl(strategy, sys;)
 		control.handle_exceptions=true
 		control.Δu_opt=1.0e5
+		control.damp_initial=0.5
 
 	if RunSim
 		solt=solve(sys;inival=inival,times,control,verbose="nae")
@@ -490,6 +499,7 @@ end
 # ╠═5f88937b-5802-4a4e-81e2-82737514b9e4
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
+# ╠═ed7d1dc5-af4b-4e15-9eb8-92e346cdbb83
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═e29848dd-d787-438e-9c32-e9c2136aec4f
 # ╟─dac0610e-63d8-409e-961c-caa160d38cca
