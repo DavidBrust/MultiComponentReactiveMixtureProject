@@ -1,7 +1,7 @@
 module FixedBed
 
 using VoronoiFVM
-using LessUnitful
+using LessUnitful, Printf
 using StaticArrays
 using Documenter
 

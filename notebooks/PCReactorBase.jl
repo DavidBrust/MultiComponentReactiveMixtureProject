@@ -40,34 +40,6 @@ __Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=false))
 PlutoUI.TableOfContents(title="Photo Catalytic (PC) Reactor")
   ╠═╡ =#
 
-# ╔═╡ 4dae4173-0363-40bc-a9ca-ce5b4d5224cd
-function grid2D()
-	R=(0:1:7)*ufac"cm"
-	Z=(0:0.05:0.5)*ufac"cm"
-	grid=simplexgrid(R,Z)
-	circular_symmetric!(grid)
-
-	cellmask!(grid,[0.0,0.45].*ufac"cm",[7.0,0.5].*ufac"cm",2) # catalyst region	
-	#cellmask!(grid,[0.0,0.4].*ufac"cm",[5.0,0.5].*ufac"cm",2) # catalyst region
-	bfacemask!(grid, [0.0,0.5].*ufac"cm",[5.0,0.5].*ufac"cm",5) # top inner
-	grid
-end
-
-# ╔═╡ 561e96e2-2d48-4eb6-bb9d-ae167a622aeb
-function grid3D()
-	X=(0:1:14)*ufac"cm"
-	Y=(0:0.05:0.5)*ufac"cm"
-	Z=(0:1:14)*ufac"cm"
-	grid=simplexgrid(X,Y,Z)
-
-	# catalyst region
-	cellmask!(grid,[2,0.0,2].*ufac"cm",[12,0.1,12].*ufac"cm",2)
-	#bfacemask!(grid, [2,1,2].*ufac"cm",[12,1,12].*ufac"cm",7) # mask outflow
-	bfacemask!(grid, [2,0,2].*ufac"cm",[12,0,12].*ufac"cm",7) # mask inflow
-	
-	grid
-end
-
 # ╔═╡ 107a6fa3-60cb-43f0-8b21-50cd1eb5065a
 const dim = 2
 
@@ -79,6 +51,58 @@ if dim == 3
 end
   ╠═╡ =#
 
+# ╔═╡ 832f3c15-b75a-4afe-8cc5-75ff3b4704d6
+begin
+	const Ω_catalyst = 2
+	if dim == 2
+		const Γ_bottom = 1
+		const Γ_side = 2
+		const Γ_sym = 4		
+		const Γ_top_permeable = 5
+		const Γ_top_irradiated = 6
+	else
+		const Γ_side_1 = 1 
+		const Γ_side_2 = 2
+		const Γ_side_3 = 3
+		const Γ_side_4 = 4		
+		const Γ_bottom = 5
+		const Γ_top_permeable = 7
+		const Γ_top_irradiated = 8
+	end
+end;
+
+# ╔═╡ 4dae4173-0363-40bc-a9ca-ce5b4d5224cd
+function grid2D()
+	W=16/2 # axisymmetry, half domain is sufficient
+	H=0.5
+	R=(0:1:W)*ufac"cm"
+	Z=(0:H/10:H)*ufac"cm"
+	grid=simplexgrid(R,Z)
+	circular_symmetric!(grid)
+
+	cellmask!(grid,[0,9/10*H].*ufac"cm",[W,H].*ufac"cm",Ω_catalyst) # catalyst layer	
+	bfacemask!(grid, [0,H].*ufac"cm",[W-1,H].*ufac"cm",Γ_top_permeable)
+	bfacemask!(grid, [0,H].*ufac"cm",[W-2,0.5].*ufac"cm",Γ_top_irradiated) 
+	grid
+end
+
+# ╔═╡ 561e96e2-2d48-4eb6-bb9d-ae167a622aeb
+function grid3D()
+	W=16
+	H=0.5
+	X=(0:1:W)*ufac"cm"
+	Y=(0:1:W)*ufac"cm"
+	Z=(0:H/10:H)*ufac"cm"	
+	grid=simplexgrid(X,Y,Z)
+
+	# catalyst region
+	cellmask!(grid,[0,0,9/10*H].*ufac"cm",[W,W,H].*ufac"cm",Ω_catalyst) # catalyst layer	
+	bfacemask!(grid, [1,1,H].*ufac"cm",[W-1,W-1,H].*ufac"cm",Γ_top_permeable)
+	bfacemask!(grid, [2,2,H].*ufac"cm",[W-2,W-2,H].*ufac"cm",Γ_top_irradiated) 
+	
+	grid
+end
+
 # ╔═╡ a995f83c-6ff7-4b95-a798-ea636ccb1d88
 # ╠═╡ skip_as_script = true
 #=╠═╡
@@ -86,33 +110,11 @@ let
 	if dim == 2
 		gridplot(grid2D(), resolution=(660,300), aspect=4.0, zoom=2.8)
 	else
-		gridplot(grid3D(); xplane=xcut, show=true, outlinealpha=0.0 )
+		#gridplot(grid3D(); xplane=xcut, show=true, outlinealpha=0.0 )
+		gridplot(grid3D(); resolution=(660,460), zoom=1.8, )
 	end
 end
   ╠═╡ =#
-
-# ╔═╡ 832f3c15-b75a-4afe-8cc5-75ff3b4704d6
-begin
-	if dim == 2
-		const Γ_bottom = 1
-		const Γ_outer = 2
-		#const Γ_top_mask = 3
-		const Γ_top_outer = 3
-		const Γ_sym = 4		
-		const Γ_top_inner = 5
-	else
-		# mask inflow
-		const Γ_left = 7 
-		const Γ_right = 3
-		# mask outflow
-		# const Γ_left = 1 
-		# const Γ_right = 7		
-		const Γ_front = 2
-		const Γ_back = 4
-		const Γ_bottom = 5
-		const Γ_top = 6
-	end
-end;
 
 # ╔═╡ a078e1e1-c9cd-4d34-86d9-df4a052b6b96
 md"""
@@ -172,110 +174,6 @@ where $\lambda_{\text{eff}}$ is the effective thermal conductivity. The heat rel
 As part of the initialisation strategy (see next section) the convective contribution of heat flux is ramped up at the same time with the heat transport boundary conditions after the flow field has been established.
 """
 
-# ╔═╡ 5547d7ad-dd58-4b00-8238-6e1abb32874e
-function flux(f,u,edge,data)
-	(;m,ip,iT,dt_hf_enth)=data
-	ng=ngas(data)
-		
-	F = MVector{ng-1,eltype(u)}(undef)
-	X = MVector{ng,eltype(u)}(undef)
-	W = MVector{ng,eltype(u)}(undef)
-	M = MMatrix{ng-1,ng-1,eltype(u)}(undef)
-	D = MMatrix{ng,ng,eltype(u)}(undef)
-
-	pm = 0.5*(u[ip,1]+u[ip,2])
-	Tm = 0.5*(u[iT,1]+u[iT,2])
-	c = pm/(ph"R"*Tm)
-	
-	δp = u[ip,1]-u[ip,2]
-	
-	@inline MoleFrac!(X,u,data)
-	@inline mmix = molarweight_mix(X,data)
-	@inline MassFrac!(X,W,data)
-	
-	
-	#@inline D_matrix!(data, D, Tm, pm)
-	@inline D_matrix!(D, Tm, pm, data)
-	@inline mumix, lambdamix = dynvisc_thermcond_mix(data, Tm, X)
-	lambda_bed=kbed(data,lambdamix)*lambdamix
-	
-	rho = c*mmix
-	v = DarcyVelo(u,data,mumix)
-	
-	f[ip] = -rho*v
-
-	@inline M_matrix!(M, W, D, data)
-	
-	@inbounds for i=1:(ng-1)
-		F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm )*c/mmix
-	end				
-
-	@inline inplace_linsolve!(M,F)
-
-	hf_conv = zero(eltype(u))
-	@inbounds for i=1:(ng-1)
-		f[i] = -(F[i] + c*X[i]*m[i]*v)
-	end
-	@inline hf_conv = f[ip] * enthalpy_mix(data.Fluids, Tm, X) / mmix * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth) 
-	
-	Bp,Bm = fbernoulli_pm(hf_conv/lambda_bed/Tm)
-	f[iT] = lambda_bed*(Bm*u[iT,1]-Bp*u[iT,2])
-end
-
-# ╔═╡ 3bb2deff-7816-4749-9f1e-c1e451372b1e
-function reaction(f,u,node,data)
-	(;m,ip,iT,is_reactive)=data
-	ng=ngas(data)
-
-	if node.region == 2 && is_reactive # catalyst layer
-		(;lcat,kinpar,gni)=data
-		(;rni,nuij)=kinpar
-		
-		pi = MVector{ng,eltype(u)}(undef)
-		for i=1:ng
-            pi[i] = u[ip]*u[i]
-		end
-
-        RR = @inline -lcat*ri(data,u[iT],pi)
-		
-		for i=1:ng
-			f[i] = zero(eltype(u))
-			for j=1:nreac(kinpar)
-				f[i] += nuij[(j-1)*ng+i] * RR[j] * m[i]
-			end			
-		end
-	end
-	
-	for i=1:ng
-		f[ng] += u[i]
-	end
-	f[ng] = f[ng] - 1.0
-end
-
-# ╔═╡ 4af1792c-572e-465c-84bf-b67dd6a7bc93
-function storage(f,u,node,data)
-	(;ip,iT,m,poros,rhos,cs)=data
-	ng=ngas(data)
-
-	c = u[ip]/(ph"R"*u[iT])
-	for i=1:ng
-		f[i]=c*u[i]*m[i]*poros
-	end
-	
-	# total pressure
-	@inline mmix = molarweight_mix(u,data)
-	X=MVector{ng,eltype(u)}(undef)
-	@inline MoleFrac!(X,u,data)
-	@inline cpmix = heatcap_mix(data.Fluids, u[iT], X)
-	
-	f[ip] = mmix*c*poros
-
-	# solid heat capacity is 4 orders of magnitude larger than gas phase heat cap
-	#f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros)
-	f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros) / 200
-	
-end
-
 # ╔═╡ f28be8bd-4ccc-473c-b01f-730f2483ac78
 md"""
 ## Boundary Conditions
@@ -283,7 +181,7 @@ md"""
 
 # ╔═╡ abc28f81-903b-4656-b137-881060ae459c
 function radiosity_window(f,u,bnode,data)
-    (;iT,iTw,G_lamp,uc_window,uc_cat,uc_mask)=data
+    (;iT,iTw,G_lamp,uc_window,uc_cat,uc_mask,irradiated_boundaries)=data
     # irrad. exchange between quartz window (1), cat surface (2), masked sruface (3) 
     tau1_vis=uc_window.tau_vis
     rho1_vis=uc_window.rho_vis
@@ -294,7 +192,8 @@ function radiosity_window(f,u,bnode,data)
     Tglass = u[iTw] # local tempererature of quartz window
     G1_bot_IR = eps1*ph"σ"*Tglass^4
 	G1_bot_vis = 0.0
-    if bnode.region==Γ_top_inner # catalyst layer (2)
+    if bnode.region in irradiated_boundaries
+	#if bnode.region==Γ_top_inner
 		# flux profile measured behind quarz in plane of cat layer
 		G1_bot_vis += G_lamp
 
@@ -304,7 +203,7 @@ end
 
 # ╔═╡ a90c6d87-b442-43e8-ab27-827fab25d4f6
 function top(f,u,bnode,data)
-	(;p,ip,iT,iTw,Tamb,mfluxin,X0,W0,m,mmix0,uc_window,uc_cat,uc_mask,uc_h,Nu,k_nat_conv,dt_hf_enth,dt_hf_irrad)=data
+	(;p,ip,iT,iTw,Tamb,mfluxin,X0,W0,m,mmix0,uc_window,uc_cat,uc_mask,uc_h,Nu,k_nat_conv,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,solve_T_equation)=data
 	ng=ngas(data)
 
 	# irrad. exchange between quartz window (1), cat surface (2), masked surface (3)
@@ -317,84 +216,81 @@ function top(f,u,bnode,data)
 	alpha2_IR=uc_cat.alpha_IR
 	eps2=uc_cat.eps
 
-	#rho3_vis=uc_mask.rho_vis
-	#rho3_IR=uc_mask.rho_IR
-	#alpha3_vis=uc_mask.alpha_vis
-	#alpha3_IR=uc_mask.alpha_IR
-	#eps3=uc_mask.eps
-
 	G1_vis, G1_IR = radiosity_window(f,u,bnode,data)
 	
-	# top boundaries (inlet and mask cross-sections)
-	if bnode.region==Γ_top_inner|| bnode.region==Γ_top_outer
+	if bnode.region in inlet_boundaries
+#	if bnode.region==Γ_top_inner|| bnode.region==Γ_top_outer
 
 		r_mfluxin = mfluxin*ramp(bnode.time; du=(0.1,1), dt=(0.0,1.0))
 		
 		f[ip] = -r_mfluxin # total mass flux
 		for i=1:(ng-1)
 			f[i] = -r_mfluxin*W0[i] # species mass flux
-		end		
-		# heatflux from enthalpy inflow
-		@inline r_hf_enth = mfluxin/mmix0 * enthalpy_mix(data.Fluids, Tamb+100, X0) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
-		
-		# heatflux from irradiation
-		hflux_irrad = (-eps2*ph"σ"*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR) 
-		
-		# heatflux from convection through top chamber
-        Tm=0.5*(u[iT] + u[iTw]) # mean temperature
-        # thermal conductivity at Tm and inlet composition X0 (H2/CO2 = 1/1)
-        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X0)
-		dh=2*uc_h
-		kconv=Nu*λf/dh*ufac"W/(m^2*K)"
-		hflux_conv = kconv*(u[iT]-Tm)
-		
-		f[iT] = -r_hf_enth +(-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
-		
-		# calculate local window temperature from (local) flux balance
-		hflux_conv_top_w = k_nat_conv*(u[iTw]-Tamb)
-		G2_vis = rho2_vis*G1_vis		
-		G2_IR = eps2*ph"σ"*u[iT]^4 + rho2_IR*G1_IR
-		hflux_abs_w = alpha1_vis*G2_vis + alpha1_IR*G2_IR + alpha1_IR*ph"σ"*Tamb^4
-		hflux_emit_w = uc_window.eps*ph"σ"*u[iTw]^4
-		f[iTw] = -hflux_conv -hflux_abs_w +hflux_conv_top_w +2*hflux_emit_w
-		
-	# elseif bnode.region==Γ_top_mask
-	#
-	#	flux_irrad = -eps3*ph"σ"*u[iT]^4 + alpha3_vis*G1_vis + alpha3_IR*G1_IR
-	#	G3_vis = rho3_vis*G1_vis		
-	#	G3_IR = eps3*ph"σ"*u[iT]^4 + rho3_IR*G1_IR
-	#	flux_abs_w = alpha1_vis*G3_vis + alpha1_IR*G3_IR
-	#
-	#	f[iT] = -flux_irrad
+		end
+
+	end
+
+	if solve_T_equation
+		if bnode.region in inlet_boundaries
+			# heatflux from enthalpy inflow
+			@inline r_hf_enth = mfluxin/mmix0 * enthalpy_mix(data.Fluids, Tamb+100, X0) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
+			f[iT] = -r_hf_enth
+
+			if bnode.region in irradiated_boundaries
+				# heatflux from irradiation
+				hflux_irrad = (-eps2*ph"σ"*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR) 
+				
+				# heatflux from convection through top chamber
+		        Tm=0.5*(u[iT] + u[iTw]) # mean temperature
+		        # thermal conductivity at Tm and inlet composition X0 (H2/CO2 = 1/1)
+		        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X0)
+				dh=2*uc_h
+				kconv=Nu*λf/dh*ufac"W/(m^2*K)"
+				hflux_conv = kconv*(u[iT]-Tm)
+				
+				f[iT] += (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+				
+				# calculate local window temperature from (local) flux balance
+				hflux_conv_top_w = k_nat_conv*(u[iTw]-Tamb)
+				G2_vis = rho2_vis*G1_vis		
+				G2_IR = eps2*ph"σ"*u[iT]^4 + rho2_IR*G1_IR
+				hflux_abs_w = alpha1_vis*G2_vis + alpha1_IR*G2_IR + alpha1_IR*ph"σ"*Tamb^4
+				hflux_emit_w = uc_window.eps*ph"σ"*u[iTw]^4
+				f[iTw] = -hflux_conv -hflux_abs_w +hflux_conv_top_w +2*hflux_emit_w
+			end
+		end
 	end
 	
 end
 
 # ╔═╡ 7f8955d2-5f0b-4217-b08d-e3f53849dbec
 function side(f,u,bnode,data)
-	# side wall boundary condition
-	(;iT,k_nat_conv,delta_gap,Tamb)=data
+	(;iT,k_nat_conv,delta_gap,Tamb,side_boundaries,solve_T_equation)=data
 	ng=ngas(data)
+
+	if solve_T_equation
+		if bnode.region in side_boundaries
 	
-	# all sides for complete domain
-	if bnode.region==Γ_outer
-
-		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
-		X=MVector{ng,eltype(u)}(undef)
-		@inline MoleFrac!(X,u,data)
-		@inline _,λf=dynvisc_thermcond_mix(data, u[iT], X)
-
-		# w/o shell height
-		f[iT] = (u[iT]-Tamb)/(delta_gap/λf+1/k_nat_conv)
-		
+			# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
+			X=MVector{ng,eltype(u)}(undef)
+			@inline MoleFrac!(X,u,data)
+			@inline _,λf=dynvisc_thermcond_mix(data, u[iT], X)
+	
+			# w/o shell height
+			f[iT] = (u[iT]-Tamb)/(delta_gap/λf+1/k_nat_conv)
+			
+		end
 	end
 end
 
 # ╔═╡ 85439b96-fe21-4b2c-8695-f7088305112f
 function bottom(f,u,bnode,data)
-	(;iT,iTp,k_nat_conv,Tamb,lc_h,Nu,dt_hf_irrad,lc_frit,lc_plate) = data
+	(;iT,iTp,k_nat_conv,Tamb,lc_h,Nu,dt_hf_irrad,lc_frit,lc_plate,solve_T_equation,outlet_boundaries) = data
 	ng=ngas(data)
-	if bnode.region == Γ_bottom
+	
+	#if bnode.region == Γ_bottom
+	
+	if solve_T_equation && bnode.region in outlet_boundaries
 
 		# irradiation heat flux
 		rho1_IR=lc_frit.rho_IR
@@ -435,60 +331,44 @@ end
 
 # ╔═╡ 5f88937b-5802-4a4e-81e2-82737514b9e4
 function bcond(f,u,bnode,data)
-	(;p,ip,iT,Tamb,mfluxin,X0,W0,m,mmix0,dt_mf)=data
+	(;p,ip,outlet_boundaries)=data
 	ng=ngas(data)
 		
-	if dim==2		
-		top(f,u,bnode,data)
-		side(f,u,bnode,data)
-		bottom(f,u,bnode,data)
-		
-		boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_bottom,value=p)
-	else
-		#boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_left,value=Tamb)
-		r_mfluxin = mfluxin*ramp(bnode.time; du=(0.1,1), dt=dt_mf)
-		for i=1:(ng-1)
-		boundary_neumann!(f,u,bnode, species=i,region=Γ_left,value=r_mfluxin*W0[i])
+	#if dim==2		
+		FixedBed.PCR_top(f,u,bnode,data)
+		#top(f,u,bnode,data)
+		#side(f,u,bnode,data)
+		FixedBed.PCR_side(f,u,bnode,data)
+		#bottom(f,u,bnode,data)
+		FixedBed.PCR_bottom(f,u,bnode,data)
+	
+		for boundary in outlet_boundaries
+			boundary_dirichlet!(f,u,bnode, species=ip,region=boundary,value=p)
 		end
-		boundary_neumann!(f,u,bnode, species=ip, region=Γ_left, value=r_mfluxin)
-		boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
-		#boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_right,value=Tamb)
-	end
-end
-
-# ╔═╡ 389a4798-a9ee-4e9c-8b44-a06201b4c457
-function boutflow(f,u,edge,data)
-	(;iT,iTp,ip,m,lc_frit,lc_plate,dt_hf_enth)=data
-	ng=ngas(data)
-
-	k=outflownode(edge)
-	pout = u[ip,k]
-	cout = pout/(ph"R"*u[iT,k])
-	X = MVector{ng,eltype(u)}(undef)
-	
-	for i=1:ng
-		X[i] = u[i,k]
-	end
-	@inline mumix, _ = dynvisc_thermcond_mix(data, u[iT,k], X)
-	v = DarcyVelo(u,data,mumix)
-	
-	for i=1:(ng-1)
-		f[i] = v*cout*u[i,k]*m[i] # species mass flux at outflow
-	end
-	# convective heat flux
-	@inline r_hf_conv = v *cout * enthalpy_mix(data.Fluids, u[iT,k], X) * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth)
-
-	f[iT] = r_hf_conv
+		#boundary_dirichlet!(f,u,bnode, species=ip,region=outlet_boundaries,value=p)
+	#else
+	#	#boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_left,value=Tamb)
+	#	r_mfluxin = mfluxin*ramp(bnode.time; du=(0.1,1), dt=dt_mf)
+	#	for i=1:(ng-1)
+	#	boundary_neumann!(f,u,bnode, species=i,region=Γ_left,value=r_mfluxin*W0[i])
+	#	end
+	#	boundary_neumann!(f,u,bnode, species=ip, region=Γ_left, value=r_mfluxin)
+	#	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
+	#	#boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_right,value=Tamb)
+	#end
 end
 
 # ╔═╡ ee797850-f5b5-4178-be07-28192c04252d
 function bflux(f,u,bedge,data)
+	(;irradiated_boundaries,outlet_boundaries)=data
 	# window temperature distribution
-	if bedge.region == Γ_top_inner || bedge.region == Γ_top_outer
+	#if bedge.region == Γ_top_inner || bedge.region == Γ_top_outer
 	#if bedge.region == Γ_top_inner
+	
+	if bedge.region in irradiated_boundaries # window, upper chamber
 		(;iTw,lambda_window) = data
 		f[iTw] = lambda_window * (u[iTw, 1] - u[iTw, 2])
-	elseif bedge.region == Γ_bottom
+	elseif bedge.region in outlet_boundaries # bottom plate, lower chamber
 		(;iTp,lambda_Al) = data
 		f[iTp] = lambda_Al * (u[iTp, 1] - u[iTp, 2])
 	end
@@ -496,10 +376,11 @@ end
 
 # ╔═╡ b375a26d-3ee6-4b69-9bd8-c69c3e193dc9
 function bstorage(f,u,bnode,data)
-	if bnode.region == Γ_top_inner|| bnode.region == Γ_top_outer
+	(;irradiated_boundaries,outlet_boundaries)=data
+	if bnode.region in irradiated_boundaries # window, upper chamber
 		(;iTw) = data
 		f[iTw] = u[iTw]
-	elseif bnode.region == Γ_bottom
+	elseif bnode.region in outlet_boundaries # bottom plate, lower chamber
 		(;iTp) = data
 		f[iTp] = u[iTp]
 	end
@@ -507,47 +388,51 @@ end
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
 #=╠═╡
-begin
-	
-	if dim == 1
-		mygrid=grid1D()
-		strategy = nothing
-		times=[0,0.1]
-	elseif dim == 2
+begin	
+	if dim == 2
 		mygrid=grid2D()
+		inb = [Γ_top_permeable,Γ_top_irradiated]
+		irrb = [Γ_top_irradiated]
+		outb = [Γ_bottom]
+		sb = [Γ_side]
 		strategy = nothing
 		times=[0,12.0]
 	else
 		mygrid=grid3D()
+		inb = [Γ_top_permeable,Γ_top_irradiated]
+		irrb = [Γ_top_irradiated]
+		outb = [Γ_bottom]
+		sb = [Γ_side_1,Γ_side_2,Γ_side_3,Γ_side_4]
 		strategy = GMRESIteration(UMFPACKFactorization())
-		times=[0,20.0]
+		#times=[0,20.0]
+		times=[0,0.1]
 	end
-	#mydata=ModelData()
-	mydata=ReactorData(rhos=10.0*ufac"kg/m^3") # set solid density to low value to reduce thermal inertia of system
+	
+	mydata=ReactorData(
+		inlet_boundaries=inb,
+		irradiated_boundaries=irrb,
+		outlet_boundaries=outb,
+		side_boundaries=sb,
+		rhos=10.0*ufac"kg/m^3") # set solid density to low value to reduce thermal inertia of system
 	(;p,ip,Tamb,iT,iTw,iTp,X0)=mydata
 	ng=ngas(mydata)
 	
 	sys=VoronoiFVM.System( 	mygrid;
 							data=mydata,
 							flux=FixedBed.DMS_flux,
-							#flux=flux,
 							reaction=FixedBed.DMS_reaction,
-							#reaction=reaction,
 							storage=FixedBed.DMS_storage,
-							#storage=storage,
-							bcondition=bcond,
-							bflux=bflux,
-							bstorage=bstorage,
+							bcondition=FixedBed.PCR_bcond,
+							bflux=FixedBed.PCR_bflux,
+							bstorage=FixedBed.PCR_bstorage,
 							boutflow=FixedBed.DMS_boutflow,
-							#boutflow=boutflow,	
-							outflowboundaries=
-								[dim == 2 ? Γ_bottom : Γ_right],
+							outflowboundaries=outb,
 							assembly=:edgewise
 							)
 
 	enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
-	enable_boundary_species!(sys, iTw, [Γ_top_inner,Γ_top_outer]) # window temperature as boundary species in upper chamber
-	enable_boundary_species!(sys, iTp, [Γ_bottom]) # plate temperature as boundary species in lower chamber
+	enable_boundary_species!(sys, iTw, irrb) # window temperature as boundary species in upper chamber
+	enable_boundary_species!(sys, iTp, outb) # plate temperature as boundary species in lower chamber
 	inival=unknowns(sys)
 
 	inival[ip,:].=p
@@ -558,19 +443,21 @@ begin
 	end
 
 
-	nd_ids = unique(mygrid[CellNodes][:,mygrid[CellRegions] .== 2])
+	nd_ids = unique(mygrid[CellNodes][:,mygrid[CellRegions] .== Ω_catalyst])
 	cat_vol = sum(nodevolumes(sys)[nd_ids])
 	mydata.lcat = mydata.mcat/cat_vol
-    area_inner = bareas(Γ_top_inner,sys,mygrid)
-    area_outer = bareas(Γ_top_outer,sys,mygrid)
-	mydata.mfluxin = mydata.mflowin / (area_inner+area_outer)
+	local Ain = 0.0
+	for boundary in inb
+		Ain += bareas(boundary,sys,mygrid)
+	end
+	mydata.mfluxin = mydata.mflowin / Ain
+    #area_inner = bareas(Γ_top_inner,sys,mygrid)
+    #area_outer = bareas(Γ_top_outer,sys,mygrid)
+	#mydata.mfluxin = mydata.mflowin / (area_inner+area_outer)
 		
 	control = SolverControl(strategy, sys;)
-		control.Δt_min=1.0e-6
-		control.Δt_max=1.0
-		#control.maxiters=200
 		control.handle_exceptions=true
-		control.Δu_opt=100.0
+		control.Δu_opt=1000.0
 
 	function post(sol,oldsol, t, Δt)
 		@info "t= "*string(round(t,sigdigits=2))*"\t Δt= "*string(round(Δt,sigdigits=2))		 
@@ -579,18 +466,6 @@ begin
 		solt=solve(sys;inival=inival,times,control,post,verbose="nae")
 	end
 end;
-  ╠═╡ =#
-
-# ╔═╡ 8923e9e0-14df-4033-a4f7-0b36c316a22c
-#=╠═╡
-let
-	(;X0,Tamb,ng,gni,Fluids) = mydata
-	X = zeros(ng)
-	X[gni[:N2]] = 1.0
-	X
-	#@time heatcap_mix(Fluids, Tamb, X)
-	#@time heatcap_mix(mydata, Tamb, X)
-end
   ╠═╡ =#
 
 # ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
@@ -619,15 +494,59 @@ The mass flow boundary condition into the reactor domain is "ramped up" starting
 sol = solt(t);
   ╠═╡ =#
 
+# ╔═╡ b13a76c9-509d-4367-8428-7b5b316ff1ed
+#=╠═╡
+FixedBed.DMS_checkinout(sol,sys,mydata)
+  ╠═╡ =#
+
+# ╔═╡ 7c7d2f10-d8d2-447e-874b-7be365e0b00c
+# ╠═╡ skip_as_script = true
+#=╠═╡
+let
+	(;gn,gni,m,nflowin,X0) = mydata
+	ng=ngas(mydata)
+	in_,out_=FixedBed.DMS_checkinout(sol,sys,mydata)
+
+	nout(i) = -out_[i]/m[i]
+	nin(i) = nflowin*X0[i]
+	nout_dry = 0.0
+	
+	println("Molar species in- & outflows:")
+	for i = 1:ng
+		@printf "%s\tIN: %2.2f\t OUT: %2.2f mol/hr\n" gn[i] nin(i)/ufac"mol/hr" nout(i)/ufac"mol/hr"
+		if i != gni[:H2O] 
+			nout_dry += nout(i)
+		end
+	end
+
+
+	println("\nDry Product Molar Fractions:")
+	for i=1:ng
+		if i != gni[:H2O] && i != gni[:N2] 
+		@printf "%3s: %2.1f%%\n" gn[i] nout(i)/nout_dry*100
+		end
+	end
+	
+	println("\nConversion:")
+	for i in(gni[:CO2],gni[:H2])
+		@printf "X%4s: %2.2f\n" gn[i] (nin(i)-nout(i))/nin(i)
+	end
+	println("\nYield & Selectivity (CO2 based):")
+	for i in(gni[:CO],gni[:CH4])
+		@printf "Y%4s: %2.2f \tS%4s: %2.2f\n" gn[i] nout(i)/nin(gni[:CO2]) gn[i] nout(i)/(nin(gni[:CO2])-nout(gni[:CO2]))
+	end
+end
+  ╠═╡ =#
+
 # ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
 #=╠═╡
 let
-	(;m,ip,gn,poros,mflowin,W0)=mydata
+	(;m,ip,gn,poros,mflowin,W0,outlet_boundaries,inlet_boundaries)=mydata
 	ng=ngas(mydata)
 	vis=GridVisualizer(resolution=(600,300), xlabel="Time / s", ylabel="Molar flow / Total Moles")
 	
 	tfact=TestFunctionFactory(sys)	
-	tf_out=testfunction(tfact,[Γ_top_inner,Γ_top_outer],[Γ_bottom])
+	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
 		
 	inflow_rate=Float64[]
 	outflow_rate=Float64[]
@@ -645,8 +564,8 @@ let
 		ifr=mflowin*W_*ramp(solt.t[i]; du=(0.1,1), dt=(0.0,1.0))
 		push!(inflow_rate,ifr/m_)		
 		push!(outflow_rate,ofr[k]/m_)		
-		rr = integrate(sys,reaction,solt[i])[k,2]
-		amount = sum(integrate(sys,storage,solt[i]), dims=2)[k]
+		rr = integrate(sys,sys.physics.reaction,solt[i])[k,2]
+		amount = sum(integrate(sys,sys.physics.storage,solt[i]), dims=2)[k]
 		push!(reaction_rate, rr/m_)
 		push!(stored_amount, amount/m_)
    	end
@@ -686,7 +605,7 @@ md"""
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	(;iT,iTw,iTp)=mydata
+	(;iT,iTw,iTp,irradiated_boundaries,outlet_boundaries)=mydata
 	vis=GridVisualizer(layout=(3,1), resolution=(680,900))
 	scalarplot!(vis[1,1],mygrid, sol[iT,:] .- 273.15, zoom = 2.8, aspect=4.0)
 
@@ -696,11 +615,11 @@ let
 		#a[2]=b[2]
 	end
     # window
-	bgridw = subgrid(mygrid, [Γ_top_inner]; boundary = true, transform = _2to1)
+	bgridw = subgrid(mygrid, irradiated_boundaries; boundary = true, transform = _2to1)
 	bsolw=view(sol[iTw, :], bgridw)
 	scalarplot!(vis[2,1],bgridw, bsolw.-273.15, resolution=(680,200))
 	# bottom plate
-	bgridp = subgrid(mygrid, [Γ_bottom]; boundary = true, transform = _2to1)
+	bgridp = subgrid(mygrid, outlet_boundaries; boundary = true, transform = _2to1)
 	bsolp=view(sol[iTp, :], bgridp)
 	scalarplot!(vis[3,1],bgridp, bsolp.-273.15,resolution=(680,200),show=true)	
 end
@@ -935,64 +854,6 @@ md"""
 ## Auxiliary
 """
 
-# ╔═╡ 1224970e-8a59-48a9-b0ef-76ed776ca15d
-function checkinout(sys,sol)	
-	tfact=TestFunctionFactory(sys)
-	if dim == 2
-		tf_in=testfunction(tfact,[Γ_bottom],[Γ_top_inner,Γ_top_outer])
-		tf_out=testfunction(tfact,[Γ_top_inner,Γ_top_outer],[Γ_bottom])
-	else
-		tf_in=testfunction(tfact,[Γ_right],[Γ_left])
-		tf_out=testfunction(tfact,[Γ_left],[Γ_right])
-	end
-
-	(;in=integrate(sys,tf_in,sol),out=integrate(sys,tf_out,sol) )
-end
-
-# ╔═╡ b13a76c9-509d-4367-8428-7b5b316ff1ed
-#=╠═╡
-checkinout(sys,sol)
-  ╠═╡ =#
-
-# ╔═╡ 7c7d2f10-d8d2-447e-874b-7be365e0b00c
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	(;gn,gni,m,nflowin,X0) = mydata
-	ng=ngas(mydata)
-	in_,out_=checkinout(sys,sol)
-
-	nout(i) = -out_[i]/m[i]
-	nin(i) = nflowin*X0[i]
-	nout_dry = 0.0
-	
-	println("Molar species in- & outflows:")
-	for i = 1:ng
-		@printf "%s\tIN: %2.2f\t OUT: %2.2f mol/hr\n" gn[i] nin(i)/ufac"mol/hr" nout(i)/ufac"mol/hr"
-		if i != gni[:H2O] 
-			nout_dry += nout(i)
-		end
-	end
-
-
-	println("\nDry Product Molar Fractions:")
-	for i=1:ng
-		if i != gni[:H2O] && i != gni[:N2] 
-		@printf "%3s: %2.1f%%\n" gn[i] nout(i)/nout_dry*100
-		end
-	end
-	
-	println("\nConversion:")
-	for i in(gni[:CO2],gni[:H2])
-		@printf "X%4s: %2.2f\n" gn[i] (nin(i)-nout(i))/nin(i)
-	end
-	println("\nYield & Selectivity (CO2 based):")
-	for i in(gni[:CO],gni[:CH4])
-		@printf "Y%4s: %2.2f \tS%4s: %2.2f\n" gn[i] nout(i)/nin(gni[:CO2]) gn[i] nout(i)/(nin(gni[:CO2])-nout(gni[:CO2]))
-	end
-end
-  ╠═╡ =#
-
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─6da83dc0-3b0c-4737-833c-6ee91552ff5c
@@ -1003,34 +864,29 @@ end
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═107a6fa3-60cb-43f0-8b21-50cd1eb5065a
 # ╠═832f3c15-b75a-4afe-8cc5-75ff3b4704d6
-# ╠═8923e9e0-14df-4033-a4f7-0b36c316a22c
 # ╟─a078e1e1-c9cd-4d34-86d9-df4a052b6b96
 # ╟─0fadb9d2-1ccf-4d44-b748-b76d911784ca
 # ╟─b94513c2-c94e-4bcb-9342-47ea48fbfd14
 # ╟─c886dd12-a90c-40ab-b9d0-32934c17baee
 # ╟─8f2549f4-b0a6-440f-af94-6880e0814dc2
 # ╟─78589a1e-2507-4279-ba42-1aaec90d87d0
-# ╠═5547d7ad-dd58-4b00-8238-6e1abb32874e
-# ╠═3bb2deff-7816-4749-9f1e-c1e451372b1e
-# ╠═4af1792c-572e-465c-84bf-b67dd6a7bc93
 # ╟─f28be8bd-4ccc-473c-b01f-730f2483ac78
 # ╠═abc28f81-903b-4656-b137-881060ae459c
 # ╠═a90c6d87-b442-43e8-ab27-827fab25d4f6
 # ╠═7f8955d2-5f0b-4217-b08d-e3f53849dbec
 # ╠═85439b96-fe21-4b2c-8695-f7088305112f
 # ╠═5f88937b-5802-4a4e-81e2-82737514b9e4
-# ╠═389a4798-a9ee-4e9c-8b44-a06201b4c457
 # ╠═ee797850-f5b5-4178-be07-28192c04252d
 # ╠═b375a26d-3ee6-4b69-9bd8-c69c3e193dc9
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
 # ╠═b13a76c9-509d-4367-8428-7b5b316ff1ed
-# ╠═7c7d2f10-d8d2-447e-874b-7be365e0b00c
+# ╟─7c7d2f10-d8d2-447e-874b-7be365e0b00c
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-# ╠═5d5ac33c-f738-4f9e-bcd2-efc43b638109
+# ╟─5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
-# ╠═99b59260-7651-45d0-b364-4f86db9927f8
+# ╟─99b59260-7651-45d0-b364-4f86db9927f8
 # ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
 # ╟─111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╟─eb9dd385-c4be-42a2-8565-cf3cc9b2a078
@@ -1045,4 +901,3 @@ end
 # ╟─0d507c5e-eb0f-4094-a30b-a4a82fd5c302
 # ╠═5bbe72b2-2f80-4dae-9706-7ddb0b8b6dbe
 # ╟─67adda35-6761-4e3c-9d05-81e5908d9dd2
-# ╠═1224970e-8a59-48a9-b0ef-76ed776ca15d

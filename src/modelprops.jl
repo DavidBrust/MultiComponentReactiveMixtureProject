@@ -170,10 +170,10 @@ Reaction function definition for use with VoronoiFVM.jl for the Darcy-Maxwell-St
     (DMS) model for Multi-component gas transport in porous media.
 """
 function DMS_reaction(f,u,node,data)
-	(;m,ip,is_reactive)=data
+	(;m,ip,is_reactive,catalyst_regions)=data
 	ng=ngas(data)
 
-	if node.region == 2 && is_reactive # catalyst layer
+	if node.region in catalyst_regions && is_reactive # catalyst layer
 		(;lcat,kinpar,iT,Tamb,solve_T_equation)=data
 		(;nuij)=kinpar
 		
@@ -395,25 +395,27 @@ end
 
 
 @kwdef mutable struct ReactorData{NG, KP}
+    # time constants for ramp functions
     dt_mf::Tuple{Float64, Float64}=(0.0,1.0)
 	dt_hf_enth::Tuple{Float64, Float64}=(2.0,10.0)
 	dt_hf_irrad::Tuple{Float64, Float64}=(3.0,10.0)
+
+    # vectors holding boundary information
+    inlet_boundaries::Vector{Int64}
+    irradiated_boundaries::Vector{Int64}
+    outlet_boundaries::Vector{Int64}
+    side_boundaries::Vector{Int64}
+    catalyst_regions::Vector{Int64} =[2]
+    impermeable_regions::Vector{Int64} =[3]
+
     kinpar::KP = XuFroment
     ng::Int64 = kinpar.ng
-	mcat::Float64=500.0*ufac"mg"
-	Vcat::Float64=1.0*ufac"m^2"*0.02*ufac"cm"
-	lcat::Float64=mcat/Vcat
 
-	# upper and lower chamber heights for calculation of conduction/convection b.c.
-	uc_h::Float64=17.0*ufac"mm"
-	lc_h::Float64=18.0*ufac"mm"
-	Nu::Float64=4.861
-	
-	# switches to control the simulation
+    # switches to control the simulation
 	is_reactive::Bool = true
     solve_T_equation::Bool = true
     constant_properties::Bool = false
-	
+
 	#ip::Int64 = NG+1
     ip::Int64 = ng+1
 	iT::Int64 = ip+1
@@ -456,8 +458,16 @@ end
 	#mfluxin::Float64 = 0.007*ufac"kg/(m^2*s)"
 	#nfluxin::Float64 = mfluxin/mmix0
 
-	G_lamp::Float64 = 70.0*ufac"kW/m^2"
-	
+    # catalyst mass, volume and loading
+	mcat::Float64=500.0*ufac"mg"
+	Vcat::Float64=1.0*ufac"m^2"*0.02*ufac"cm"
+	lcat::Float64=mcat/Vcat
+
+	# upper and lower chamber heights for calculation of conduction/convection b.c.
+	uc_h::Float64=17.0*ufac"mm"
+	lc_h::Float64=18.0*ufac"mm"
+	Nu::Float64=4.861	
+
 	# optical properties of surfaces in IR/visible ranges
 	uc_window::SurfaceOpticalProps = uc_window
 	uc_cat::SurfaceOpticalProps = uc_cat
@@ -468,6 +478,7 @@ end
 	# reactor data
 	delta_gap::Float64=1.5*ufac"mm" # gas gap between frit and reactor wall
 	k_nat_conv::Float64=17.5*ufac"W/(m^2*K)" # natural convection heat transfer coeff.
+    G_lamp::Float64 = 70.0*ufac"kW/m^2"
 
 	# VitraPor data
 	dp::Float64=200.0*ufac"μm" # average pore size, por class 0
@@ -484,15 +495,258 @@ end
 	lambda_window::Float64=1.38*ufac"W/(m*K)"
 	lambda_Al::Float64=235.0*ufac"W/(m*K)"
 
-    function ReactorData(dt_mf,dt_hf_enth,dt_hf_irrad,kinpar,ng,mcat,Vcat,lcat,uc_h,lc_h,Nu,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,G_lamp,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,k_nat_conv,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+    function ReactorData(dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,k_nat_conv,G_lamp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
         KP = FixedBed.KinData{nreac(kinpar)}
-        new{ng,KP}(dt_mf,dt_hf_enth,dt_hf_irrad,kinpar,ng,mcat,Vcat,lcat,uc_h,lc_h,Nu,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,G_lamp,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,k_nat_conv,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+        new{ng,KP}(dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,k_nat_conv,G_lamp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
 
     end
 end
 
 ngas(::ReactorData{NG,KP}) where {NG,KP} = NG
 
+@doc raw"""
+Helper function to calculate flux integrals over in- and outflow boundaries in 
+    the Darcy-Maxwell-Stefan (DMS) model.
+"""
+function DMS_checkinout(sol,sys,data)	
+	(;inlet_boundaries,outlet_boundaries)=data
+	tfact=TestFunctionFactory(sys)
+
+	tf_in=testfunction(tfact,outlet_boundaries,inlet_boundaries)
+	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
+	
+	(;in=integrate(sys,tf_in,sol),out=integrate(sys,tf_out,sol) )
+end
+
+@doc raw"""
+Helper function to print a summary based on calculated flux integrals over in- 
+    and outflow boundaries in the Darcy-Maxwell-Stefan (DMS) model.
+"""
+function DMS_print_summary(sol,grid,sys,data)
+    (;ip,m,mfluxin,mmix0,X0,ng,inlet_boundaries) = data
+    in_,out_=DMS_checkinout(sol,sys,data)
+
+    nout(i) = out_[i]/m[i]
+    local Ain = 0.0
+	for boundary in inlet_boundaries
+		Ain += bareas(boundary,sys,grid)
+	end
+    nin(i) = mfluxin/mmix0*Ain*X0[i]
+
+    RI=sum(integrate(sys,sys.physics.reaction,sol),dims=2) # reaction integral
+
+    println("Total mass inflows and outflows:")
+    @printf "IN: %2.6e \t OUT: %2.6e \t REACT: %2.6e kg/hr \nSUM: %2.6e kg/hr\n\n" in_[ip]/ufac"kg/hr" out_[ip]/ufac"kg/hr" RI[ip]/ufac"kg/hr" (in_[ip]+out_[ip]+RI[ip])/ufac"kg/hr"
+
+    println("Molar species inflows, outflows and reaction integrals:")
+    for i = 1:ng
+        @printf "%i\tIN: %2.6e \t OUT: %2.6e \t REACT: %2.6e mol/hr \n\tSUM: %2.6e mol/hr\n" i nin(i)/ufac"mol/hr" nout(i)/ufac"mol/hr" -RI[i]/m[i]/ufac"mol/hr" (nin(i)+nout(i)-RI[i]/m[i])/ufac"mol/hr"
+    end
+end
+
+@doc raw"""
+Helper function to calculate radiation emitted from the window towards the surface
+    of the catalyst layer in the upper chamber in the photo thermal catalytic
+    reactor (PCR) model.
+"""
+function radiosity_window(f,u,bnode,data)
+    (;iT,iTw,G_lamp,uc_window,uc_cat,uc_mask,irradiated_boundaries)=data
+    # irrad. exchange between quartz window (1), cat surface (2), masked sruface (3) 
+    tau1_vis=uc_window.tau_vis
+    rho1_vis=uc_window.rho_vis
+    tau1_IR=uc_window.tau_IR
+    rho1_IR=uc_window.rho_IR
+    eps1=uc_window.eps
+
+    Tglass = u[iTw] # local tempererature of quartz window
+    G1_bot_IR = eps1*ph"σ"*Tglass^4
+	G1_bot_vis = 0.0
+    if bnode.region in irradiated_boundaries
+	#if bnode.region==Γ_top_inner
+		# flux profile measured behind quarz in plane of cat layer
+		G1_bot_vis += G_lamp
+
+    end
+    return G1_bot_vis,G1_bot_IR
+end
+
+@doc raw"""
+Function defining the top/inlet boundary condition in the photo thermal catalytic
+    reactor (PCR) model.
+"""
+function PCR_top(f,u,bnode,data)
+	(;ip,iT,iTw,Tamb,mfluxin,X0,W0,mmix0,uc_window,uc_cat,uc_h,Nu,k_nat_conv,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,solve_T_equation)=data
+	ng=ngas(data)
+
+	# irrad. exchange between quartz window (1), cat surface (2), masked surface (3)
+	alpha1_vis=uc_window.alpha_vis
+	alpha1_IR=uc_window.alpha_IR
+	
+	rho2_vis=uc_cat.rho_vis
+	rho2_IR=uc_cat.rho_IR
+	alpha2_vis=uc_cat.alpha_vis
+	alpha2_IR=uc_cat.alpha_IR
+	eps2=uc_cat.eps
+
+	G1_vis, G1_IR = radiosity_window(f,u,bnode,data)
+	
+	if bnode.region in inlet_boundaries
+		r_mfluxin = mfluxin*ramp(bnode.time; du=(0.1,1), dt=dt_mf)
+		
+		f[ip] = -r_mfluxin # Neumann bc. for total mass flux
+		for i=1:(ng-1)
+			f[i] = -r_mfluxin*W0[i] # Neumann bc. for species mass flux
+		end
+
+	end
+
+	if solve_T_equation
+		if bnode.region in inlet_boundaries
+			# heatflux from enthalpy inflow
+			@inline r_hf_enth = mfluxin/mmix0 * enthalpy_mix(data.Fluids, Tamb+100, X0) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
+			f[iT] = -r_hf_enth
+
+			if bnode.region in irradiated_boundaries
+				# heatflux from irradiation
+				hflux_irrad = (-eps2*ph"σ"*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR) 
+				
+				# heatflux from convection through top chamber
+		        Tm=0.5*(u[iT] + u[iTw]) # mean temperature
+		        # thermal conductivity at Tm and inlet composition X0 (H2/CO2 = 1/1)
+		        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X0)
+				dh=2*uc_h
+				kconv=Nu*λf/dh*ufac"W/(m^2*K)"
+				hflux_conv = kconv*(u[iT]-Tm)
+				
+				f[iT] += (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+				
+				# calculate local window temperature from (local) flux balance
+				hflux_conv_top_w = k_nat_conv*(u[iTw]-Tamb)
+				G2_vis = rho2_vis*G1_vis		
+				G2_IR = eps2*ph"σ"*u[iT]^4 + rho2_IR*G1_IR
+				hflux_abs_w = alpha1_vis*G2_vis + alpha1_IR*G2_IR + alpha1_IR*ph"σ"*Tamb^4
+				hflux_emit_w = uc_window.eps*ph"σ"*u[iTw]^4
+				f[iTw] = -hflux_conv -hflux_abs_w +hflux_conv_top_w +2*hflux_emit_w
+			end
+		end
+	end
+	
+end
+
+@doc raw"""
+Function defining the side boundary condition in the photo thermal catalytic
+    reactor (PCR) model.
+"""
+function PCR_side(f,u,bnode,data)
+	(;iT,k_nat_conv,delta_gap,Tamb,side_boundaries,solve_T_equation)=data
+	ng=ngas(data)
+
+	if solve_T_equation && bnode.region in side_boundaries
+	    X=MVector{ng,eltype(u)}(undef)
+        @inline MoleFrac!(X,u,data)
+        @inline _,λf=dynvisc_thermcond_mix(data, u[iT], X)
+
+        # w/o shell height
+        f[iT] = (u[iT]-Tamb)/(delta_gap/λf+1/k_nat_conv)			
+    end
+end
+
+@doc raw"""
+Function defining the bottom/outlet boundary condition in the photo thermal catalytic
+    reactor (PCR) model.
+"""
+function PCR_bottom(f,u,bnode,data)
+	(;iT,iTp,k_nat_conv,Tamb,lc_h,Nu,dt_hf_irrad,lc_frit,lc_plate,solve_T_equation,outlet_boundaries) = data
+	ng=ngas(data)
+	
+	if solve_T_equation && bnode.region in outlet_boundaries
+
+		# irradiation heat flux
+		rho1_IR=lc_frit.rho_IR
+		alpha1_IR=lc_frit.alpha_IR
+		eps1=lc_frit.eps
+		rho2_IR=lc_plate.rho_IR
+		alpha2_IR=lc_plate.alpha_IR
+		eps2=lc_plate.eps
+
+		# heatflux from irradiation exchange with bottom plate
+		Tplate = u[iTp]	
+		hflux_irrad = -eps1*ph"σ"*u[iT]^4 + alpha1_IR/(1-rho1_IR*rho2_IR)*(eps2*ph"σ"*Tplate^4+rho2_IR*eps1*ph"σ"*u[iT]^4)
+	
+		# heatflux from convective/conductive heat exchange with bottom plate
+		Tm=0.5*(u[iT] + Tplate)
+
+		X=MVector{ng,eltype(u)}(undef)
+		@inline MoleFrac!(X,u,data)
+        # thermal conductivity at Tm and outlet composition X
+        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X)
+
+        # flux_cond = -λf*(u[iT]-Tplate)/lc_h # positive flux in positive z coord.
+		dh=2*lc_h
+		kconv=Nu*λf/dh*ufac"W/(m^2*K)"
+		hflux_conv = kconv*(u[iT]-Tm) # positive flux in negative z coord. (towards plate)
+
+		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
+		f[iT] = (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+		
+		# calculate (local) plate temperature from (local) flux balance
+		hflux_conv_bot_p = k_nat_conv*(u[iTp]-Tamb)*2
+		hflux_emit_p = lc_plate.eps*ph"σ"*u[iTp]^4
+		G1_IR = (eps1*ph"σ"*u[iT]^4 + rho1_IR*eps2*ph"σ"*u[iTp]^4)/(1-rho1_IR*rho2_IR)
+		hflux_abs_p = alpha2_IR*G1_IR + alpha2_IR*ph"σ"*Tamb^4
+		f[iTp] = -hflux_conv -hflux_abs_p +2*hflux_emit_p +hflux_conv_bot_p		
+	end
+end
+
+@doc raw"""
+Wrapper function defining the boundary conditions in the photo thermal catalytic
+    reactor (PCR) model. Used with the VoronoiFVM.jl package
+"""
+function PCR_bcond(f,u,bnode,data)
+	(;p,ip,outlet_boundaries)=data
+	ng=ngas(data)		
+	
+    FixedBed.PCR_top(f,u,bnode,data)
+    FixedBed.PCR_side(f,u,bnode,data)
+    FixedBed.PCR_bottom(f,u,bnode,data)
+    for boundary in outlet_boundaries
+        boundary_dirichlet!(f,u,bnode, species=ip,region=boundary,value=p)
+    end	
+end
+
+@doc raw"""
+Function defining the flux function in the boundary species in the photo thermal catalytic
+    reactor (PCR) model. Calculates the heat flux occuring in the window and 
+    bottom plate respectively. Only relevant if temperature equation is solved.
+"""
+function PCR_bflux(f,u,bedge,data)
+	(;irradiated_boundaries,outlet_boundaries)=data
+
+	if bedge.region in irradiated_boundaries # window, upper chamber
+		(;iTw,lambda_window) = data
+		f[iTw] = lambda_window * (u[iTw, 1] - u[iTw, 2])
+	elseif bedge.region in outlet_boundaries # bottom plate, lower chamber
+		(;iTp,lambda_Al) = data
+		f[iTp] = lambda_Al * (u[iTp, 1] - u[iTp, 2])
+	end
+end
+
+@doc raw"""
+Function defining the storage function of the boundary species in the photo
+    thermal catalytic reactor (PCR) model. Calculates the heat storage capacity
+    for transient simulations in the window and bottom plate respectively.
+    Only relevant if temperature equation is solved.
+"""
+function PCR_bstorage(f,u,bnode,data)
+	(;irradiated_boundaries,outlet_boundaries)=data
+	if bnode.region in irradiated_boundaries # window, upper chamber
+		(;iTw) = data
+		f[iTw] = u[iTw]
+	elseif bnode.region in outlet_boundaries # bottom plate, lower chamber
+		(;iTp) = data
+		f[iTp] = u[iTp]
+	end
+end
 #"""
 #When working with a heterogeneous phase model (separate energy balances for both fluid and porous solid material), the exchange of energe between the phases can be described by an interfacial heat transfer coefficient. It can be calculated according to:
 #
