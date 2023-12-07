@@ -34,21 +34,23 @@ begin
 	GridVisualize.default_plotter!(PlutoVista)
 end;
 
+# ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
+PlutoUI.TableOfContents(title="Demo")
+
 # ╔═╡ 2c4b16ab-8f60-467b-b608-2fea9fbc741c
 md"""
 # Introduction
 Demo Notebook with 3 ideal gas species and constant properties to demonstrate isothermal Multicomponent species transport.
 
-Check the box to start the simulation:
+Select problem dimension: $(@bind dim Select([1, 2, 3], default=2))
 
-__Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=false))
+Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=false))
 """
 
-# ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
-PlutoUI.TableOfContents(title="Demo")
-
-# ╔═╡ 107a6fa3-60cb-43f0-8b21-50cd1eb5065a
-const dim = 2
+# ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
+if dim == 3
+	@bind xcut Slider(linspace(0,1,21)*ufac"cm",show_value=true,default=0.5*ufac"cm")
+end
 
 # ╔═╡ 832f3c15-b75a-4afe-8cc5-75ff3b4704d6
 begin
@@ -106,11 +108,6 @@ function grid3D()
 	grid
 end
 
-# ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
-if dim == 3
-	@bind xcut Slider(linspace(0,1,21)*ufac"cm",show_value=true,default=0.5*ufac"cm")
-end
-
 # ╔═╡ a995f83c-6ff7-4b95-a798-ea636ccb1d88
 let
 	if dim == 1
@@ -159,7 +156,7 @@ $B \rightarrow 3 A$
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
 #begin
-function MinDemo(;dim=2, _times=nothing, _mfluxin = nothing)
+function MinDemo(dim; times=nothing, mfluxin = nothing)
 	
 	if dim == 1
 		mygrid=grid1D()
@@ -167,21 +164,21 @@ function MinDemo(;dim=2, _times=nothing, _mfluxin = nothing)
 		irrb = []
 		outb = [Γ_right]
 		sb = []
-		times = isnothing(_times) ? [0,20.0] : _times
+		times = isnothing(times) ? [0,20.0] : times
 	elseif dim == 2
 		mygrid=grid2D()
 		inb = [Γ_left]
 		irrb = []
 		outb = [Γ_right]
 		sb = []
-		times = isnothing(_times) ? [0,12.0] : _times
+		times = isnothing(times) ? [0,12.0] : times
 	else
 		mygrid=grid3D()
 		inb = [Γ_left]
 		irrb = []
 		outb = [Γ_right]
 		sb = []
-		times = isnothing(_times) ? [0,3.0] : _times
+		times = isnothing(times) ? [0,3.0] : times
 	end
 
 	MinKin = KinData{}(;
@@ -215,7 +212,7 @@ function MinDemo(;dim=2, _times=nothing, _mfluxin = nothing)
 		Tamb = 273.15,
 		m = [2.0,6.0,21.0]*ufac"g/mol",
 		X0 = [0.2, 0.8, 0.0],
-		mfluxin = isnothing(_mfluxin) ? 0.01*ufac"kg/(m^2*s)" : _mfluxin,
+		mfluxin = isnothing(mfluxin) ? 0.01*ufac"kg/(m^2*s)" : mfluxin,
 		solve_T_equation = false,
 		constant_properties = true,
 		is_reactive = true
@@ -266,10 +263,11 @@ function MinDemo(;dim=2, _times=nothing, _mfluxin = nothing)
 end
 
 # ╔═╡ b9f80e49-bf9f-4a92-afba-867ab1cb1d1f
+# ╠═╡ show_logs = false
 # ╠═╡ skip_as_script = true
 #=╠═╡
 if RunSim
-	solt,grid,sys,data=MinDemo();
+	solt,grid,sys,data=MinDemo(dim);
 end;
   ╠═╡ =#
 
@@ -299,6 +297,13 @@ FixedBed.DMS_checkinout(sol,sys,data)
 # ╔═╡ 862bf54f-8700-4956-9024-07fdf809c922
 #=╠═╡
 FixedBed.DMS_print_summary(sol,grid,sys,data)
+  ╠═╡ =#
+
+# ╔═╡ 06ec3b97-5532-4a86-9abb-61b91e94b4e7
+#=╠═╡
+if dim==3
+	FixedBed.PCR_writeSol3D(sol,grid,data;desc="MinDemo")
+end
   ╠═╡ =#
 
 # ╔═╡ 111b1b1f-51a5-4069-a365-a713c92b79f4
@@ -389,15 +394,14 @@ end
 
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
-# ╟─2c4b16ab-8f60-467b-b608-2fea9fbc741c
-# ╠═d3278ac7-db94-4119-8efd-4dd18107e248
+# ╟─d3278ac7-db94-4119-8efd-4dd18107e248
+# ╠═2c4b16ab-8f60-467b-b608-2fea9fbc741c
+# ╟─a995f83c-6ff7-4b95-a798-ea636ccb1d88
+# ╟─4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═83fa22fa-451d-4c30-a4b7-834974245996
 # ╠═4dae4173-0363-40bc-a9ca-ce5b4d5224cd
 # ╠═561e96e2-2d48-4eb6-bb9d-ae167a622aeb
 # ╠═832f3c15-b75a-4afe-8cc5-75ff3b4704d6
-# ╟─a995f83c-6ff7-4b95-a798-ea636ccb1d88
-# ╟─4e05ab31-7729-4a4b-9c14-145118477715
-# ╠═107a6fa3-60cb-43f0-8b21-50cd1eb5065a
 # ╟─0fadb9d2-1ccf-4d44-b748-b76d911784ca
 # ╟─b94513c2-c94e-4bcb-9342-47ea48fbfd14
 # ╟─c886dd12-a90c-40ab-b9d0-32934c17baee
@@ -407,6 +411,7 @@ end
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
 # ╠═e29848dd-d787-438e-9c32-e9c2136aec4f
 # ╠═862bf54f-8700-4956-9024-07fdf809c922
+# ╠═06ec3b97-5532-4a86-9abb-61b91e94b4e7
 # ╟─05949759-2bb9-475b-b2f4-900b32c30e00
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╟─111b1b1f-51a5-4069-a365-a713c92b79f4

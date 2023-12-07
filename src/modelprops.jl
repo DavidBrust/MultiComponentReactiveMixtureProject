@@ -543,6 +543,72 @@ function DMS_print_summary(sol,grid,sys,data)
         @printf "%i\tIN: %2.6e \t OUT: %2.6e \t REACT: %2.6e mol/hr \n\tSUM: %2.6e mol/hr\n" i nin(i)/ufac"mol/hr" nout(i)/ufac"mol/hr" -RI[i]/m[i]/ufac"mol/hr" (nin(i)+nout(i)-RI[i]/m[i])/ufac"mol/hr"
     end
 end
+@doc raw"""
+Helper function to print an extended summary based on calculated flux integrals over in- 
+    and outflow boundaries in the Darcy-Maxwell-Stefan (DMS) model.
+"""
+function DMS_print_summary_ext(sol,sys,data)
+	(;gn,gni,m,nflowin,X0) = data
+	ng=ngas(data)
+	in_,out_=FixedBed.DMS_checkinout(sol,sys,data)
+
+	nout(i) = -out_[i]/m[i]
+	nin(i) = nflowin*X0[i]
+	nout_dry = 0.0
+	
+	println("Molar species in- & outflows:")
+	for i = 1:ng
+		@printf "%s\tIN: %2.2f\t OUT: %2.2f mol/hr\n" gn[i] nin(i)/ufac"mol/hr" nout(i)/ufac"mol/hr"
+		if i != gni[:H2O] 
+			nout_dry += nout(i)
+		end
+	end
+
+
+	println("\nDry Product Molar Fractions:")
+	for i=1:ng
+		if i != gni[:H2O] && i != gni[:N2] 
+		@printf "%3s: %2.1f%%\n" gn[i] nout(i)/nout_dry*100
+		end
+	end
+	
+	println("\nConversion:")
+	for i in(gni[:CO2],gni[:H2])
+		@printf "X%4s: %2.2f\n" gn[i] (nin(i)-nout(i))/nin(i)
+	end
+	println("\nYield & Selectivity (CO2 based):")
+	for i in(gni[:CO],gni[:CH4])
+		@printf "Y%4s: %2.2f \tS%4s: %2.2f\n" gn[i] nout(i)/nin(gni[:CO2]) gn[i] nout(i)/(nin(gni[:CO2])-nout(gni[:CO2]))
+	end
+end
+
+@doc raw"""
+Helper function to export to VTK format for visualization 3D solutions of the
+    photo thermal catalytic reactor (PCR) model. Exported are the pressure, 
+    species molar fractions and temperature fields in the 3D domain.
+"""
+function PCR_writeSol3D(sol,grid,data;desc="")
+    (;ip,iT,gn,nflowin,solve_T_equation) = data
+    ng=ngas(data)
+    _t = now()
+    tm = "$(hour(_t))_$(minute(_t))_$(second(_t))"
+    desc = isempty(desc) ? desc : "_"*desc
+    path = "../data/out/$(Date(_t))/$(tm)$(desc)"
+    try
+        mkpath(path)
+    catch e
+        println("Directory " * path * " already exists.")
+    end
+    #mkdir(string(Date(_t)))
+    
+    VoronoiFVM.writeVTK("$(path)/$(tm)_3D_ptot_$(data.G_lamp/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[ip,:])
+	if solve_T_equation
+        VoronoiFVM.writeVTK("$(path)/$(tm)_3D_T_$(data.G_lamp/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[iT,:] .-273.15)
+    end
+    for i=1:ng
+        VoronoiFVM.writeVTK("$(path)/$(tm)_3D_x$(gn[i])_$(data.G_lamp/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[i,:])
+    end
+end
 
 @doc raw"""
 Helper function to calculate radiation emitted from the window towards the surface
