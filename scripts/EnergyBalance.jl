@@ -1,9 +1,9 @@
-module EnergyBalancesCyl
+module EnergyBalance
 
-using DataFrames, CSV, Plots.PlotMeasures
+using DataFrames, CSV, Plots.PlotMeasures, Revise
 
 
-include("../notebooks/PCReactorTransient.jl")
+include("../notebooks/PCReactorBase.jl")
 
 
 
@@ -19,50 +19,34 @@ include("../notebooks/PCReactorTransient.jl")
 # end
 
 
-# function radiosity_window(f,u,bnode,data)
-#     (;iTw,FluxIntp,FluxEmbed,uc_window,uc_cat,uc_frit)=data
-#     # irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
-#     # window properties (1)
-#     tau1_vis=uc_window.tau_vis
-#     rho1_vis=uc_window.rho_vis
-#     tau1_IR=uc_window.tau_IR
-#     rho1_IR=uc_window.rho_IR
-#     eps1=uc_window.eps
+function radiosity_window(f,u,bnode,data)
+    (;iTw,G_lamp,uc_window,irradiated_boundaries)=data
 
-#     # obtain local irradiation flux value from interpolation + embedding	
-#     @views y,x,_ = bnode.coord[:,bnode.index] 
-#     Glamp =FluxEmbed*FluxIntp(x,y)
+    eps1=uc_window.eps
 
-# 	# local tempererature of quartz window
-#     Tglass = u[iTw]
-#     G1_bot_IR = eps1*ph"σ"*Tglass^4
-#     if bnode.region==Γ_top_cat
-#         # catalyst layer (2)
-#         rho2_vis=uc_cat.rho_vis
-		
-#         # vis radiosity of quartz window inwards / towards catalyst 
-#         G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*rho2_vis)
+    Tglass = u[iTw] # local tempererature of quartz window
+    G1_bot_IR = eps1*ph"σ"*Tglass^4
+	G1_bot_vis = 0.0
+    if bnode.region in irradiated_boundaries
+	#if bnode.region==Γ_top_inner
+		# flux profile measured behind quarz in plane of cat layer
+		G1_bot_vis += G_lamp
 
-#     elseif bnode.region==Γ_top_frit
-#         # uncoated frit (3)
-#         rho3_vis=uc_frit.rho_vis
+    end
+    return G1_bot_vis,G1_bot_IR
+end
 
-# 		# vis radiosity of quartz window inwards / towards catalyst
-#         G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*rho3_vis)
-#     end
-#     return G1_bot_vis,G1_bot_IR
-# end
+# G0_bot, IR/vis : surface radiosities of glass underside
+function flux_window_underside(f,u,bnode,data)
+    (;iT,irradiated_boundaries)=data
+    # if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
+    if bnode.region in irradiated_boundaries        
 
-# # G0_bot, IR/vis : surface radiosities of glass underside
-# function flux_window_underside(f,u,bnode,data)
-#     if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
-#         (;iT)=data
+        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
 
-#         G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
-
-#         f[iT] = G1_bot_vis + G1_bot_IR
-#     end
-# end
+        f[iT] = G1_bot_vis + G1_bot_IR
+    end
+end
 
 # G0_bot, IR only
 # function flux_window_underside_IR(f,u,bnode,data)
@@ -87,23 +71,24 @@ include("../notebooks/PCReactorTransient.jl")
 # end
 
 # # G2_IR/vis : surface radiosities of catalyst layer 
-# function flux_catalyst_layer(f,u,bnode,data)
-#     if bnode.region==Γ_top_cat
-#         (;iT,uc_cat)=data
-#         # catalyst layer properties (2)
-#         rho2_vis=uc_cat.rho_vis
-#         rho2_IR=uc_cat.rho_IR
-#         eps2=uc_cat.eps
+function flux_catalyst_layer(f,u,bnode,data)
+    (;iT,uc_cat,irradiated_boundaries)=data
+    if bnode.region in irradiated_boundaries
+        
+        # catalyst layer properties (2)
+        rho2_vis=uc_cat.rho_vis
+        rho2_IR=uc_cat.rho_IR
+        eps2=uc_cat.eps
 
-#         G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
 
-#         G2_vis = rho2_vis*G1_bot_vis
+        G2_vis = rho2_vis*G1_bot_vis
 
-#         G2_IR = eps2*ph"σ"*u[iT]^4 + rho2_IR*G1_bot_IR
+        G2_IR = eps2*ph"σ"*u[iT]^4 + rho2_IR*G1_bot_IR
 
-#         f[iT] = G2_vis + G2_IR
-#     end
-# end
+        f[iT] = G2_vis + G2_IR
+    end
+end
 
 # # G2 IR only
 # function flux_catalyst_layer_IR(f,u,bnode,data)
@@ -238,24 +223,20 @@ include("../notebooks/PCReactorTransient.jl")
 # end
 
 # # convective heat flux through top chamber
-# function flux_convection_top(f,u,bnode,data)
-#     if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
-#         (;iT,iTw,X0,uc_h,Nu)=data
-#         # mean temperature
-#         Tglass = u[iTw]
-#         Tm=0.5*(u[iT] + Tglass)
-
-#         # thermal conductivity at Tm and inlet composition X0 (H2/CO2 = 1/1)
-#         @inline _,λf=dynvisc_thermcond_mix(data, Tm, X0)
-
-#         # positive flux in positive z-coordinate
-#         dh=2*uc_h
-#         kconv=Nu*λf/dh*ufac"W/(m^2*K)"
-
-#         q_conv = kconv*(Tm-Tglass)	
-#         f[iT] = q_conv			
-#     end
-# end
+function flux_convection_top(f,u,bnode,data)
+    (;iT,iTw,X0,uc_h,Nu,irradiated_boundaries)=data
+    if bnode.region in irradiated_boundaries
+   
+        Tm=0.5*(u[iT] +  u[iTw]) # mean temperature
+        # thermal conductivity at Tm and inlet composition X0 (H2/CO2 = 1/1)
+        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X0)
+        dh=2*uc_h
+        kconv=Nu*λf/dh*ufac"W/(m^2*K)"
+        # positive flux in positive z-coordinate
+        hflux_conv = kconv*(Tm-u[iTw])	
+        f[iT] = hflux_conv			
+    end
+end
 
 # # convective heat flux exiting upper window surface
 # function flux_convection_window_top(f,u,bnode,data)
@@ -281,41 +262,44 @@ include("../notebooks/PCReactorTransient.jl")
 
 # # surface radiosity of underside of frit, facing towards the bottom plate
 # # solely in IR, consists of emission and reflection
-# function flux_radiation_frit_bottom(f,u,bnode,data)
-#     if bnode.region==Γ_bottom
-# 		(;iT,iTp,lc_frit,lc_plate) = data
+function flux_radiation_frit_bottom(f,u,bnode,data)
+    (;iT,iTp,lc_frit,lc_plate,outlet_boundaries) = data
+    #if bnode.region==Γ_bottom
+    if bnode.region in outlet_boundaries
 		
-# 		# irradiation exchange between porous frit (1) and Al bottom plate (2)
-# 		# porous frit properties (1)
-# 		eps1=lc_frit.eps;  rho1_IR=lc_frit.rho_IR; 	
-# 		# Al bottom plate properties (2)
-# 		eps2=lc_plate.eps; rho2_IR=lc_plate.rho_IR;
+		
+		# irradiation exchange between porous frit (1) and Al bottom plate (2)
+		# porous frit properties (1)
+		eps1=lc_frit.eps;  rho1_IR=lc_frit.rho_IR; 	
+		# Al bottom plate properties (2)
+		eps2=lc_plate.eps; rho2_IR=lc_plate.rho_IR;
 	
-#         # local plate temperature
-#         Tplate = u[iTp]
-#         G1_IR = (eps1*ph"σ"*u[iT]^4 + rho1_IR*eps2*ph"σ"*Tplate^4)/(1-rho1_IR*rho2_IR)
+        # local plate temperature
+        Tplate = u[iTp]
+        G1_IR = (eps1*ph"σ"*u[iT]^4 + rho1_IR*eps2*ph"σ"*Tplate^4)/(1-rho1_IR*rho2_IR)
 
-#         f[iT] = G1_IR
-#     end
-# end
+        f[iT] = G1_IR
+    end
+end
 
-# function flux_radiation_plate_bottom(f,u,bnode,data)
-#     if bnode.region==Γ_bottom
-# 		(;iT,iTp,lc_frit,lc_plate) = data
+function flux_radiation_plate_bottom(f,u,bnode,data)
+    (;iT,iTp,lc_frit,lc_plate,outlet_boundaries) = data
+    # if bnode.region==Γ_bottom
+    if bnode.region in outlet_boundaries		
 		
-# 		# irradiation exchange between porous frit (1) and Al bottom plate (2)
-# 		# porous frit properties (1)
-# 		eps1=lc_frit.eps;  rho1_IR=lc_frit.rho_IR; 	
-# 		# Al bottom plate properties (2)
-# 		eps2=lc_plate.eps; rho2_IR=lc_plate.rho_IR;
+		# irradiation exchange between porous frit (1) and Al bottom plate (2)
+		# porous frit properties (1)
+		eps1=lc_frit.eps;  rho1_IR=lc_frit.rho_IR; 	
+		# Al bottom plate properties (2)
+		eps2=lc_plate.eps; rho2_IR=lc_plate.rho_IR;
 		
-#         # local plate temperature
-#         Tplate = u[iTp]
-#         G2_IR = (eps2*ph"σ"*Tplate^4 + rho2_IR*eps1*ph"σ"*u[iT]^4)/(1-rho1_IR*rho2_IR)
+        # local plate temperature
+        Tplate = u[iTp]
+        G2_IR = (eps2*ph"σ"*Tplate^4 + rho2_IR*eps1*ph"σ"*u[iT]^4)/(1-rho1_IR*rho2_IR)
 
-#         f[iT] = G2_IR
-#     end
-# end
+        f[iT] = G2_IR
+    end
+end
 
 # # conductive heat flux through bottom chamber
 # function flux_conduction_bottom(f,u,bnode,data)
@@ -339,27 +323,30 @@ include("../notebooks/PCReactorTransient.jl")
 #     end
 # end
 
-# function flux_convection_bottom(f,u,bnode,data)
-#     if bnode.region==Γ_bottom
-#         (;iT,iTp,lc_h,Nu)=data
-#         ng=ngas(data)
+function flux_convection_bottom(f,u,bnode,data)
+    (;iT,iTp,lc_h,Nu,outlet_boundaries)=data
 
-#         X=zeros(eltype(u), ng)
-#         mole_frac!(bnode,data,X,u)
+    # if bnode.region==Γ_bottom        
+    if bnode.region in outlet_boundaries
+        ng=ngas(data)
 
-#         # local plate temperature
-#         Tplate = u[iTp]
-#         Tm=0.5*(u[iT] + Tplate)
-#         @inline _,λf=dynvisc_thermcond_mix(data, Tm, X)
+        X=zeros(eltype(u), ng)
+        # mole_frac!(bnode,data,X,u)
+        MoleFrac!(X,u,data)
 
-#         dh=2*lc_h
-#         kconv=Nu*λf/dh*ufac"W/(m^2*K)"
+        # local plate temperature
+        Tplate = u[iTp]
+        Tm=0.5*(u[iT] + Tplate)
+        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X)
+
+        dh=2*lc_h
+        kconv=Nu*λf/dh*ufac"W/(m^2*K)"
         
-#         # positive flux in negative z coord. -> pointing towards bottom plate
-#         q_conv = kconv*(Tm-Tplate)	
-#         f[iT] = q_conv			
-#    end
-# end
+        # positive flux in negative z coord. -> pointing towards bottom plate
+        hflux_conv = kconv*(Tm-Tplate)	
+        f[iT] = hflux_conv			
+   end
+end
 
 # # convective heat flux exiting upper window surface
 # function flux_convection_outer_plate(f,u,bnode,data)
@@ -452,14 +439,11 @@ include("../notebooks/PCReactorTransient.jl")
 # end
 
 function flux_enthalpy_top(f,u,bnode,data)
-    if bnode.region==Γ_top_in
-        
-		(;iT,Fluids,X0,mfluxin,mmix0,Tamb) = data
+    (;iT,Fluids,X0,mfluxin,mmix0,T_gas_in,inlet_boundaries) = data
 
-        flux_enth_top = mfluxin/mmix0 * enthalpy_mix(Fluids, Tamb+100, X0)
-
+    if bnode.region in inlet_boundaries
+        flux_enth_top = mfluxin/mmix0 * enthalpy_mix(Fluids, T_gas_in, X0)
         f[iT]=flux_enth_top
-
     end
 end
 
@@ -546,110 +530,79 @@ end
 # 	T_int./areas_	
 # end
 
-function runSim()
-    if dim == 1
-		mygrid=grid1D()
-		strategy = nothing
-		times=[0,10]
-	elseif dim == 2
-		mygrid=grid2D()
-		strategy = nothing
-		times=[0,5.0]
-	else
-		mygrid=grid3D()
-		strategy = GMRESIteration(UMFPACKFactorization())
-		times=[0,20.0]
-	end
-    mydata=ModelData()
-	(;p,ip,Tamb,iT,iTw,iTp,X0)=mydata
-	ng=ngas(mydata)
-	
-	sys=VoronoiFVM.System( 	mygrid;
-							data=mydata,
-							flux=flux,
-							reaction=reaction,
-							storage=storage,
-							bcondition=bcond,
-							bflux=bflux,
-							bstorage=bstorage,
-							boutflow=boutflow,
-							outflowboundaries=
-								[dim == 2 ? Γ_bottom : Γ_right],
-							assembly=:edgewise
-							)
-	
-	enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
-	enable_boundary_species!(sys, iTw, [Γ_top_in]) # window temperature as boundary species in upper chamber
-	#enable_boundary_species!(sys, iTw, [Γ_top_in,Γ_top_mask]) # window temperature as boundary species in upper chamber
-	enable_boundary_species!(sys, iTp, [Γ_bottom]) # plate temperature as boundary species in lower chamber
-	inival=unknowns(sys)
 
-	inival[ip,:].=p
-	inival[[iT,iTw,iTp],:] .= Tamb
-	
-	for i=1:ng
-		inival[i,:] .= X0[i]
-	end
 
-	control = SolverControl(strategy, sys;)
-		control.Δt_min=1.0e-6
-		control.Δt_max=1.0
-		#control.maxiters=200
-		control.handle_exceptions=true
-		control.Δu_opt=100.0
-	function post(sol,oldsol, t, Δt)
-		@info "t= "*string(round(t,sigdigits=2))*"\t Δt= "*string(round(Δt,sigdigits=2))
+function EnthFluxes(sol,grid,sys,data)
+    (;iT,Fluids,inlet_boundaries,outlet_boundaries,mfluxin,mmix0,nflowin, T_gas_in,X0)=data
 
-		 
-	end
+    Hin=integrate(sys,flux_enthalpy_top,sol; boundary=true)[iT,inlet_boundaries]
+    Hin = sum(Hin)
+   
 
-	solt=solve(sys;inival=inival,times,control,post,)
-    sol = solt(solt.t[end])
-    sol,mygrid,sys,mydata
-end
-
-function Fluxes_test(sol,grid,sys,data)
-    (;iT,ip)=data
-
-    Hin=integrate(sys,flux_enthalpy_top,sol; boundary=true)[iT,[Γ_top_in]]
     #Min=integrate(sys,flux_mass_top,sol; boundary=true)[ip,[Γ_top_in]]
-    #Hout=integrate(sys,flux_enthalpy_bottom,sol; boundary=true)[iT,Γ_bottom]
+
+    in_,out_ = FixedBed.DMS_checkinout(sol,sys,data)
+
+    Hout=sum(out_[iT,outlet_boundaries])
+    X = [0.0,1.0,0.0,0.0,0.0,0.0]
+    h_in = enthalpy_mix(data, 299.15, X)
+    H_in = nflowin * h_in
+
+
+    #@info nflowin, mfluxin/mmix0 * Aout
+
+    H_in
 end
 
 
 function HeatFluxes_EB_I(sol,grid,sys,data)
 
+    (;iT,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries)=data
 
-    (;iT)=data
+    Hin=integrate(sys,flux_enthalpy_top,sol; boundary=true)[iT,inlet_boundaries]
+    Hin = sum(Hin)
+    #Min=integrate(sys,flux_mass_top,sol; boundary=true)[ip,[Γ_top_in]]
 
-
-    Hin=integrate(sys,flux_enthalpy_top,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
-    Hin=sum(Hin)
+    in_,out_ = FixedBed.DMS_checkinout(sol,sys,data)
+    Hout=sum(out_[iT,outlet_boundaries])
 
     # Qcond_10=integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
-    Qconv_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
+    Qconv_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,irradiated_boundaries]
+    Qconv_10=sum(Qconv_10)
     # Qcond_20=integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
-    Qconv_20=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
+    #Qconv_20=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
 
-    QG_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_cat]
-    QG_02=integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_frit]
+    #QG_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_cat]
+    QG_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,irradiated_boundaries]
+    QG_01=sum(QG_01)
 
-    QG_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
-    QG_20=integrate(sys,flux_frit,sol; boundary=true)[iT,Γ_top_frit]
+    # #QG_02=integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_frit]
 
-    # EB_top= Hin +QG_01 +QG_02 -QG_10 -QG_20 -Qcond_10 -Qcond_20
-    EB_top= Hin +QG_01 +QG_02 -QG_10 -QG_20 -Qconv_10 -Qconv_20
+    #QG_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
+    QG_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,irradiated_boundaries]
+    QG_10=sum(QG_10)
+    # QG_20=integrate(sys,flux_frit,sol; boundary=true)[iT,Γ_top_frit]
+
+    # # EB_top= Hin +QG_01 +QG_02 -QG_10 -QG_20 -Qcond_10 -Qcond_20
+    # EB_top= Hin +QG_01 +QG_02 -QG_10 -QG_20 -Qconv_10 -Qconv_20
       
 
-    Hout=integrate(sys,flux_enthalpy_bottom,sol; boundary=true)[iT,Γ_bottom]
+    # Hout=integrate(sys,flux_enthalpy_bottom,sol; boundary=true)[iT,Γ_bottom]
 
-    # Qcond_34=integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
-    Qconv_34=integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,Γ_bottom]
+    # # Qcond_34=integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
+    #Qconv_34=integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,Γ_bottom]
+    Qconv_34=integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,outlet_boundaries]
+    Qconv_34=sum(Qconv_34)
 
-    QG_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,Γ_bottom]
-    QG_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,Γ_bottom]
+    #QG_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,Γ_bottom]
+    QG_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,outlet_boundaries]
+    QG_34=sum(QG_34)
+    #QG_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,Γ_bottom]
+    QG_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,outlet_boundaries]
+    QG_43=sum(QG_43)
     
-    Qsides=integrate(sys,side,sol; boundary=true)[iT,[Γ_side_right,Γ_side_back,Γ_side_front,Γ_side_left]]      
+    # Qsides=integrate(sys,side,sol; boundary=true)[iT,[Γ_side_right,Γ_side_back,Γ_side_front,Γ_side_left]]
+    Qsides=integrate(sys,FixedBed.PCR_side,sol; boundary=true)[iT,side_boundaries]
     Qsides=sum(Qsides)
 
     # EB_bot= -Hout -Qcond_34 -QG_34 +QG_43    
@@ -658,13 +611,14 @@ function HeatFluxes_EB_I(sol,grid,sys,data)
     (
         Hin=Hin,
         QG_01=QG_01,
-        QG_02=QG_02,
+        # QG_02=QG_02,
         QG_10=-QG_10,
-        QG_20=-QG_20,
+        # QG_20=-QG_20,
+        # Qconv_10=-Qconv_10,
         Qconv_10=-Qconv_10,
-        Qconv_20=-Qconv_20,
+        # Qconv_20=-Qconv_20,
         Hout=-Hout,
-        # Qcond_34=-Qcond_34,
+        # # Qcond_34=-Qcond_34,
         Qconv_34=-Qconv_34,
         QG_34=-QG_34,
         QG_43=QG_43,

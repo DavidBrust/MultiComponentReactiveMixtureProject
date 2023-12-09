@@ -509,6 +509,22 @@ function enthalpy_mix(Fluids::AbstractVector, T, x)
     hmix
 end
 
+function enthalpy_mix(data, T, x)
+    (;Fluids,constant_properties) = data
+    hmix = zero(eltype(x))
+
+    if constant_properties
+        hmix += 0.0*ufac"J/mol"
+    else
+        ng=ngas(data)    
+        @inbounds for i=1:ng
+            hmix += x[i] * enthalpy_gas(Fluids[i], T)
+        end
+    end
+    return hmix
+end
+
+
 
 
 function molarweight_mix(X,data)

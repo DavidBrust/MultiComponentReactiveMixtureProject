@@ -158,7 +158,8 @@ function DMS_flux(f,u,edge,data)
     if solve_T_equation
         lambda_bed=kbed(data,lambdamix)*lambdamix
         hf_conv = zero(eltype(u))
-        @inline hf_conv = f[ip] * enthalpy_mix(data.Fluids, Tm, X) / mmix * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth) 
+        @inline hf_conv = f[ip] * enthalpy_mix(data, Tm, X) / mmix * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth) 
+        #@inline hf_conv = f[ip] * enthalpy_mix(data.Fluids, Tm, X) / mmix * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth) 
         
         Bp,Bm = fbernoulli_pm(hf_conv/lambda_bed/Tm)
         f[iT] = lambda_bed*(Bm*u[iT,1]-Bp*u[iT,2])
@@ -261,8 +262,9 @@ function DMS_boutflow(f,u,edge,data)
 
     if solve_T_equation
         # convective heat flux
-        @inline r_hf_conv = v *cout * enthalpy_mix(data.Fluids, Tout, X) * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth)
-        #@inline r_hf_conv = v *cout * enthalpy_mix(data.Fluids, u[iT,k], X) * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth)
+        @inline r_hf_conv = v *cout * enthalpy_mix(data, Tout, X)
+        #@inline r_hf_conv = v *cout * enthalpy_mix(data, Tout, X) * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth)
+        #@inline r_hf_conv = v *cout * enthalpy_mix(data.Fluids, Tout, X) * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth)
 
         f[iT] = r_hf_conv
     end
@@ -455,8 +457,7 @@ end
 	nflowin::Float64 = 7.4*ufac"mol/hr"
 	mflowin::Float64 = nflowin*mmix0
 	mfluxin::Float64 = mflowin/(100*ufac"cm^2")*ufac"kg/(m^2*s)"
-	#mfluxin::Float64 = 0.007*ufac"kg/(m^2*s)"
-	#nfluxin::Float64 = mfluxin/mmix0
+	T_gas_in::Float64 = Tamb
 
     # catalyst mass, volume and loading
 	mcat::Float64=500.0*ufac"mg"
@@ -495,9 +496,9 @@ end
 	lambda_window::Float64=1.38*ufac"W/(m*K)"
 	lambda_Al::Float64=235.0*ufac"W/(m*K)"
 
-    function ReactorData(dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,k_nat_conv,G_lamp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+    function ReactorData(dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,k_nat_conv,G_lamp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
         KP = FixedBed.KinData{nreac(kinpar)}
-        new{ng,KP}(dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,k_nat_conv,G_lamp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+        new{ng,KP}(dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,k_nat_conv,G_lamp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
 
     end
 end
@@ -641,7 +642,7 @@ Function defining the top/inlet boundary condition in the photo thermal catalyti
     reactor (PCR) model.
 """
 function PCR_top(f,u,bnode,data)
-	(;ip,iT,iTw,Tamb,mfluxin,X0,W0,mmix0,uc_window,uc_cat,uc_h,Nu,k_nat_conv,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,solve_T_equation)=data
+	(;ip,iT,iTw,Tamb,T_gas_in,mfluxin,X0,W0,mmix0,uc_window,uc_cat,uc_h,Nu,k_nat_conv,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,solve_T_equation)=data
 	ng=ngas(data)
 
 	# irrad. exchange between quartz window (1), cat surface (2), masked surface (3)
@@ -669,7 +670,8 @@ function PCR_top(f,u,bnode,data)
 	if solve_T_equation
 		if bnode.region in inlet_boundaries
 			# heatflux from enthalpy inflow
-			@inline r_hf_enth = mfluxin/mmix0 * enthalpy_mix(data.Fluids, Tamb+100, X0) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
+			#@inline r_hf_enth = mfluxin/mmix0 * enthalpy_mix(data.Fluids, T_gas_in, X0) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
+            @inline r_hf_enth = mfluxin/mmix0 * enthalpy_mix(data, T_gas_in, X0) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
 			f[iT] = -r_hf_enth
 
 			if bnode.region in irradiated_boundaries
@@ -684,7 +686,8 @@ function PCR_top(f,u,bnode,data)
 				kconv=Nu*λf/dh*ufac"W/(m^2*K)"
 				hflux_conv = kconv*(u[iT]-Tm)
 				
-				f[iT] += (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+				#f[iT] += (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+                f[iT] += zero(eltype(u))
 				
 				# calculate local window temperature from (local) flux balance
 				hflux_conv_top_w = k_nat_conv*(u[iTw]-Tamb)
@@ -692,7 +695,8 @@ function PCR_top(f,u,bnode,data)
 				G2_IR = eps2*ph"σ"*u[iT]^4 + rho2_IR*G1_IR
 				hflux_abs_w = alpha1_vis*G2_vis + alpha1_IR*G2_IR + alpha1_IR*ph"σ"*Tamb^4
 				hflux_emit_w = uc_window.eps*ph"σ"*u[iTw]^4
-				f[iTw] = -hflux_conv -hflux_abs_w +hflux_conv_top_w +2*hflux_emit_w
+				#f[iTw] = -hflux_conv -hflux_abs_w +hflux_conv_top_w +2*hflux_emit_w
+                f[iTw] = zero(eltype(u))
 			end
 		end
 	end
@@ -713,7 +717,8 @@ function PCR_side(f,u,bnode,data)
         @inline _,λf=dynvisc_thermcond_mix(data, u[iT], X)
 
         # w/o shell height
-        f[iT] = (u[iT]-Tamb)/(delta_gap/λf+1/k_nat_conv)			
+        # f[iT] = (u[iT]-Tamb)/(delta_gap/λf+1/k_nat_conv)
+        f[iT] = zero(eltype(u))		
     end
 end
 
@@ -753,14 +758,17 @@ function PCR_bottom(f,u,bnode,data)
 		hflux_conv = kconv*(u[iT]-Tm) # positive flux in negative z coord. (towards plate)
 
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
-		f[iT] = (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
 		
+        # f[iT] = (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+		f[iT] = zero(eltype(u))
+
 		# calculate (local) plate temperature from (local) flux balance
 		hflux_conv_bot_p = k_nat_conv*(u[iTp]-Tamb)*2
 		hflux_emit_p = lc_plate.eps*ph"σ"*u[iTp]^4
 		G1_IR = (eps1*ph"σ"*u[iT]^4 + rho1_IR*eps2*ph"σ"*u[iTp]^4)/(1-rho1_IR*rho2_IR)
 		hflux_abs_p = alpha2_IR*G1_IR + alpha2_IR*ph"σ"*Tamb^4
-		f[iTp] = -hflux_conv -hflux_abs_p +2*hflux_emit_p +hflux_conv_bot_p		
+		# f[iTp] = -hflux_conv -hflux_abs_p +2*hflux_emit_p +hflux_conv_bot_p		
+        f[iTp] = zero(eltype(u))
 	end
 end
 

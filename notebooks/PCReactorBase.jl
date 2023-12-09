@@ -65,13 +65,18 @@ function grid_boundaries_regions(dim)
 	H=0.5
 	if dim == 2
 		Γ_bottom = 1
+		Γ_bottom_insulating = 7
 		Γ_side = 2
 		Γ_sym = 4		
 		Γ_top_permeable = 5
 		Γ_top_irradiated = 6
 
 		W=W/2 # axisymmetry, half domain is sufficient
-		R=(0:1:W)*ufac"cm"
+		R1=(0:1:(W-1))*ufac"cm"
+		R2=((W-1):(9/10):W-1/10)*ufac"cm"
+		R3=((W-1/10):(1/10):W).*ufac"cm"
+		R=glue(R1,R2)
+		R=glue(R,R3)
 		Z=(0:H/10:H)*ufac"cm"
 		grid=simplexgrid(R,Z)
 		circular_symmetric!(grid)
@@ -79,6 +84,7 @@ function grid_boundaries_regions(dim)
 		cellmask!(grid,[0,9/10*H].*ufac"cm",[W,H].*ufac"cm",Ω_catalyst) # catalyst layer	
 		bfacemask!(grid, [0,H].*ufac"cm",[W-1,H].*ufac"cm",Γ_top_permeable)
 		bfacemask!(grid, [0,H].*ufac"cm",[W-2,0.5].*ufac"cm",Γ_top_irradiated) 
+		bfacemask!(grid, [W-1/10,0].*ufac"cm",[W,0].*ufac"cm",Γ_bottom_insulating) 
 		
 		inb = [Γ_top_permeable,Γ_top_irradiated]
 		irrb = [Γ_top_irradiated]
@@ -184,9 +190,9 @@ As part of the initialisation strategy (see next section) the convective contrib
 """
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
-function PCR_base(dim; times=nothing, mfluxin = nothing)
+function PCR_base(dim; times=nothing, mfluxin = nothing, verbose="aen")
 	if dim == 2
-		times = isnothing(times) ? [0,12.0] : times
+		times = isnothing(times) ? [0,20.0] : times
 	else
 		times = isnothing(times) ? [0,15.0] : times
 	end
@@ -194,15 +200,20 @@ function PCR_base(dim; times=nothing, mfluxin = nothing)
 	grid, inb,irrb,outb,sb,catr =  grid_boundaries_regions(dim)
 	
 	data=ReactorData(
+		is_reactive = false,
+		G_lamp = 0,
+		dt_hf_enth = (2.0,6.0),
+		T_gas_in = 299.15,
+		X0 = [0,1.0,0,0,0.0,0.0], # H2
 		inlet_boundaries=inb,
 		irradiated_boundaries=irrb,
 		outlet_boundaries=outb,
 		side_boundaries=sb,
 		catalyst_regions=catr,
 		rhos=10.0*ufac"kg/m^3") # set solid density to low value to reduce thermal inertia of system
-	(;p,ip,Tamb,iT,iTw,iTp,X0)=data
+	(;p,ip,Tamb,iT,iTw,iTp,ng,gni,X0)=data
 	ng=ngas(data)
-	
+
 	sys=VoronoiFVM.System( 	grid;
 							data=data,
 							flux=FixedBed.DMS_flux,
@@ -257,15 +268,16 @@ function PCR_base(dim; times=nothing, mfluxin = nothing)
    		)
 	end
 		control.handle_exceptions=true
-		control.Δu_opt=1000.0
-
-	solt=solve(sys;inival=inival,times,control,verbose="nae")
+		control.Δu_opt=100.0
+		#control.maxiters=250
+		#control.Δt_max = 5.0
+		
+	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="nae")
 	
 	return solt,grid,sys,data
 end
 
 # ╔═╡ fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
-# ╠═╡ show_logs = false
 # ╠═╡ skip_as_script = true
 #=╠═╡
 if RunSim
@@ -288,34 +300,11 @@ The mass flow boundary condition into the reactor domain is "ramped up" starting
 """
   ╠═╡ =#
 
-# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-#=╠═╡
-@bind t Slider(solt.t,show_value=true,default=solt.t[end])
-  ╠═╡ =#
-
-# ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
-# ╠═╡ skip_as_script = true
-#=╠═╡
-sol = solt(t);
-  ╠═╡ =#
-
-# ╔═╡ b13a76c9-509d-4367-8428-7b5b316ff1ed
-# ╠═╡ skip_as_script = true
-#=╠═╡
-FixedBed.DMS_checkinout(sol,sys,data)
-  ╠═╡ =#
-
-# ╔═╡ 3207839f-48a9-49b6-9861-e5e74bc593a4
-# ╠═╡ skip_as_script = true
-#=╠═╡
-FixedBed.DMS_print_summary_ext(sol,sys,data)
-  ╠═╡ =#
-
 # ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	(;m,ip,gn,poros,mflowin,W0,outlet_boundaries,inlet_boundaries)=data
+	(;m,ip,gn,gni,poros,mflowin,W0,outlet_boundaries,inlet_boundaries)=data
 	ng=ngas(data)
 	vis=GridVisualizer(resolution=(600,300), xlabel="Time / s", ylabel="Molar flow / Total Moles")
 	
@@ -327,7 +316,7 @@ let
 	reaction_rate=Float64[]
 	stored_amount=Float64[]
 
-	k=5
+	k=gni[:H2]
 	for i=2:length(solt)
 		m_ = k in 1:ng ? m[k] : 1
 		W_ = k in 1:ng ? W0[k] : 1
@@ -374,6 +363,34 @@ md"""
 2) Window inner surface
 3) Bottom plate
 """
+
+# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
+#=╠═╡
+@bind t Slider(solt.t,show_value=true,default=solt.t[end])
+  ╠═╡ =#
+
+# ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
+# ╠═╡ skip_as_script = true
+#=╠═╡
+sol = solt(t);
+  ╠═╡ =#
+
+# ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
+#=╠═╡
+FixedBed.DMS_print_summary(sol,grid,sys,data)
+  ╠═╡ =#
+
+# ╔═╡ 3207839f-48a9-49b6-9861-e5e74bc593a4
+# ╠═╡ skip_as_script = true
+#=╠═╡
+FixedBed.DMS_print_summary_ext(sol,sys,data)
+  ╠═╡ =#
+
+# ╔═╡ b13a76c9-509d-4367-8428-7b5b316ff1ed
+# ╠═╡ skip_as_script = true
+#=╠═╡
+FixedBed.DMS_checkinout(sol,sys,data)
+  ╠═╡ =#
 
 # ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
 # ╠═╡ skip_as_script = true
@@ -422,7 +439,7 @@ let
 		function _2to1(a,b)
 			a[1]=b[2]
 		end
-		_grid=grid2D()
+		_grid,_,_,_,_,_ = grid_boundaries_regions(dim)
 		bfacemask!(_grid, [3.0,0.0].*ufac"cm",[3.0,0.5].*ufac"cm",5)
 	    grid1D = subgrid(_grid, [5]; boundary = true, transform = _2to1)
 		for i=1:ng
@@ -621,11 +638,12 @@ end
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
-# ╠═b13a76c9-509d-4367-8428-7b5b316ff1ed
+# ╠═994d4a87-3f27-4a51-b061-6111c3346d60
 # ╠═3207839f-48a9-49b6-9861-e5e74bc593a4
-# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-# ╟─5d5ac33c-f738-4f9e-bcd2-efc43b638109
+# ╠═5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
+# ╠═b13a76c9-509d-4367-8428-7b5b316ff1ed
+# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╟─99b59260-7651-45d0-b364-4f86db9927f8
 # ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
 # ╟─111b1b1f-51a5-4069-a365-a713c92b79f4
