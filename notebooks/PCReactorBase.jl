@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.27
+# v0.19.35
 
 using Markdown
 using InteractiveUtils
@@ -159,7 +159,7 @@ md"""
 ## Species Mass Continuity and Transport
 ```math
 \begin{align}
-	\frac{\partial \epsilon \rho_i}{\partial t} + \nabla \cdot \left( \vec \Phi_i + \rho_i \vec v \right ) - R_i &= 0 ~, \qquad i = 1 ... \nu \\
+	\frac{\partial \epsilon \rho_i}{\partial t} + \nabla \cdot \left( \vec \Phi_i + \rho_i \vec v \right ) - r_i(\varrho) &= 0 ~, \qquad i = 1 ... \nu \\
 		\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} \right) &= -\sum_{j=1 \atop j \neq i}^{\nu} \frac{w_j \vec \Phi_i-w_i \vec \Phi_j}{D_{ij} M_i M_j} \\
 		\sum_{i=1}^\nu x_i &= 1
 \end{align}
@@ -168,7 +168,9 @@ md"""
 
 # ╔═╡ c886dd12-a90c-40ab-b9d0-32934c17baee
 md"""
-where $\rho$ is the (total) mixture density, $\vec v$ is the mass-averaged (barycentric)  mixture velocity calculated with the Darcy equation, $x_i$, $w_i$ and $M_i$ are the molar fraction, mass fraction and molar mass of species $i$ respectively, $\vec \Phi_i$ is the mass flux of species $i$ ($\frac{\text{kg}}{\text{m}^2 \text{s}}$) and $R_i$ is the species mass volumetric source/sink ($\frac{\text{kg}}{\text{m}^3 \text{s}}$) of gas phase species $i$.
+where $\rho$ is the (total) mixture density, $\vec v$ is the mass-averaged (barycentric)  mixture velocity calculated with the Darcy equation, $x_i$, $w_i$ and $M_i$ are the molar fraction, mass fraction and molar mass of species $i$ respectively, $\vec \Phi_i$ is the __diffusive__ mass flux of species $i$ ($\frac{\text{kg}}{\text{m}^2 \text{s}}$) and $r_i$ is the species mass volumetric source/sink ($\frac{\text{kg}}{\text{m}^3 \text{s}}$) of gas phase species $i$.
+
+The __convective__ mass flux of species $i$ is the product of the superficial mean velocity with the partial mass density $\rho_i \vec v$. The combined __convective-diffusive__ species mass flux $\vec \Psi_i = \vec \Phi_i + \rho_i \vec v$ can be introduced as an auxiliary variable.
 """
 
 # ╔═╡ 8f2549f4-b0a6-440f-af94-6880e0814dc2
@@ -176,16 +178,28 @@ md"""
 ## Thermal Energy Transport
 """
 
-# ╔═╡ 78589a1e-2507-4279-ba42-1aaec90d87d0
+# ╔═╡ 05ef2813-194a-4ba8-81aa-4ec96f68b01c
 md"""
+The thermal energy equation considers convective-diffusive transport of thermal energy and is formulated with effective transport parameters that are a consequence of the quasi-homogeneous phase approach:
+
 ```math
 \begin{align}
-\frac{\partial((1-\epsilon)\rho_{\text s} c_{\text s}+\epsilon c c_p) T}{\partial t} - \nabla \cdot \left(\lambda_{\text{eff}} \nabla T - \sum_i^{\nu} \vec N_i h_i \right)  &= 0
+\frac{\partial ( \varepsilon c c_p + (1-\varepsilon) \rho_{\text s} c_{\text s}) T}{\partial t} - \nabla \cdot \left(\lambda_{\text{eff}} \nabla T - h_{\text{mix}} \rho \vec v \right) = 0
 \end{align}
 ```
+The term for the time derivative of the temperature describes the heat storage capacity of the media in the domain and is a superposition of the heat capacities for gas and solid phase weighted by their respective volume fraction.
 
-where $\lambda_{\text{eff}}$ is the effective thermal conductivity. The heat release from chemical reactions is considered as part of the species enthalpies. The convective heat transport within the porous medium is expressed via the sum over the product of species (mass) fluxes with species mass-specific enthalpies $\vec H_i= \vec N_i h_i$.
+Here $\lambda_{\text{eff}}$ is the effective thermal conductivity in the quasi-homogeneous approach, which is a (complicated) function of the thermal conductivities of the solid and gas phases.
 
+The convective heat transport ("thermal drift") within the porous medium is a result of gas phase mass flow carrying enthalpy and is expressed via the sum  of species (mass) fluxes and species mass-specific enthalpies $\sum_i^n \vec \Psi_i h_i$.
+A simplification is made under the assumption that $\sum_i^n\vec \Psi_i h_i \approx (\rho \vec v) h_{\text{mix}}$, leading to above thermal energy transport equation.
+Here the mixture mass specific enthalpy is defined by $h_{\text{mix}}=\sum_i^n x_i h_i / M_{\text{mix}}$.
+
+The heat release from chemical reactions is considered as part of the species enthalpies.
+"""
+
+# ╔═╡ 87d3a394-47b1-4c16-aa67-2ad1f16e48ff
+md"""
 As part of the initialisation strategy (see next section) the convective contribution of heat flux is ramped up at the same time with the heat transport boundary conditions after the flow field has been established.
 """
 
@@ -203,14 +217,14 @@ function PCR_base(dim; times=nothing, mfluxin = nothing, verbose="aen")
 		is_reactive = false,
 		G_lamp = 0,
 		dt_hf_enth = (2.0,6.0),
-		T_gas_in = 299.15,
-		X0 = [0,1.0,0,0,0.0,0.0], # H2
+		T_gas_in = 273.15 +300,
+		#X0 = [0,1.0,0,0,0.0,0.0], # H2
 		inlet_boundaries=inb,
 		irradiated_boundaries=irrb,
 		outlet_boundaries=outb,
 		side_boundaries=sb,
 		catalyst_regions=catr,
-		rhos=10.0*ufac"kg/m^3") # set solid density to low value to reduce thermal inertia of system
+		rhos=5.0*ufac"kg/m^3") # set solid density to low value to reduce thermal inertia of system
 	(;p,ip,Tamb,iT,iTw,iTp,ng,gni,X0)=data
 	ng=ngas(data)
 
@@ -269,7 +283,7 @@ function PCR_base(dim; times=nothing, mfluxin = nothing, verbose="aen")
 	end
 		control.handle_exceptions=true
 		control.Δu_opt=100.0
-		#control.maxiters=250
+		control.maxiters=250
 		#control.Δt_max = 5.0
 		
 	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="nae")
@@ -300,31 +314,44 @@ The mass flow boundary condition into the reactor domain is "ramped up" starting
 """
   ╠═╡ =#
 
+# ╔═╡ a26abbf3-f20d-4f73-aee0-34b851677f1c
+#=╠═╡
+data.inlet_boundaries
+  ╠═╡ =#
+
 # ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	(;m,ip,gn,gni,poros,mflowin,W0,outlet_boundaries,inlet_boundaries)=data
+	(;m,ip,iT,gn,gni,poros,mflowin,nflowin,W0,T_gas_in,X0,outlet_boundaries,inlet_boundaries,dt_mf,dt_hf_enth)=data
 	ng=ngas(data)
 	vis=GridVisualizer(resolution=(600,300), xlabel="Time / s", ylabel="Molar flow / Total Moles")
 	
 	tfact=TestFunctionFactory(sys)	
 	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
+	tf_in=testfunction(tfact,outlet_boundaries,inlet_boundaries)
 		
 	inflow_rate=Float64[]
 	outflow_rate=Float64[]
 	reaction_rate=Float64[]
 	stored_amount=Float64[]
 
-	k=gni[:H2]
+	#k=gni[:H2]
+	k=iT
 	for i=2:length(solt)
 		m_ = k in 1:ng ? m[k] : 1
 		W_ = k in 1:ng ? W0[k] : 1
 		#fac = k in 1:ng ? ufac"mol/hr" : ufac"kg/hr"
 		# use time dependent version of integrate function for use w testfunction
 		ofr=integrate(sys,tf_out,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])
+		
 
-		ifr=mflowin*W_*ramp(solt.t[i]; du=(0.1,1), dt=(0.0,1.0))
+		if k in 1:ng
+			ifr=mflowin*W_*ramp(solt.t[i]; du=(0.1,1), dt=dt_mf)
+		elseif k == iT
+			ifr=integrate(sys,tf_in,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])[iT]
+			#ifr=nflowin*enthalpy_mix(data, T_gas_in, X0) * ramp(solt.t[i]; du=(0.0,1), dt=dt_hf_enth)
+		end
 		push!(inflow_rate,ifr/m_)		
 		push!(outflow_rate,ofr[k]/m_)		
 		rr = integrate(sys,sys.physics.reaction,solt[i])[k,2]
@@ -344,6 +371,14 @@ let
 		I_reac+=reaction_rate[i]*(solt.t[i+1]-solt.t[i])
 	end
 	name = k in 1:ng ?  gn[k] : "Total Mass"
+	if k in 1:ng
+		name = gn[k]
+	elseif k == ip
+		name = "Total Mass"
+	elseif k == iT
+		name = "Enthalpy Flow"
+	end
+	
 	@printf "%s In: %2.2e \t Out: %2.2e \t React: %2.2e \nIn - Out: %2.4e \nStorage tEnd -t0: %2.4e" name I_in I_out I_reac I_in+I_out-I_reac stored_amount[end]-stored_amount[1]
 
 	
@@ -373,6 +408,26 @@ md"""
 # ╠═╡ skip_as_script = true
 #=╠═╡
 sol = solt(t);
+  ╠═╡ =#
+
+# ╔═╡ d6a073e4-f4f6-4589-918f-20b61a780dad
+#=╠═╡
+let
+	(;inlet_boundaries,outlet_boundaries)=data
+	tfact=TestFunctionFactory(sys)
+	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
+	#tf_out=testfunction(tfact,[1,3,4,5,6,7],[2])
+	out=integrate(sys,tf_out,sol)
+	#scalarplot(grid,tf_out)
+end
+  ╠═╡ =#
+
+# ╔═╡ b04750ac-ca66-41c4-9abc-f2358952b05d
+#=╠═╡
+let
+	(;iT) = data
+	FixedBed.DMS_checkinout(sol,sys,data)
+end
   ╠═╡ =#
 
 # ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
@@ -626,6 +681,7 @@ end
 # ╟─d3278ac7-db94-4119-8efd-4dd18107e248
 # ╟─b2791860-ae0f-412d-9082-bb2e27f990bc
 # ╟─a995f83c-6ff7-4b95-a798-ea636ccb1d88
+# ╠═d6a073e4-f4f6-4589-918f-20b61a780dad
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═bc811695-8394-4c35-8ad6-25856fa29183
 # ╟─a078e1e1-c9cd-4d34-86d9-df4a052b6b96
@@ -633,9 +689,12 @@ end
 # ╟─b94513c2-c94e-4bcb-9342-47ea48fbfd14
 # ╟─c886dd12-a90c-40ab-b9d0-32934c17baee
 # ╟─8f2549f4-b0a6-440f-af94-6880e0814dc2
-# ╟─78589a1e-2507-4279-ba42-1aaec90d87d0
+# ╟─05ef2813-194a-4ba8-81aa-4ec96f68b01c
+# ╟─87d3a394-47b1-4c16-aa67-2ad1f16e48ff
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
+# ╠═b04750ac-ca66-41c4-9abc-f2358952b05d
+# ╠═a26abbf3-f20d-4f73-aee0-34b851677f1c
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
 # ╠═994d4a87-3f27-4a51-b061-6111c3346d60

@@ -114,7 +114,7 @@ Flux function definition for use with VoronoiFVM.jl for the Darcy-Maxwell-Stefan
     (DMS) model for Multi-component gas transport in porous media.
 """
 function DMS_flux(f,u,edge,data)
-	(;m,ip,iT,dt_hf_enth,solve_T_equation,Tamb)=data
+	(;m,ip,iT,dt_hf_enth,solve_T_equation,Tamb,Fluids)=data
 	ng=ngas(data)
 		
 	F = MVector{ng-1,eltype(u)}(undef)
@@ -154,13 +154,11 @@ function DMS_flux(f,u,edge,data)
 	@inbounds for i=1:(ng-1)
 		f[i] = -(F[i] + c*X[i]*m[i]*v)
 	end
-
+	
     if solve_T_equation
         lambda_bed=kbed(data,lambdamix)*lambdamix
-        hf_conv = zero(eltype(u))
         @inline hf_conv = f[ip] * enthalpy_mix(data, Tm, X) / mmix * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth) 
-        #@inline hf_conv = f[ip] * enthalpy_mix(data.Fluids, Tm, X) / mmix * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth) 
-        
+                
         Bp,Bm = fbernoulli_pm(hf_conv/lambda_bed/Tm)
         f[iT] = lambda_bed*(Bm*u[iT,1]-Bp*u[iT,2])
     end
@@ -229,7 +227,6 @@ function DMS_storage(f,u,node,data)
         @inline cpmix = heatcap_mix(data, T, X)
         # solid heat capacity is 4 orders of magnitude larger than gas phase heat cap
         f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros)
-        #f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros) / 200
     end
 	
 end
@@ -239,7 +236,7 @@ Storage function definition for use with VoronoiFVM.jl for the Darcy-Maxwell-Ste
     (DMS) model for Multi-component gas transport in porous media.
 """
 function DMS_boutflow(f,u,edge,data)
-	(;iT,ip,m,dt_hf_enth,Tamb,solve_T_equation)=data
+	(;iT,ip,m,dt_hf_enth,Tamb,solve_T_equation,Fluids)=data
 	ng=ngas(data)
 
 	k=outflownode(edge)
@@ -262,9 +259,7 @@ function DMS_boutflow(f,u,edge,data)
 
     if solve_T_equation
         # convective heat flux
-        @inline r_hf_conv = v *cout * enthalpy_mix(data, Tout, X)
-        #@inline r_hf_conv = v *cout * enthalpy_mix(data, Tout, X) * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth)
-        #@inline r_hf_conv = v *cout * enthalpy_mix(data.Fluids, Tout, X) * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth)
+        @inline r_hf_conv = v *cout * enthalpy_mix(data, Tout, X) * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth)
 
         f[iT] = r_hf_conv
     end
@@ -670,7 +665,6 @@ function PCR_top(f,u,bnode,data)
 	if solve_T_equation
 		if bnode.region in inlet_boundaries
 			# heatflux from enthalpy inflow
-			#@inline r_hf_enth = mfluxin/mmix0 * enthalpy_mix(data.Fluids, T_gas_in, X0) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
             @inline r_hf_enth = mfluxin/mmix0 * enthalpy_mix(data, T_gas_in, X0) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
 			f[iT] = -r_hf_enth
 
