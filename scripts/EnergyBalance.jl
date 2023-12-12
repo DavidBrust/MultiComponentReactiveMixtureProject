@@ -1,9 +1,10 @@
 module EnergyBalance
 
-using DataFrames, CSV, Plots.PlotMeasures, Revise
+using DataFrames, CSV, Revise, LessUnitful
 
 
-include("../notebooks/PCReactorBase.jl")
+#include("../notebooks/PCReactorBase.jl")
+# include("../notebooks/Demo/ThermalDemo.jl")
 
 
 
@@ -20,18 +21,15 @@ include("../notebooks/PCReactorBase.jl")
 
 
 function radiosity_window(f,u,bnode,data)
-    (;iTw,G_lamp,uc_window,irradiated_boundaries)=data
+    (;iTw,G_lamp,Tamb,uc_window,irradiated_boundaries)=data
 
     eps1=uc_window.eps
 
     Tglass = u[iTw] # local tempererature of quartz window
-    G1_bot_IR = eps1*ph"σ"*Tglass^4
+    G1_bot_IR = eps1*ph"σ"*(Tglass^4-Tamb^4)+ph"σ"*Tamb^4
 	G1_bot_vis = 0.0
-    if bnode.region in irradiated_boundaries
-	#if bnode.region==Γ_top_inner
-		# flux profile measured behind quarz in plane of cat layer
-		G1_bot_vis += G_lamp
-
+    if bnode.region in irradiated_boundaries		
+		G1_bot_vis += G_lamp # flux profile measured behind quarz in plane of cat layer
     end
     return G1_bot_vis,G1_bot_IR
 end
@@ -48,37 +46,37 @@ function flux_window_underside(f,u,bnode,data)
     end
 end
 
-function irrad_top(f,u,bnode,data)
-    (;iT,irradiated_boundaries,uc_cat)=data
+# function irrad_top(f,u,bnode,data)
+#     (;iT,irradiated_boundaries,uc_cat)=data
 
-    if bnode.region in irradiated_boundaries
-        alpha2_vis=uc_cat.alpha_vis
-        alpha2_IR=uc_cat.alpha_IR
-        eps2=uc_cat.eps       
+#     if bnode.region in irradiated_boundaries
+#         alpha2_vis=uc_cat.alpha_vis
+#         alpha2_IR=uc_cat.alpha_IR
+#         eps2=uc_cat.eps       
 
-        G1_vis, G1_IR = radiosity_window(f,u,bnode,data)
+#         G1_vis, G1_IR = radiosity_window(f,u,bnode,data)
 
-        hflux_irrad = (-eps2*ph"σ"*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR) 
-        f[iT] += hflux_irrad
-    end
-end
+#         hflux_irrad = (-eps2*ph"σ"*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR) 
+#         f[iT] += hflux_irrad
+#     end
+# end
 
-function irrad_bottom(f,u,bnode,data)
-    (;iT,iTp,outlet_boundaries,lc_frit,lc_plate)=data
+# function irrad_bottom(f,u,bnode,data)
+#     (;iT,iTp,outlet_boundaries,lc_frit,lc_plate)=data
 
-    if bnode.region in outlet_boundaries
-        rho1_IR=lc_frit.rho_IR
-		alpha1_IR=lc_frit.alpha_IR
-		eps1=lc_frit.eps
-		rho2_IR=lc_plate.rho_IR
-		eps2=lc_plate.eps      
+#     if bnode.region in outlet_boundaries
+#         rho1_IR=lc_frit.rho_IR
+# 		alpha1_IR=lc_frit.alpha_IR
+# 		eps1=lc_frit.eps
+# 		rho2_IR=lc_plate.rho_IR
+# 		eps2=lc_plate.eps      
 
-        Tplate = u[iTp]
+#         Tplate = u[iTp]
         
-        hflux_irrad = -eps1*ph"σ"*u[iT]^4 + alpha1_IR/(1-rho1_IR*rho2_IR)*(eps2*ph"σ"*Tplate^4+rho2_IR*eps1*ph"σ"*u[iT]^4)
-        f[iT] += hflux_irrad
-    end
-end
+#         hflux_irrad = -eps1*ph"σ"*u[iT]^4 + alpha1_IR/(1-rho1_IR*rho2_IR)*(eps2*ph"σ"*Tplate^4+rho2_IR*eps1*ph"σ"*u[iT]^4)
+#         f[iT] += hflux_irrad
+#     end
+# end
 
 
 # G0_bot, IR only
@@ -563,36 +561,36 @@ end
 # 	T_int./areas_	
 # end
 
-function HeatFluxes_Test(solt,grid,sys,data)
-    (;iT,irradiated_boundaries,outlet_boundaries) = data
-    inf_t, outf_t = TotalFlows(solt,grid,sys,data)
+# function HeatFluxes_Test(solt,grid,sys,data)
+#     (;iT,irradiated_boundaries,outlet_boundaries) = data
+#     inf_t, outf_t = TotalFlows(solt,grid,sys,data)
 
-    dE_dt = inf_t + outf_t
-    sol = solt(solt.t[end])
-    Qabs_inner_top = integrate(sys,irrad_top,sol; boundary=true)[iT,irradiated_boundaries]
-    Qabs_inner_top = sum(Qabs_inner_top)
+#     dE_dt = inf_t + outf_t
+#     sol = solt(solt.t[end])
+#     Qabs_inner_top = integrate(sys,irrad_top,sol; boundary=true)[iT,irradiated_boundaries]
+#     Qabs_inner_top = sum(Qabs_inner_top)
 
-    QG_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,irradiated_boundaries]
-    QG_01=sum(QG_01)
+#     QG_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,irradiated_boundaries]
+#     QG_01=sum(QG_01)
 
-    QG_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,irradiated_boundaries]
-    QG_10=sum(QG_10)
+#     QG_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,irradiated_boundaries]
+#     QG_10=sum(QG_10)
 
-    Qabs_inner_bottom = integrate(sys,irrad_bottom,sol; boundary=true)[iT,outlet_boundaries]
-    Qabs_inner_bottom = sum(Qabs_inner_bottom)
+#     Qabs_inner_bottom = integrate(sys,irrad_bottom,sol; boundary=true)[iT,outlet_boundaries]
+#     Qabs_inner_bottom = sum(Qabs_inner_bottom)
 
-    QG_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,outlet_boundaries]
-    QG_34=sum(QG_34)
-    # #QG_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,Γ_bottom]
-    QG_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,outlet_boundaries]
-    QG_43=sum(QG_43)
+#     QG_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,outlet_boundaries]
+#     QG_34=sum(QG_34)
+#     # #QG_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,Γ_bottom]
+#     QG_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,outlet_boundaries]
+#     QG_43=sum(QG_43)
 
-    dH_dot = dE_dt - Qabs_inner_top
-    #dH_dot, Qabs_irr
+#     dH_dot = dE_dt - Qabs_inner_top
+#     #dH_dot, Qabs_irr
 
-    # Qabs_inner_top, QG_01 - QG_10, QG_01, QG_10
-    Qabs_inner_bottom, QG_43 - QG_34, QG_43, QG_34
-end
+#     # Qabs_inner_top, QG_01 - QG_10, QG_01, QG_10
+#     Qabs_inner_bottom, QG_43 - QG_34, QG_43, QG_34
+# end
 
 
 function TotalFlows(solt,grid,sys,data)

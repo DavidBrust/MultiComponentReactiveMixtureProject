@@ -17,7 +17,7 @@ end
 # ╔═╡ c21e1942-628c-11ee-2434-fd4adbdd2b93
 begin
 	using Pkg
-	Pkg.activate(joinpath(@__DIR__,".."))
+	Pkg.activate(joinpath(@__DIR__,"../.."))
 	using Revise
 	using VoronoiFVM
 	using ExtendableGrids, GridVisualize,ExtendableSparse,SparseArrays
@@ -205,7 +205,7 @@ As part of the initialisation strategy (see next section) the convective contrib
 """
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
-function PCR_base(dim; times=nothing, mfluxin = nothing, verbose="aen")
+function ThermalDemo(dim; times=nothing, mfluxin = nothing, verbose="aen")
 	if dim == 2
 		times = isnothing(times) ? [0,25.0] : times
 	else
@@ -215,12 +215,13 @@ function PCR_base(dim; times=nothing, mfluxin = nothing, verbose="aen")
 	grid, inb,irrb,outb,sb,catr =  grid_boundaries_regions(dim)
 	
 	data=ReactorData(
-		#is_reactive = false,
-		G_lamp = 70.0*ufac"kW/m^2",
-		#G_lamp = 0.0,
-		dt_hf_enth = (2.0,6.0),
-		#T_gas_in = 273.15 +300,
-		#X0 = [0,0,0,0,0,1.0], # N2
+		is_reactive = false,
+		#G_lamp = 70.0*ufac"kW/m^2",
+		G_lamp = 0.0*ufac"kW/m^2",
+		dt_hf_irrad = (30.0,31.0),
+		T_gas_in = 273.15 +300,
+		X0 = [0,0,0,0,0,1.0], # N2
+		k_nat_conv = 0.0,
 		inlet_boundaries=inb,
 		irradiated_boundaries=irrb,
 		outlet_boundaries=outb,
@@ -296,7 +297,7 @@ end
 # ╠═╡ skip_as_script = true
 #=╠═╡
 if RunSim
-	solt,grid,sys,data=PCR_base(dim);
+	solt,grid,sys,data=ThermalDemo(dim);
 end;
   ╠═╡ =#
 
@@ -315,9 +316,11 @@ The mass flow boundary condition into the reactor domain is "ramped up" starting
 """
   ╠═╡ =#
 
-# ╔═╡ 589feab3-f94d-4f32-9526-a41cf9a5e439
+# ╔═╡ 0e86c197-32ae-4cff-8ab2-fe7847e5514a
 #=╠═╡
-HeatFluxes_EB_I(solt,grid,sys,data)
+let
+	HeatFluxes_EB_I(solt,grid,sys,data)
+end
   ╠═╡ =#
 
 # ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
@@ -389,7 +392,7 @@ let
 	scalarplot!(vis, solt.t[2:end], inflow_rate_manual, label="Inflow MANUAL", color=:pink, clear=false)
 	scalarplot!(vis, solt.t[2:end], outflow_rate, label="Outflow rate", color=:red, clear=false)	
 	scalarplot!(vis, solt.t[2:end], -reaction_rate, label="Reaction rate",  color=:blue, clear=false)
-	scalarplot!(vis, solt.t[2:end], stored_amount, label="Stored amount", color=:green, clear=false, )
+	#scalarplot!(vis, solt.t[2:end], stored_amount, label="Stored amount", color=:green, clear=false, )
 	reveal(vis)
 
 end
@@ -547,6 +550,7 @@ md"""
 """
 
 # ╔═╡ de69f808-2618-4add-b092-522a1d7e0bb7
+# ╠═╡ show_logs = false
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
@@ -718,11 +722,11 @@ end
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
-# ╠═589feab3-f94d-4f32-9526-a41cf9a5e439
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
+# ╠═0e86c197-32ae-4cff-8ab2-fe7847e5514a
 # ╠═994d4a87-3f27-4a51-b061-6111c3346d60
 # ╠═3207839f-48a9-49b6-9861-e5e74bc593a4
-# ╠═5d5ac33c-f738-4f9e-bcd2-efc43b638109
+# ╟─5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╟─99b59260-7651-45d0-b364-4f86db9927f8

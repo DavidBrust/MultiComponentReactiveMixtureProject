@@ -613,7 +613,7 @@ Helper function to calculate radiation emitted from the window towards the surfa
     reactor (PCR) model.
 """
 function radiosity_window(f,u,bnode,data)
-    (;iT,iTw,G_lamp,uc_window,uc_cat,uc_mask,irradiated_boundaries)=data
+    (;iTw,G_lamp,Tamb,uc_window,irradiated_boundaries)=data
     # irrad. exchange between quartz window (1), cat surface (2), masked sruface (3) 
     tau1_vis=uc_window.tau_vis
     rho1_vis=uc_window.rho_vis
@@ -622,7 +622,8 @@ function radiosity_window(f,u,bnode,data)
     eps1=uc_window.eps
 
     Tglass = u[iTw] # local tempererature of quartz window
-    G1_bot_IR = eps1*ph"σ"*Tglass^4
+    G1_bot_IR = eps1*ph"σ"*(Tglass^4-Tamb^4)+ph"σ"*Tamb^4
+	#G1_bot_IR = ph"σ"*Tamb^4
 	G1_bot_vis = 0.0
     if bnode.region in irradiated_boundaries		
 		G1_bot_vis += G_lamp # flux profile measured behind quarz in plane of cat layer
@@ -668,6 +669,7 @@ function PCR_top(f,u,bnode,data)
 			
 			if bnode.region in irradiated_boundaries
 				hflux_irrad = (-eps2*ph"σ"*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR) # irradiation heatflux 
+				#hflux_irrad = (-eps2*ph"σ"*(u[iT]^4-Tamb^4) + alpha2_vis*G1_vis) # irradiation heatflux 
 				
 				Tm=0.5*(u[iT] + u[iTw]) # mean temperature: catalyst layer and window
 		        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X0) # thermal conductivity at Tm and inlet composition X0
@@ -686,6 +688,7 @@ function PCR_top(f,u,bnode,data)
 				hflux_abs_w = alpha1_vis*G2_vis + alpha1_IR*G2_IR + alpha1_IR*ph"σ"*Tamb^4
 				hflux_emit_w = uc_window.eps*ph"σ"*u[iTw]^4
 				f[iTw] = -hflux_conv -hflux_abs_w +hflux_conv_top_w +2*hflux_emit_w
+				f[iTw] *= ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
                 # f[iTw] = zero(eltype(u))
 			end
 		end
@@ -756,8 +759,9 @@ function PCR_bottom(f,u,bnode,data)
 		hflux_emit_p = lc_plate.eps*ph"σ"*u[iTp]^4
 		G1_IR = (eps1*ph"σ"*u[iT]^4 + rho1_IR*eps2*ph"σ"*u[iTp]^4)/(1-rho1_IR*rho2_IR)
 		hflux_abs_p = alpha2_IR*G1_IR + alpha2_IR*ph"σ"*Tamb^4
-		f[iTp] = -hflux_conv -hflux_abs_p +2*hflux_emit_p +hflux_conv_bot_p		
-        #f[iTp] = zero(eltype(u))
+		f[iTp] = -hflux_conv -hflux_abs_p +2*hflux_emit_p +hflux_conv_bot_p
+		f[iTp] *= ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+        # f[iTp] = zero(eltype(u))
 	end
 end
 
