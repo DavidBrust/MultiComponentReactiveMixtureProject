@@ -48,6 +48,39 @@ function flux_window_underside(f,u,bnode,data)
     end
 end
 
+function irrad_top(f,u,bnode,data)
+    (;iT,irradiated_boundaries,uc_cat)=data
+
+    if bnode.region in irradiated_boundaries
+        alpha2_vis=uc_cat.alpha_vis
+        alpha2_IR=uc_cat.alpha_IR
+        eps2=uc_cat.eps       
+
+        G1_vis, G1_IR = radiosity_window(f,u,bnode,data)
+
+        hflux_irrad = (-eps2*ph"σ"*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR) 
+        f[iT] += hflux_irrad
+    end
+end
+
+function irrad_bottom(f,u,bnode,data)
+    (;iT,iTp,outlet_boundaries,lc_frit,lc_plate)=data
+
+    if bnode.region in outlet_boundaries
+        rho1_IR=lc_frit.rho_IR
+		alpha1_IR=lc_frit.alpha_IR
+		eps1=lc_frit.eps
+		rho2_IR=lc_plate.rho_IR
+		eps2=lc_plate.eps      
+
+        Tplate = u[iTp]
+        
+        hflux_irrad = -eps1*ph"σ"*u[iT]^4 + alpha1_IR/(1-rho1_IR*rho2_IR)*(eps2*ph"σ"*Tplate^4+rho2_IR*eps1*ph"σ"*u[iT]^4)
+        f[iT] += hflux_irrad
+    end
+end
+
+
 # G0_bot, IR only
 # function flux_window_underside_IR(f,u,bnode,data)
 #     if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
@@ -530,95 +563,105 @@ end
 # 	T_int./areas_	
 # end
 
+function HeatFluxes_Test(solt,grid,sys,data)
+    (;iT,irradiated_boundaries,outlet_boundaries) = data
+    inf_t, outf_t = TotalFlows(solt,grid,sys,data)
 
+    dE_dt = inf_t + outf_t
+    sol = solt(solt.t[end])
+    Qabs_inner_top = integrate(sys,irrad_top,sol; boundary=true)[iT,irradiated_boundaries]
+    Qabs_inner_top = sum(Qabs_inner_top)
 
-function EnthFluxes(sol,grid,sys,data)
-    (;iT,Fluids,inlet_boundaries,outlet_boundaries,mfluxin,mmix0,nflowin, T_gas_in,X0)=data
-
-    Hin=integrate(sys,flux_enthalpy_top,sol; boundary=true)[iT,inlet_boundaries]
-    Hin = sum(Hin)
-   
-
-    #Min=integrate(sys,flux_mass_top,sol; boundary=true)[ip,[Γ_top_in]]
-
-    in_,out_ = FixedBed.DMS_checkinout(sol,sys,data)
-
-    Hout=sum(out_[iT,outlet_boundaries])
-    X = [0.0,1.0,0.0,0.0,0.0,0.0]
-    h_in = enthalpy_mix(data, 299.15, X)
-    H_in = nflowin * h_in
-
-
-    #@info nflowin, mfluxin/mmix0 * Aout
-
-    H_in
-end
-
-
-function HeatFluxes_EB_I(sol,grid,sys,data)
-
-    (;iT,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries)=data
-
-    Hin=integrate(sys,flux_enthalpy_top,sol; boundary=true)[iT,inlet_boundaries]
-    Hin = sum(Hin)
-    #Min=integrate(sys,flux_mass_top,sol; boundary=true)[ip,[Γ_top_in]]
-
-    in_,out_ = FixedBed.DMS_checkinout(sol,sys,data)
-    Hout=sum(out_[iT,outlet_boundaries])
-
-    # Qcond_10=integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
-    Qconv_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,irradiated_boundaries]
-    Qconv_10=sum(Qconv_10)
-    # Qcond_20=integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
-    #Qconv_20=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
-
-    #QG_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_cat]
     QG_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,irradiated_boundaries]
     QG_01=sum(QG_01)
 
-    # #QG_02=integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_frit]
-
-    #QG_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
     QG_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,irradiated_boundaries]
     QG_10=sum(QG_10)
-    # QG_20=integrate(sys,flux_frit,sol; boundary=true)[iT,Γ_top_frit]
 
-    # # EB_top= Hin +QG_01 +QG_02 -QG_10 -QG_20 -Qcond_10 -Qcond_20
-    # EB_top= Hin +QG_01 +QG_02 -QG_10 -QG_20 -Qconv_10 -Qconv_20
-      
+    Qabs_inner_bottom = integrate(sys,irrad_bottom,sol; boundary=true)[iT,outlet_boundaries]
+    Qabs_inner_bottom = sum(Qabs_inner_bottom)
 
-    # Hout=integrate(sys,flux_enthalpy_bottom,sol; boundary=true)[iT,Γ_bottom]
+    QG_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,outlet_boundaries]
+    QG_34=sum(QG_34)
+    # #QG_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,Γ_bottom]
+    QG_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,outlet_boundaries]
+    QG_43=sum(QG_43)
 
-    # # Qcond_34=integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
-    #Qconv_34=integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,Γ_bottom]
+    dH_dot = dE_dt - Qabs_inner_top
+    #dH_dot, Qabs_irr
+
+    # Qabs_inner_top, QG_01 - QG_10, QG_01, QG_10
+    Qabs_inner_bottom, QG_43 - QG_34, QG_43, QG_34
+end
+
+
+function TotalFlows(solt,grid,sys,data)
+    (;iT,Fluids,inlet_boundaries,outlet_boundaries,mfluxin,mmix0,nflowin, T_gas_in,X0)=data
+
+    tfact=TestFunctionFactory(sys)	
+	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
+	tf_in=testfunction(tfact,outlet_boundaries,inlet_boundaries)
+
+    inflow_rate=Float64[]
+	outflow_rate=Float64[]
+    
+    for i=2:length(solt)
+		ifr=integrate(sys,tf_in,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])[iT]
+		ofr=integrate(sys,tf_out,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])[iT]
+		push!(inflow_rate,ifr)
+		push!(outflow_rate,ofr)        
+   	end
+
+    inflow_rate[end], outflow_rate[end]
+
+
+end
+
+
+function HeatFluxes_EB_I(solt,grid,sys,data)
+
+    (;iT,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries)=data
+
+    inf_t, outf_t = TotalFlows(solt,grid,sys,data)
+    dE_dt = inf_t + outf_t
+    sol = solt(solt.t[end])
+
+
+    Qconv_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,irradiated_boundaries]
+    Qconv_10=sum(Qconv_10)
+    
+    QG_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,irradiated_boundaries]
+    QG_01=sum(QG_01)
+
+    QG_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,irradiated_boundaries]
+    QG_10=sum(QG_10)
+
+        
+    QG_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,outlet_boundaries]
+    QG_34=sum(QG_34)
+    
+    QG_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,outlet_boundaries]
+    QG_43=sum(QG_43)
+
     Qconv_34=integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,outlet_boundaries]
     Qconv_34=sum(Qconv_34)
 
-    #QG_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,Γ_bottom]
-    QG_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,outlet_boundaries]
-    QG_34=sum(QG_34)
-    #QG_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,Γ_bottom]
-    QG_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,outlet_boundaries]
-    QG_43=sum(QG_43)
-    
-    # Qsides=integrate(sys,side,sol; boundary=true)[iT,[Γ_side_right,Γ_side_back,Γ_side_front,Γ_side_left]]
+    # # Qsides=integrate(sys,side,sol; boundary=true)[iT,[Γ_side_right,Γ_side_back,Γ_side_front,Γ_side_left]]
     Qsides=integrate(sys,FixedBed.PCR_side,sol; boundary=true)[iT,side_boundaries]
     Qsides=sum(Qsides)
+
+    dH_dot = dE_dt - (QG_01 - QG_10) - (QG_43 - QG_34) + Qconv_10 + Qconv_34 + Qsides
 
     # EB_bot= -Hout -Qcond_34 -QG_34 +QG_43    
 
     # EB = EB_top +EB_bot -Qsides    
     (
-        Hin=Hin,
         QG_01=QG_01,
-        # QG_02=QG_02,
+        # # QG_02=QG_02,
         QG_10=-QG_10,
-        # QG_20=-QG_20,
-        # Qconv_10=-Qconv_10,
+        dH_dot=dH_dot,
+        # # QG_20=-QG_20,
         Qconv_10=-Qconv_10,
-        # Qconv_20=-Qconv_20,
-        Hout=-Hout,
-        # # Qcond_34=-Qcond_34,
         Qconv_34=-Qconv_34,
         QG_34=-QG_34,
         QG_43=QG_43,

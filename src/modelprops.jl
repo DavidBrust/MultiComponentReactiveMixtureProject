@@ -169,7 +169,7 @@ Reaction function definition for use with VoronoiFVM.jl for the Darcy-Maxwell-St
     (DMS) model for Multi-component gas transport in porous media.
 """
 function DMS_reaction(f,u,node,data)
-	(;m,ip,is_reactive,catalyst_regions)=data
+	(;m,ip,iT,is_reactive,catalyst_regions)=data
 	ng=ngas(data)
 
 	if node.region in catalyst_regions && is_reactive # catalyst layer
@@ -192,7 +192,11 @@ function DMS_reaction(f,u,node,data)
 			end			
 		end
 	end
-	
+	### !!! TESTING
+	# if node.region in catalyst_regions
+	# 	f[iT] = -1000000.0
+	# end
+	### !!! TESTING
 	for i=1:ng
 		f[ng] += u[i]
 	end
@@ -220,19 +224,16 @@ function DMS_storage(f,u,node,data)
 	f[ip] = mmix*c*poros
 
     if solve_T_equation
-       	#@inline mmix = molarweight_mix(u,data)
         X=MVector{ng,eltype(u)}(undef)
         @inline MoleFrac!(X,u,data)
-        #@inline cpmix = heatcap_mix(data.Fluids, u[iT], X)
         @inline cpmix = heatcap_mix(data, T, X)
-        # solid heat capacity is 4 orders of magnitude larger than gas phase heat cap
         f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros)
     end
 	
 end
 
 @doc raw"""
-Storage function definition for use with VoronoiFVM.jl for the Darcy-Maxwell-Stefan
+Outflow boundary function definition for use with VoronoiFVM.jl for the Darcy-Maxwell-Stefan
     (DMS) model for Multi-component gas transport in porous media.
 """
 function DMS_boutflow(f,u,edge,data)
@@ -243,13 +244,13 @@ function DMS_boutflow(f,u,edge,data)
 	pout = u[ip,k]
     Tout = solve_T_equation ? u[iT,k] : one(eltype(u))*Tamb
     cout = pout/(ph"R"*Tout)
-	#cout = pout/(ph"R"*u[iT,k])
+
 	X = MVector{ng,eltype(u)}(undef)
 	
 	for i=1:ng
 		X[i] = u[i,k]
 	end
-	#@inline mumix, _ = dynvisc_thermcond_mix(data, u[iT,k], X)
+	
     @inline mumix, _ = dynvisc_thermcond_mix(data, Tout, X)
 	v = DarcyVelo(u,data,mumix)
 	
@@ -258,10 +259,8 @@ function DMS_boutflow(f,u,edge,data)
 	end
 
     if solve_T_equation
-        # convective heat flux
-        @inline r_hf_conv = v *cout * enthalpy_mix(data, Tout, X) * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth)
-
-        f[iT] = r_hf_conv
+        @inline r_hf_enth = v *cout * enthalpy_mix(data, Tout, X) * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth) # enthalpy heat flux
+        f[iT] = r_hf_enth
     end
 end
 
@@ -473,6 +472,8 @@ end
 
 	# reactor data
 	delta_gap::Float64=1.5*ufac"mm" # gas gap between frit and reactor wall
+	delta_wall::Float64=15*ufac"mm" # reactor wall thickness
+	shell_h::Float64=20*ufac"mm" # height of heat transfer area adjancent to domain boundary 
 	k_nat_conv::Float64=17.5*ufac"W/(m^2*K)" # natural convection heat transfer coeff.
     G_lamp::Float64 = 70.0*ufac"kW/m^2"
 
@@ -491,9 +492,9 @@ end
 	lambda_window::Float64=1.38*ufac"W/(m*K)"
 	lambda_Al::Float64=235.0*ufac"W/(m*K)"
 
-    function ReactorData(dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,k_nat_conv,G_lamp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+    function ReactorData(dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,G_lamp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
         KP = FixedBed.KinData{nreac(kinpar)}
-        new{ng,KP}(dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,k_nat_conv,G_lamp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+        new{ng,KP}(dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,G_lamp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
 
     end
 end
@@ -623,11 +624,8 @@ function radiosity_window(f,u,bnode,data)
     Tglass = u[iTw] # local tempererature of quartz window
     G1_bot_IR = eps1*ph"σ"*Tglass^4
 	G1_bot_vis = 0.0
-    if bnode.region in irradiated_boundaries
-	#if bnode.region==Γ_top_inner
-		# flux profile measured behind quarz in plane of cat layer
-		G1_bot_vis += G_lamp
-
+    if bnode.region in irradiated_boundaries		
+		G1_bot_vis += G_lamp # flux profile measured behind quarz in plane of cat layer
     end
     return G1_bot_vis,G1_bot_IR
 end
@@ -667,21 +665,19 @@ function PCR_top(f,u,bnode,data)
 			# heatflux from enthalpy inflow
             @inline r_hf_enth = mfluxin/mmix0 * enthalpy_mix(data, T_gas_in, X0) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
 			f[iT] = -r_hf_enth
-
+			
 			if bnode.region in irradiated_boundaries
-				# heatflux from irradiation
-				hflux_irrad = (-eps2*ph"σ"*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR) 
+				hflux_irrad = (-eps2*ph"σ"*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR) # irradiation heatflux 
 				
-				# heatflux from convection through top chamber
-		        Tm=0.5*(u[iT] + u[iTw]) # mean temperature
-		        # thermal conductivity at Tm and inlet composition X0 (H2/CO2 = 1/1)
-		        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X0)
+				Tm=0.5*(u[iT] + u[iTw]) # mean temperature: catalyst layer and window
+		        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X0) # thermal conductivity at Tm and inlet composition X0
 				dh=2*uc_h
 				kconv=Nu*λf/dh*ufac"W/(m^2*K)"
-				hflux_conv = kconv*(u[iT]-Tm)
+				hflux_conv = kconv*(u[iT]-Tm) # convection heatflux through top chamber
 				
-				#f[iT] += (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
-                f[iT] += zero(eltype(u))
+				f[iT] += (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+                # f[iT] += zero(eltype(u))
+				# f[iT] += (-hflux_irrad) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
 				
 				# calculate local window temperature from (local) flux balance
 				hflux_conv_top_w = k_nat_conv*(u[iTw]-Tamb)
@@ -689,8 +685,8 @@ function PCR_top(f,u,bnode,data)
 				G2_IR = eps2*ph"σ"*u[iT]^4 + rho2_IR*G1_IR
 				hflux_abs_w = alpha1_vis*G2_vis + alpha1_IR*G2_IR + alpha1_IR*ph"σ"*Tamb^4
 				hflux_emit_w = uc_window.eps*ph"σ"*u[iTw]^4
-				#f[iTw] = -hflux_conv -hflux_abs_w +hflux_conv_top_w +2*hflux_emit_w
-                f[iTw] = zero(eltype(u))
+				f[iTw] = -hflux_conv -hflux_abs_w +hflux_conv_top_w +2*hflux_emit_w
+                # f[iTw] = zero(eltype(u))
 			end
 		end
 	end
@@ -711,8 +707,8 @@ function PCR_side(f,u,bnode,data)
         @inline _,λf=dynvisc_thermcond_mix(data, u[iT], X)
 
         # w/o shell height
-        # f[iT] = (u[iT]-Tamb)/(delta_gap/λf+1/k_nat_conv)
-        f[iT] = zero(eltype(u))		
+        f[iT] = (u[iT]-Tamb)/(delta_gap/λf+1/k_nat_conv)
+        # f[iT] = zero(eltype(u))		
     end
 end
 
@@ -743,26 +739,25 @@ function PCR_bottom(f,u,bnode,data)
 
 		X=MVector{ng,eltype(u)}(undef)
 		@inline MoleFrac!(X,u,data)
-        # thermal conductivity at Tm and outlet composition X
-        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X)
-
-        # flux_cond = -λf*(u[iT]-Tplate)/lc_h # positive flux in positive z coord.
-		dh=2*lc_h
+        
+        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X) # thermal conductivity at Tm and outlet composition X
+        dh=2*lc_h
 		kconv=Nu*λf/dh*ufac"W/(m^2*K)"
 		hflux_conv = kconv*(u[iT]-Tm) # positive flux in negative z coord. (towards plate)
 
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
 		
-        # f[iT] = (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
-		f[iT] = zero(eltype(u))
+        f[iT] = (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+		# f[iT] = (-hflux_irrad) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+		# f[iT] = zero(eltype(u))
 
 		# calculate (local) plate temperature from (local) flux balance
 		hflux_conv_bot_p = k_nat_conv*(u[iTp]-Tamb)*2
 		hflux_emit_p = lc_plate.eps*ph"σ"*u[iTp]^4
 		G1_IR = (eps1*ph"σ"*u[iT]^4 + rho1_IR*eps2*ph"σ"*u[iTp]^4)/(1-rho1_IR*rho2_IR)
 		hflux_abs_p = alpha2_IR*G1_IR + alpha2_IR*ph"σ"*Tamb^4
-		# f[iTp] = -hflux_conv -hflux_abs_p +2*hflux_emit_p +hflux_conv_bot_p		
-        f[iTp] = zero(eltype(u))
+		f[iTp] = -hflux_conv -hflux_abs_p +2*hflux_emit_p +hflux_conv_bot_p		
+        #f[iTp] = zero(eltype(u))
 	end
 end
 

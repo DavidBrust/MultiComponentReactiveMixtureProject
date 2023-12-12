@@ -482,20 +482,18 @@ end
 
 
 
-# Molar enthalpy of ideal gases, J/(mol*K)
+# Molar enthalpy of ideal gases, J/mol
 # calculation according to VDI heat atlas 2010 D1.6 Equation (66), p. 140
 # use standard conditions (T=25°C, p=1 atm) as reference state
 # set enthalpy at reference state to standard enthalpy of formation
 function enthalpy_gas(Fluid::FluidProps, T)
-    # h = zero(eltype(T))
+	hgas = zero(eltype(T))
     (;ΔHform)=Fluid
     Tref = 298.15*ufac"K"
-    # cp_Tref = heatcap_gas(Fluid, Tref)
-    # cp_T = heatcap_gas(Fluid, T)
-    #cp(T) = heatcap_gas(Fluid, T)
-	
-    # h(T) = h_form(T_ref) + cp_bar*(T-T_ref)
-    ΔHform + 0.5*(heatcap_gas(Fluid, T)+heatcap_gas(Fluid, Tref))*(T-Tref)
+    # hgas += ΔHform + 0.5*(heatcap_gas(Fluid, T)+heatcap_gas(Fluid, Tref))*(T-Tref)
+	hgas += 0.5*(heatcap_gas(Fluid, T)+heatcap_gas(Fluid, Tref))*(T-Tref)
+	return hgas
+	# return 0.5*(heatcap_gas(Fluid, T)+heatcap_gas(Fluid, Tref))*(T-Tref)
 end
 
 # ideal gas mixture enthalpy
