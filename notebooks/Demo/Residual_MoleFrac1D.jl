@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.27
+# v0.19.35
 
 using Markdown
 using InteractiveUtils
@@ -99,134 +99,18 @@ md"""
 where $\rho$ is the (total) mixture density, $\vec v$ is the mass-averaged (barycentric)  mixture velocity calculated with the Darcy equation, $x_i$, $w_i$ and $M_i$ are the molar fraction, mass fraction and molar mass of species $i$ respectively, $\vec \Phi_i$ is the mass flux of species $i$ ($\frac{\text{kg}}{\text{m}^2 \text{s}}$) and $R_i$ is the species mass volumetric source/sink ($\frac{\text{mol}}{\text{m}^3 \text{s}}$) of gas phase species $i$.
 """
 
-# ╔═╡ 1f2d79f6-5511-4286-907f-a4cf8c547f8e
-function D_matrix!(D,data)
-	ng=ngas(data)
-	(;m) = data
-	@inbounds for i=1:(ng-1)
-		for j=(i+1):ng
-            Dji = one(eltype(D)) *1.0e-5*ufac"m^2/s" * m[i]*m[j]
-			@views D[j,i] = Dji
-			@views D[i,j] = Dji
-		end
-	end
-end
-
-# ╔═╡ 5547d7ad-dd58-4b00-8238-6e1abb32874e
-function flux(f,u,edge,data)
-	(;m,ip,Tamb)=data
-	ng=ngas(data)
-
-	F = MVector{ng-1,eltype(u)}(undef)
-	X = MVector{ng,eltype(u)}(undef)
-	W = MVector{ng,eltype(u)}(undef)
-	M = MMatrix{ng-1,ng-1,eltype(u)}(undef)
-	D = MMatrix{ng,ng,eltype(u)}(undef)
-	
-	δp = u[ip,1]-u[ip,2]
-	pm = 0.5*(u[ip,1]+u[ip,2])
-	c = pm/(ph"R"*Tamb)
-
-	@inline MoleFrac!(X,u,data)
-	@inline mmix = molarweight_mix(X,data)
-	@inline MassFrac!(X,W,data)
-	
-	rho = c*mmix
-	mumix = 2.0e-5*ufac"Pa*s"
-	v = DarcyVelo(u,data,mumix)
-	
-	
-	f[ip] = -rho*v
-	
-	@inline D_matrix!(D, data)
-	@inline M_matrix!(M, W, D, data)
-
-
-	@inbounds for i=1:(ng-1)
-		F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm )*c/mmix
-	end				
-	
-
-	@inline inplace_linsolve!(M,F)
-
-	@inbounds for i=1:(ng-1)
-		f[i] = -(F[i] + c*X[i]*m[i]*v)
-	end
-
-end
-
 # ╔═╡ 3440d4d8-3e03-4ff3-93f1-9afd7aaf9c41
 md"""
-Reaction leading to increase in moles.
+## Chemical Reaction
+The system consists of the three species $X_1, X_2, X_3$. The feed composition on molar basis is:
+-  $X_1 = 0.8$
+-  $X_2 = 0.2$
+-  $X_3 = 0.0$
 
-$A \rightarrow 3 B$
+In the interior of the domain a reaction leading to increase in total species number (moles) occurs:
+
+$X_2 \rightarrow 3 X_1$
 """
-
-# ╔═╡ 3bb2deff-7816-4749-9f1e-c1e451372b1e
-function reaction(f,u,node,data)
-	(;p,m,ip,Tamb,isreactive)=data
-	ng=ngas(data)
-	if node.region == 2 && isreactive == 1 # catalyst layer		
-		
-		# R1: u2 -> 3 u1 
-		k1 = 5.0
-		c = u[ip]/(ph"R"*Tamb)
-		r = k1 * u[2]*c
-
-		f[1] = -3*r*m[1]
-		f[2] = r*m[2]		
-	end
-	
-	for i=1:ng
-		f[ng] += u[i]
-	end
-	f[ng] = f[ng] - 1.0
-end
-
-# ╔═╡ 4af1792c-572e-465c-84bf-b67dd6a7bc93
-function storage(f,u,node,data)
-	(;Tamb,ip,m)=data
-	ng=ngas(data)
-	mmix = zero(eltype(u))
-	c = u[ip]/(ph"R"*Tamb)
-	
-	for i=1:ng
-		f[i]=c*u[i]*m[i]
-		mmix += u[i]*m[i]
-	end
-	
-	# total pressure
-	f[ng+1] = mmix*c
-end
-
-# ╔═╡ 5f88937b-5802-4a4e-81e2-82737514b9e4
-function bcond(f,u,bnode,data)
-	(;p,ip,mfluxin,W0,dt_mf,ng)=data
-
-	r_mfluxin = mfluxin*ramp(bnode.time; du=(0.1,1), dt=dt_mf)
-	for i=1:(ng-1)
-		boundary_neumann!(f,u,bnode, species=i,region=Γ_left,value=r_mfluxin*W0[i])
-	end	
-	boundary_neumann!(f,u,bnode, species=ip, region=Γ_left, value=r_mfluxin)
-	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
-end
-
-# ╔═╡ 389a4798-a9ee-4e9c-8b44-a06201b4c457
-function boutflow(f,u,edge,data)
-	(;Tamb,ip,m)=data
-	ng=ngas(data)
-
-	k=outflownode(edge)
-
-	pout = u[ip,k]
-	cout = pout/(ph"R"*Tamb)
-	mumix = 2.0e-5*ufac"Pa*s"
-	v = DarcyVelo(u,data,mumix)
-	
-	for i=1:(ng-1)
-		f[i] = v * cout*u[i,k]*m[i]
-	end	
-end
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
 function runSimRef(data,nref=0)
@@ -242,12 +126,14 @@ function runSimRef(data,nref=0)
 	
 	sys=VoronoiFVM.System( 	mygrid;
 							data=data,
-							flux=flux,
-							reaction=reaction,
-							storage=storage,
-							bcondition=bcond,
-							boutflow=boutflow,
-							outflowboundaries=[Γ_right],
+							flux=FixedBed.DMS_flux,
+							reaction=FixedBed.DMS_reaction,
+							storage=FixedBed.DMS_storage,
+							bcondition=FixedBed.PCR_bcond,
+							bflux=FixedBed.PCR_bflux,
+							bstorage=FixedBed.PCR_bstorage,
+							boutflow=FixedBed.DMS_boutflow,
+							outflowboundaries=data.outlet_boundaries,
 							assembly=:edgewise
 							)
 	
@@ -263,6 +149,7 @@ function runSimRef(data,nref=0)
 
 	control = SolverControl(strategy, sys;)
 		control.handle_exceptions=true
+		control.maxiters=250
 		control.Δu_opt=1.0e5
 
 	tsol=solve(sys;inival=inival,times,control)
@@ -303,13 +190,45 @@ begin
 		asol = []
 		agrid = []
 		asys = []
+
+		MinKin = KinData{}(;
+			ng = 3,
+			gnames = [:A, :B, :C],
+			Fluids = Vector{FluidProps}(undef,3),
+			gn = Dict(1:3 .=> [:A, :B, :C]),
+		    nr = 1,
+		    rnames = [:R1],
+		    rn = Dict(1:1 .=> [:R1]),
+		    rni = Dict(value => key for (key, value) in Dict(1:1 .=> [:R1])),
+		    nuij = vcat(
+		        [3, -1, 0], #R1 : B -> 3A
+		    ),
+		    ki_ref = Dict( [:R1] .=>  log.([5.0]) ),
+		    Ei = Dict( [:R1] .=> [0.0]*ufac"kJ/mol"),
+		    Ki_ref = Dict( [:R1] .=> [Inf]),
+		
+			Kj_ref = Dict( [:R1] .=> 0.0 ),
+			TKj_ref = Dict( [:R1] .=>  0.0 ),
+			ΔHj = Dict( [:R1] .=> 0.0 ),
+		)
+		
 		data_res = ReactorData(;
+			inlet_boundaries=[Γ_left],
+			outlet_boundaries=[Γ_right],
+			irradiated_boundaries=[],
+			side_boundaries=[],
+			solve_T_equation=false,
+			constant_properties = true,
+			is_reactive = true,
+			kinpar=MinKin,
+			lcat = 1.0,
 			ng = 3,
 			Tamb = 273.15,
 			m = [2.0,6.0,21.0]*ufac"g/mol",
 			X0 = [0.2, 0.8, 0.0],
 			mfluxin = 0.01*ufac"kg/(m^2*s)"
-	)
+		)
+			
 	 	for nref=0:refmax
 	 		sol,grid,sys,e,n = calce(data_res,nref)
 	 		push!(ae, e)
@@ -363,7 +282,7 @@ let
 	
 		nout(i) = out_[i]/m[i]
 		nin(i) = mfluxin/mmix0 *bareas(Γ_left,sys,grid)*X0[i]
-		RI=sum(integrate(sys,reaction,sol),dims=2) # reaction integral
+		RI=sum(integrate(sys,FixedBed.DMS_reaction,sol),dims=2) # reaction integral
 
 		println("Total mass inflows and outflows:")
 		@printf "IN: %2.6e \t OUT: %2.6e \t REACT: %2.6e kg/hr \nSUM: %2.6e kg/hr\n\n" in_[ip]/ufac"kg/hr" out_[ip]/ufac"kg/hr" RI[ip]/ufac"kg/hr" (in_[ip]+out_[ip]+RI[ip])/ufac"kg/hr"
@@ -385,19 +304,13 @@ end
 # ╟─0fadb9d2-1ccf-4d44-b748-b76d911784ca
 # ╟─b94513c2-c94e-4bcb-9342-47ea48fbfd14
 # ╟─c886dd12-a90c-40ab-b9d0-32934c17baee
-# ╠═5547d7ad-dd58-4b00-8238-6e1abb32874e
-# ╠═1f2d79f6-5511-4286-907f-a4cf8c547f8e
 # ╟─3440d4d8-3e03-4ff3-93f1-9afd7aaf9c41
-# ╠═3bb2deff-7816-4749-9f1e-c1e451372b1e
-# ╠═4af1792c-572e-465c-84bf-b67dd6a7bc93
-# ╠═5f88937b-5802-4a4e-81e2-82737514b9e4
-# ╠═389a4798-a9ee-4e9c-8b44-a06201b4c457
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╟─184f70a9-f049-4017-ad28-027ae606d0ca
 # ╟─abedcbf9-c99c-4969-b97a-3bc0295061bb
 # ╠═3ffbe1ba-d5aa-4bf0-a5c4-92cec7e0c199
 # ╟─7dd363bf-d6e0-4dfb-b29f-85aa1fb62429
-# ╠═c5190db5-ed3d-4084-ba16-496cc825fa9d
+# ╟─c5190db5-ed3d-4084-ba16-496cc825fa9d
 # ╠═bb2ef3c0-96fc-4a90-a714-a0cfa08ac178
 # ╠═3f56ffca-8ab8-4c32-b2b1-f2ec28ccf8b7
 # ╠═e4fb2336-781d-4c9c-b038-d9325ced57b6

@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.27
+# v0.19.35
 
 using Markdown
 using InteractiveUtils
@@ -98,128 +98,6 @@ md"""
 where $\rho$ is the (total) mixture density, $\vec v$ is the mass-averaged (barycentric)  mixture velocity calculated with the Darcy equation, $x_i$, $w_i$ and $M_i$ are the molar fraction, mass fraction and molar mass of species $i$ respectively, $\vec \Phi_i$ is the mass flux of species $i$ ($\frac{\text{kg}}{\text{m}^2 \text{s}}$) and $R_i$ is the species mass volumetric source/sink ($\frac{\text{mol}}{\text{m}^3 \text{s}}$) of gas phase species $i$.
 """
 
-# ╔═╡ 5547d7ad-dd58-4b00-8238-6e1abb32874e
-function flux(f,u,edge,data)
-	(;m,ip,Tamb)=data
-	ng=ngas(data)
-
-	F = MVector{ng-1,eltype(u)}(undef)
-	X = MVector{ng,eltype(u)}(undef)
-	W = MVector{ng,eltype(u)}(undef)
-	M = MMatrix{ng-1,ng-1,eltype(u)}(undef)
-	D = MMatrix{ng,ng,eltype(u)}(undef)
-	
-	δp = u[ip,1]-u[ip,2]
-	pm = 0.5*(u[ip,1]+u[ip,2])
-	c = pm/(ph"R"*Tamb)
-
-	@inline MoleFrac!(X,u,data)
-	@inline mmix = molarweight_mix(X,data)
-	@inline MassFrac!(X,W,data)
-	@inline mumix, lambdamix = dynvisc_thermcond_mix(data, Tamb, X)
-
-	rho = c*mmix
-	v = DarcyVelo(u,data,mumix)
-	
-	
-	f[ip] = -rho*v
-	
-	@inline D_matrix!(D, Tamb, pm, data)
-	@inline M_matrix!(M, W, D, data)
-
-
-	@inbounds for i=1:(ng-1)
-		F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm )*c/mmix
-	end				
-	
-
-	@inline inplace_linsolve!(M,F)
-
-	@inbounds for i=1:(ng-1)
-		f[i] = -(F[i] + c*X[i]*m[i]*v)
-	end
-
-end
-
-# ╔═╡ 3bb2deff-7816-4749-9f1e-c1e451372b1e
-function reaction(f,u,node,data)
-	(;m,ip,isreactive)=data
-	ng=ngas(data)
-
-	if node.region == 2 && isreactive==1 # catalyst layer
-		(;lcat,kinpar,gni)=data
-		(;rni,nuij)=kinpar
-		
-		pi = MVector{ng,eltype(u)}(undef)
-		for i=1:ng
-            pi[i] = u[ip]*u[i]
-		end
-
-		T = (650.0+273.15)*ufac"K"
-        RR = @inline -lcat*ri(data,T,pi)
-		
-		for i=1:ng
-			f[i] = zero(eltype(u))
-			for j=1:nreac(kinpar)
-				f[i] += nuij[(j-1)*ng+i] * RR[j] * m[i]
-			end			
-		end
-	end
-	
-	for i=1:ng
-		f[ng] += u[i]
-	end
-	f[ng] = f[ng] - 1.0
-end
-
-# ╔═╡ 4af1792c-572e-465c-84bf-b67dd6a7bc93
-function storage(f,u,node,data)
-	(;ip,Tamb,m,poros,)=data
-	ng=ngas(data)
-
-	c = u[ip]/(ph"R"*Tamb)
-	for i=1:ng
-		f[i]=c*u[i]*m[i]*poros
-	end
-	
-	# total pressure
-	@inline mmix = molarweight_mix(u,data)
-	
-	f[ip] = mmix*c*poros	
-end
-
-# ╔═╡ 5f88937b-5802-4a4e-81e2-82737514b9e4
-function bcond(f,u,bnode,data)
-	(;p,ip,mfluxin,W0,dt_mf,ng)=data
-
-	r_mfluxin = mfluxin*ramp(bnode.time; du=(0.1,1), dt=dt_mf)
-	for i=1:(ng-1)
-		boundary_neumann!(f,u,bnode, species=i,region=Γ_left,value=r_mfluxin*W0[i])
-	end	
-	boundary_neumann!(f,u,bnode, species=ip, region=Γ_left, value=r_mfluxin)
-
-	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
-end
-
-# ╔═╡ 389a4798-a9ee-4e9c-8b44-a06201b4c457
-function boutflow(f,u,edge,data)
-	(;Tamb,ip,m)=data
-	ng=ngas(data)
-
-	k=outflownode(edge)
-
-	pout = u[ip,k]
-	cout = pout/(ph"R"*Tamb)
-	X = MVector{ng,eltype(u)}(undef)
-	@inline MoleFrac!(X,u,data)
-	@inline mumix, lambdamix = dynvisc_thermcond_mix(data, Tamb, X)
-	v = DarcyVelo(u,data,mumix)
-	
-	for i=1:(ng-1)
-		f[i] = v * cout*u[i,k]*m[i]
-	end	
-end
-
 # ╔═╡ 9d0f4f0f-2a09-4f6c-a102-e45c8d39bd3e
 md"""
 # Uphill diffusion
@@ -248,17 +126,17 @@ function runSimRef(data,nref=0)
 
 	
 	times=flowrate == :high ? [0,20.0] : [0,100.0]
-	
 
-	
 	sys=VoronoiFVM.System( 	mygrid;
 							data=data,
-							flux=flux,
-							reaction=reaction,
-							storage=storage,
-							bcondition=bcond,
-							boutflow=boutflow,
-							outflowboundaries=[Γ_right],
+							flux=FixedBed.DMS_flux,
+							reaction=FixedBed.DMS_reaction,
+							storage=FixedBed.DMS_storage,
+							bcondition=FixedBed.PCR_bcond,
+							bflux=FixedBed.PCR_bflux,
+							bstorage=FixedBed.PCR_bstorage,
+							boutflow=FixedBed.DMS_boutflow,
+							outflowboundaries=data.outlet_boundaries,
 							assembly=:edgewise
 							)
 	
@@ -268,13 +146,14 @@ function runSimRef(data,nref=0)
 
 	inival[ip,:].=p
 	for i=1:ng
-		inival[i,:] .= 1.0/ng
-		#inival[i,:] .= X0[i]
+		#inival[i,:] .= 1.0/ng
+		inival[i,:] .= X0[i]
 	end
 	
 	control = SolverControl(nothing, sys;)
 		control.handle_exceptions=true
-		control.Δu_opt=100.0
+		control.Δu_opt=1_000.0
+		control.maxiters=250
 
 	tsol=solve(sys;inival=inival,times,control,verbose="nae")
 	sol = tsol(tsol.t[end]);
@@ -307,7 +186,18 @@ begin
 		asol = []
 		agrid = []
 		asys = []
-		data_uh = flowrate == :high ? ReactorData(nflowin=0.005) : ReactorData(nflowin=0.0001)
+		
+		nflowin = flowrate == :high ? 0.005 : 0.0001
+		data_uh = ReactorData(
+			inlet_boundaries=[Γ_left],
+			outlet_boundaries=[Γ_right],
+			irradiated_boundaries=[],
+			side_boundaries=[],
+			solve_T_equation=false,
+			nflowin=nflowin,
+			Treac = 273.15+650
+		)
+		
 	 	for nref=0:refmax
 	 		sol,grid,sys,DeltaCO2,n = calc(data_uh,nref)
 	 		push!(asol, sol)
@@ -359,7 +249,7 @@ let
 	
 		nout(i) = out_[i]/m[i]
 		nin(i) = mfluxin/mmix0 *1.0*ufac"m^2"*X0[i]
-		RI=sum(integrate(sys,reaction,sol),dims=2) # reaction integral
+		RI=sum(integrate(sys,FixedBed.DMS_reaction,sol),dims=2) # reaction integral
 
 		println("Total mass inflows and outflows:")
 		@printf "IN: %2.6e \t OUT: %2.6e \t REACT: %2.6e kg/hr \nSUM: %2.6e kg/hr\n\n" in_[ip]/ufac"kg/hr" out_[ip]/ufac"kg/hr" RI[ip]/ufac"kg/hr" (in_[ip]+out_[ip]+RI[ip])/ufac"kg/hr"
@@ -381,11 +271,6 @@ end
 # ╟─0fadb9d2-1ccf-4d44-b748-b76d911784ca
 # ╟─b94513c2-c94e-4bcb-9342-47ea48fbfd14
 # ╟─c886dd12-a90c-40ab-b9d0-32934c17baee
-# ╠═5547d7ad-dd58-4b00-8238-6e1abb32874e
-# ╠═3bb2deff-7816-4749-9f1e-c1e451372b1e
-# ╠═4af1792c-572e-465c-84bf-b67dd6a7bc93
-# ╠═5f88937b-5802-4a4e-81e2-82737514b9e4
-# ╠═389a4798-a9ee-4e9c-8b44-a06201b4c457
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╟─9d0f4f0f-2a09-4f6c-a102-e45c8d39bd3e
 # ╟─04acab16-0848-40a7-8d70-9c2ae6c1ca9b

@@ -173,7 +173,7 @@ function DMS_reaction(f,u,node,data)
 	ng=ngas(data)
 
 	if node.region in catalyst_regions && is_reactive # catalyst layer
-		(;lcat,kinpar,iT,Tamb,solve_T_equation)=data
+		(;lcat,kinpar,iT,Treac,solve_T_equation)=data
 		(;nuij)=kinpar
 		
 		pi = MVector{ng,eltype(u)}(undef)
@@ -181,7 +181,7 @@ function DMS_reaction(f,u,node,data)
             pi[i] = u[ip]*u[i]
 		end
 
-        T = solve_T_equation ? u[iT] : one(eltype(u))*Tamb
+        T = solve_T_equation ? u[iT] : one(eltype(u))*Treac
         RR = @inline -lcat*ri(data,T,pi)
         #RR = @inline -lcat*ri(data,u[iT],pi)
 		
@@ -192,11 +192,7 @@ function DMS_reaction(f,u,node,data)
 			end			
 		end
 	end
-	### !!! TESTING
-	# if node.region in catalyst_regions
-	# 	f[iT] = -1000000.0
-	# end
-	### !!! TESTING
+
 	for i=1:ng
 		f[ng] += u[i]
 	end
@@ -421,6 +417,7 @@ end
 	
 	p::Float64 = 1.0*ufac"bar"
 	Tamb::Float64 = 298.15*ufac"K"
+	Treac::Float64 = 298.15*ufac"K"
 
 	gn::Dict{Int, Symbol} = kinpar.gn # names and fluid indices
 	gni::Dict{Symbol, Int} = kinpar.gni # inverse names and fluid indices
@@ -492,9 +489,9 @@ end
 	lambda_window::Float64=1.38*ufac"W/(m*K)"
 	lambda_Al::Float64=235.0*ufac"W/(m*K)"
 
-    function ReactorData(dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,G_lamp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+    function ReactorData(dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,G_lamp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
         KP = FixedBed.KinData{nreac(kinpar)}
-        new{ng,KP}(dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,G_lamp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+        new{ng,KP}(dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,G_lamp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
 
     end
 end
