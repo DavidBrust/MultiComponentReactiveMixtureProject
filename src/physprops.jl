@@ -490,8 +490,8 @@ function enthalpy_gas(Fluid::FluidProps, T)
 	hgas = zero(eltype(T))
     (;ΔHform)=Fluid
     Tref = 298.15*ufac"K"
-    # hgas += ΔHform + 0.5*(heatcap_gas(Fluid, T)+heatcap_gas(Fluid, Tref))*(T-Tref)
-	hgas += 0.5*(heatcap_gas(Fluid, T)+heatcap_gas(Fluid, Tref))*(T-Tref)
+    hgas += ΔHform + 0.5*(heatcap_gas(Fluid, T)+heatcap_gas(Fluid, Tref))*(T-Tref)
+	# hgas += 0.5*(heatcap_gas(Fluid, T)+heatcap_gas(Fluid, Tref))*(T-Tref)
 	return hgas
 	# return 0.5*(heatcap_gas(Fluid, T)+heatcap_gas(Fluid, Tref))*(T-Tref)
 end

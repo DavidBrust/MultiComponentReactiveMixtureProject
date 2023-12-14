@@ -28,7 +28,7 @@ begin
 	
 	using PlutoVista, Plots, Printf
 	using PlutoUI, Colors
-
+	using Test
 	using FixedBed
 	
 	GridVisualize.default_plotter!(PlutoVista)
@@ -37,15 +37,20 @@ end;
 # ╔═╡ 2c4b16ab-8f60-467b-b608-2fea9fbc741c
 md"""
 # Introduction
-Demo Notebook with $\nu=3$ ideal gas species and constant properties to assess the discretization approach used for the Multi-component transport model where the $\nu$ (last) species is inert.
+Demo Notebook with $n=3$ ideal gas species in isothermal case with constant properties to assess the discretization approach used for the Multi-component transport model where the last species $X_3$ is inert.
 
-In the case setup in this notebook, the molar fraction of the last species $x_\nu$ should vanish, since it is not participating in any reactions and it is not in the feed flow. In the model, gas species $\nu$ is computed from $\Sigma x_i = 1$.
+The system consists of the three species $X_1, X_2, X_3$. The feed composition on molar basis is:
+-  $X_1 = 0.8$
+-  $X_2 = 0.2$
+-  $X_3 = 0.0$
 
-Solutions show small but non-vanishing values for $x_\nu$. A grid study is performed to see the influence of the grid spacing on the residuals of the molar fraction of species $\nu$.
+For the problem formulated here the molar fraction of the last species $X_3$ should vanish, since it is not participating in any reactions and it is not in the feed flow. In the model, the molar fraction of species $X_3$, $x_3$, is computed from solving $\Sigma x_i = 1$.
+
+Solutions show small but non-vanishing values for $x_3$. A grid study is performed to see the influence of the grid spacing on the residuals of the molar fraction of species $X_3$.
 
 Check the box to start the simulation:
 
-__Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=false))
+__Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=true))
 """
 
 # ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
@@ -71,33 +76,8 @@ begin
 	const Γ_right = 2
 end;
 
-# ╔═╡ 0fadb9d2-1ccf-4d44-b748-b76d911784ca
-md"""
-## Mass Continuity
-```math
-\begin{align}
-	\frac{\partial \rho}{\partial t} + \nabla \cdot \left ( \rho \vec v \right)  &= 0\\
-	\vec v  &= -\frac{\kappa}{\mu} \vec \nabla p\\
-\end{align}
-```
-"""
-
-# ╔═╡ b94513c2-c94e-4bcb-9342-47ea48fbfd14
-md"""
-## Species Mass Transport
-```math
-\begin{align}
-	\frac{\partial \rho_i}{\partial t} + \nabla \cdot \left( \vec \Phi_i + \rho_i \vec v \right ) - R_i &= 0 ~, \qquad i = 1 ... \nu \\
-		\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} \right) &= -\sum_{j=1 \atop j \neq i}^{\nu} \frac{w_j \vec \Phi_i-w_i \vec \Phi_j}{D_{ij} M_i M_j} \\
-		\sum_{i=1}^\nu x_i &= 1
-\end{align}
-```
-"""
-
-# ╔═╡ c886dd12-a90c-40ab-b9d0-32934c17baee
-md"""
-where $\rho$ is the (total) mixture density, $\vec v$ is the mass-averaged (barycentric)  mixture velocity calculated with the Darcy equation, $x_i$, $w_i$ and $M_i$ are the molar fraction, mass fraction and molar mass of species $i$ respectively, $\vec \Phi_i$ is the mass flux of species $i$ ($\frac{\text{kg}}{\text{m}^2 \text{s}}$) and $R_i$ is the species mass volumetric source/sink ($\frac{\text{mol}}{\text{m}^3 \text{s}}$) of gas phase species $i$.
-"""
+# ╔═╡ 94b0c012-b92c-41b7-9fa2-63e966dabd77
+@doc FixedBed.DMS_Info_isothermal()
 
 # ╔═╡ 3440d4d8-3e03-4ff3-93f1-9afd7aaf9c41
 md"""
@@ -255,21 +235,6 @@ let
 	end
 end
 
-# ╔═╡ c5190db5-ed3d-4084-ba16-496cc825fa9d
-if RunSim
-	p=Plots.plot(xlabel="Number of gridpoints (1D)",ylabel="Abs. error")
-	Plots.plot!(p,an,ae, xaxis=:log, yaxis=:log,m=:circle,label="max(abs(x$(data_res.ng))",)
-	Plots.plot!(p,an,1.0e-4 ./an, xaxis=:log, yaxis=:log, label="1/nx")
-end
-
-# ╔═╡ e4fb2336-781d-4c9c-b038-d9325ced57b6
-function checkinout(sys,sol)	
-	tfact=TestFunctionFactory(sys)
-	tf_in=testfunction(tfact,[Γ_right],[Γ_left])
-	tf_out=testfunction(tfact,[Γ_left],[Γ_right])	
-	(;in=integrate(sys,tf_in,sol),out=integrate(sys,tf_out,sol) )
-end
-
 # ╔═╡ 3ffbe1ba-d5aa-4bf0-a5c4-92cec7e0c199
 let
 	if RunSim
@@ -278,7 +243,7 @@ let
 		sys=asys[end]
 		grid=agrid[end]
 		
-		in_,out_=checkinout(sys,sol)
+		in_,out_=FixedBed.DMS_checkinout(sol,sys,data_res)
 	
 		nout(i) = out_[i]/m[i]
 		nin(i) = mfluxin/mmix0 *bareas(Γ_left,sys,grid)*X0[i]
@@ -294,23 +259,31 @@ let
 	end
 end
 
+# ╔═╡ c5190db5-ed3d-4084-ba16-496cc825fa9d
+if RunSim
+	p=Plots.plot(xlabel="Number of gridpoints (1D)",ylabel="Abs. error")
+	Plots.plot!(p,an,ae, xaxis=:log, yaxis=:log,m=:circle,label="max(abs(x$(data_res.ng))",)
+	Plots.plot!(p,an,1.0e-4 ./an, xaxis=:log, yaxis=:log, label="1/nx")
+end
+
+# ╔═╡ 868a72a1-48f7-4727-baaa-645968298ef5
+@test ae[end] ≈ 1.7151859462020464e-7
+
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
-# ╟─2c4b16ab-8f60-467b-b608-2fea9fbc741c
+# ╠═2c4b16ab-8f60-467b-b608-2fea9fbc741c
 # ╠═d3278ac7-db94-4119-8efd-4dd18107e248
 # ╠═83fa22fa-451d-4c30-a4b7-834974245996
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
 # ╠═832f3c15-b75a-4afe-8cc5-75ff3b4704d6
-# ╟─0fadb9d2-1ccf-4d44-b748-b76d911784ca
-# ╟─b94513c2-c94e-4bcb-9342-47ea48fbfd14
-# ╟─c886dd12-a90c-40ab-b9d0-32934c17baee
+# ╟─94b0c012-b92c-41b7-9fa2-63e966dabd77
 # ╟─3440d4d8-3e03-4ff3-93f1-9afd7aaf9c41
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╟─184f70a9-f049-4017-ad28-027ae606d0ca
 # ╟─abedcbf9-c99c-4969-b97a-3bc0295061bb
-# ╠═3ffbe1ba-d5aa-4bf0-a5c4-92cec7e0c199
+# ╟─3ffbe1ba-d5aa-4bf0-a5c4-92cec7e0c199
 # ╟─7dd363bf-d6e0-4dfb-b29f-85aa1fb62429
 # ╟─c5190db5-ed3d-4084-ba16-496cc825fa9d
 # ╠═bb2ef3c0-96fc-4a90-a714-a0cfa08ac178
+# ╠═868a72a1-48f7-4727-baaa-645968298ef5
 # ╠═3f56ffca-8ab8-4c32-b2b1-f2ec28ccf8b7
-# ╠═e4fb2336-781d-4c9c-b038-d9325ced57b6

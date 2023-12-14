@@ -47,7 +47,7 @@ Demonstration notebook for the photo thermal catalytic reactor (PCR) model. Solv
 
 Select problem dimension: $(@bind dim Select([2, 3], default=2))
 
-Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=false))
+Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=true))
 """
 
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
@@ -142,67 +142,11 @@ This notebook covers overall mass transport through porous material based on Dar
 Also the thermal energy equation is solved, taking into account convective-diffusive heat fluxes and irradiation boundary conditions.
 """
 
-# ╔═╡ 0fadb9d2-1ccf-4d44-b748-b76d911784ca
-md"""
-## Overall Mass Continuity
-Mixture mass flow (overall mass flow) through the pore space of the porous medium. Mixture mass averaged velocity is calculated from Darcy equation. The void fraction (porosity) is given by $\epsilon$.
+# ╔═╡ a1ea393e-f123-4ad0-affa-885db325cfd5
+@doc FixedBed.DMS_Info_isothermal()
 
-```math
-\begin{align}
-	\frac{\partial \epsilon \rho}{\partial t} + \nabla \cdot \left ( \rho \vec v \right)  &= 0\\
-	\vec v  &= -\frac{\kappa}{\mu} \vec \nabla p\\
-\end{align}
-```
-"""
-
-# ╔═╡ b94513c2-c94e-4bcb-9342-47ea48fbfd14
-md"""
-## Species Mass Continuity and Transport
-```math
-\begin{align}
-	\frac{\partial \epsilon \rho_i}{\partial t} + \nabla \cdot \left( \vec \Phi_i + \rho_i \vec v \right ) - r_i(\varrho) &= 0 ~, \qquad i = 1 ... \nu \\
-		\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} \right) &= -\sum_{j=1 \atop j \neq i}^{\nu} \frac{w_j \vec \Phi_i-w_i \vec \Phi_j}{D_{ij} M_i M_j} \\
-		\sum_{i=1}^\nu x_i &= 1
-\end{align}
-```
-"""
-
-# ╔═╡ c886dd12-a90c-40ab-b9d0-32934c17baee
-md"""
-where $\rho$ is the (total) mixture density, $\vec v$ is the mass-averaged (barycentric)  mixture velocity calculated with the Darcy equation, $x_i$, $w_i$ and $M_i$ are the molar fraction, mass fraction and molar mass of species $i$ respectively, $\vec \Phi_i$ is the __diffusive__ mass flux of species $i$ ($\frac{\text{kg}}{\text{m}^2 \text{s}}$) and $r_i$ is the species mass volumetric source/sink ($\frac{\text{kg}}{\text{m}^3 \text{s}}$) of gas phase species $i$.
-
-The __convective__ mass flux of species $i$ is the product of the superficial mean velocity with the partial mass density $\rho_i \vec v$. The combined __convective-diffusive__ species mass flux $\vec \Psi_i = \vec \Phi_i + \rho_i \vec v$ can be introduced as an auxiliary variable.
-"""
-
-# ╔═╡ 8f2549f4-b0a6-440f-af94-6880e0814dc2
-md"""
-## Thermal Energy Transport
-"""
-
-# ╔═╡ 05ef2813-194a-4ba8-81aa-4ec96f68b01c
-md"""
-The thermal energy equation considers convective-diffusive transport of thermal energy and is formulated with effective transport parameters that are a consequence of the quasi-homogeneous phase approach:
-
-```math
-\begin{align}
-\frac{\partial ( \varepsilon c c_p + (1-\varepsilon) \rho_{\text s} c_{\text s}) T}{\partial t} - \nabla \cdot \left(\lambda_{\text{eff}} \nabla T - h_{\text{mix}} \rho \vec v \right) = 0
-\end{align}
-```
-The term for the time derivative of the temperature describes the heat storage capacity of the media in the domain and is a superposition of the heat capacities for gas and solid phase weighted by their respective volume fraction.
-
-Here $\lambda_{\text{eff}}$ is the effective thermal conductivity in the quasi-homogeneous approach, which is a (complicated) function of the thermal conductivities of the solid and gas phases.
-
-The convective heat transport ("thermal drift") within the porous medium is a result of gas phase mass flow carrying enthalpy and is expressed via the sum  of species (mass) fluxes and species mass-specific enthalpies $\sum_i^n \vec \Psi_i h_i$.
-A simplification is made under the assumption that $\sum_i^n\vec \Psi_i h_i \approx (\rho \vec v) h_{\text{mix}}$, leading to above thermal energy transport equation.
-Here the mixture mass specific enthalpy is defined by $h_{\text{mix}}=\sum_i^n x_i h_i / M_{\text{mix}}$.
-
-The heat release from chemical reactions is considered as part of the species enthalpies.
-"""
-
-# ╔═╡ 87d3a394-47b1-4c16-aa67-2ad1f16e48ff
-md"""
-As part of the initialisation strategy (see next section) the convective contribution of heat flux is ramped up at the same time with the heat transport boundary conditions after the flow field has been established.
-"""
+# ╔═╡ 415f6fa7-d5b5-40a2-806e-3d8a61541c2e
+@doc FixedBed.DMS_Info_thermal()
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
 function ThermalDemo(dim; times=nothing, mfluxin = nothing, verbose="aen")
@@ -316,11 +260,45 @@ The mass flow boundary condition into the reactor domain is "ramped up" starting
 """
   ╠═╡ =#
 
+# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
+#=╠═╡
+@bind t Slider(solt.t,show_value=true,default=solt.t[end])
+  ╠═╡ =#
+
+# ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
+# ╠═╡ skip_as_script = true
+#=╠═╡
+sol = solt(t);
+  ╠═╡ =#
+
+# ╔═╡ d6a073e4-f4f6-4589-918f-20b61a780dad
+#=╠═╡
+let
+	(;inlet_boundaries,outlet_boundaries)=data
+	tfact=TestFunctionFactory(sys)
+	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
+	#tf_out=testfunction(tfact,[1,3,4,5,6,7],[2])
+	out=integrate(sys,tf_out,sol)
+	#scalarplot(grid,tf_out)
+end
+  ╠═╡ =#
+
 # ╔═╡ 0e86c197-32ae-4cff-8ab2-fe7847e5514a
 #=╠═╡
 let
-	HeatFluxes_EB_I(solt,grid,sys,data)
+	HeatFluxes_EB_I(t,solt,grid,sys,data)
 end
+  ╠═╡ =#
+
+# ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
+#=╠═╡
+FixedBed.DMS_print_summary(sol,grid,sys,data)
+  ╠═╡ =#
+
+# ╔═╡ 3207839f-48a9-49b6-9861-e5e74bc593a4
+# ╠═╡ skip_as_script = true
+#=╠═╡
+FixedBed.DMS_print_summary_ext(sol,sys,data)
   ╠═╡ =#
 
 # ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
@@ -405,40 +383,6 @@ md"""
 2) Window inner surface
 3) Bottom plate
 """
-
-# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-#=╠═╡
-@bind t Slider(solt.t,show_value=true,default=solt.t[end])
-  ╠═╡ =#
-
-# ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
-# ╠═╡ skip_as_script = true
-#=╠═╡
-sol = solt(t);
-  ╠═╡ =#
-
-# ╔═╡ d6a073e4-f4f6-4589-918f-20b61a780dad
-#=╠═╡
-let
-	(;inlet_boundaries,outlet_boundaries)=data
-	tfact=TestFunctionFactory(sys)
-	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
-	#tf_out=testfunction(tfact,[1,3,4,5,6,7],[2])
-	out=integrate(sys,tf_out,sol)
-	#scalarplot(grid,tf_out)
-end
-  ╠═╡ =#
-
-# ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
-#=╠═╡
-FixedBed.DMS_print_summary(sol,grid,sys,data)
-  ╠═╡ =#
-
-# ╔═╡ 3207839f-48a9-49b6-9861-e5e74bc593a4
-# ╠═╡ skip_as_script = true
-#=╠═╡
-FixedBed.DMS_print_summary_ext(sol,sys,data)
-  ╠═╡ =#
 
 # ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
 # ╠═╡ show_logs = false
@@ -588,122 +532,6 @@ let
 end
   ╠═╡ =#
 
-# ╔═╡ 68ca72ae-3b24-4c09-ace1-5e340c8be3d4
-function len(grid)
-	coord = grid[Coordinates]
-	L=0.0
-	if dim == 1
-		L=coord[end]
-	elseif dim == 2
-		L=coord[1,end]
-	else
-		L=coord[2,end]
-	end
-	L*ufac"m"
-end
-
-# ╔═╡ db77fca9-4118-4825-b023-262d4073b2dd
-md"""
-### Peclet Number
-```math
-\text{Pe}_L= \frac{L \vec v}{D}
-
-```
-"""
-
-# ╔═╡ ae8c7993-a89f-438a-a72a-d4a0c9a8ce57
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	L=maximum(grid[Coordinates][dim,:])
-	(;mfluxin,mmix0,p,Tamb) = data
-	ng = ngas(data)
-	rho0 = p*mmix0/(ph"R"*Tamb)
-	v0 = mfluxin / rho0
-	D = DiffCoeffs(mydata)
-	Pe = L*v0 / minimum(D[D.>0])
-end
-  ╠═╡ =#
-
-# ╔═╡ e7497364-75ef-4bd9-87ca-9a8c2d97064c
-md"""
-### Damköhler Number
-```math
-\text{Da}= \frac{k_{\text{react}}}{k_{\text{conv}}} = \frac{\dot r}{c_0} \tau = \frac{\dot r L}{c_0 v}
-
-```
-"""
-
-# ╔═╡ e000c100-ee46-454e-b049-c1c29daa9a56
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	L=maximum(grid[Coordinates][dim,:])
-	(;mfluxin,mmix0,lcat,p,X0,gni) = data
-	T = 650 + 273.15
-	c0 = p*X0/(ph"R"*T)
-	rho0 = p*mmix0/(ph"R"*T)
-	v0 = mfluxin / rho0	
-	RR = -lcat*ri(data,T,p*X0)
-	tau = L/v0
-	Da = maximum(RR)/c0[gni[:H2]] * tau
-end
-  ╠═╡ =#
-
-# ╔═╡ f6e54602-b63e-4ce5-b8d5-f626fbe5ae7a
-md"""
-### Reynolds Number
-```math
-\text{Re} = \frac{\rho v D}{\eta}  
-```
-where $\rho$ is the density of the fluid, ideal gas in this case, $v$ is the magnitufe of the velocity, $D$ is a representative length scale, here it is the mean pore diameter, and $\eta$ is the dynamic viscosity of the fluid.
-"""
-
-# ╔═╡ f690c19f-22e3-4428-bc1c-3ed7d1646e71
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let	
-	(;mfluxin,mmix0,X0,p,Tamb,m,dp,Fluids) = data
-	ng = ngas(data)
-	rho0 = p*mmix0/(ph"R"*Tamb)
-	v0 = mfluxin / rho0
-
-	ηf, λf = dynvisc_thermcond_mix(data, Tamb, X0)
-    
-    cf = heatcap_mix(Fluids, Tamb, X0)
-	
-	Re = v0*rho0*dp/ηf # Reynolds number
-	#Pr = cf*ηf/λf # Prandtl number
-	#Pe = u0*ρf*cf*d/λf # Peclet
-	#Re,Pr,Pe
-end
-  ╠═╡ =#
-
-# ╔═╡ 0d507c5e-eb0f-4094-a30b-a4a82fd5c302
-md"""
-### Knudsen Number
-```math
-\text{Kn} = \frac{\lambda}{l} = \frac{k_{\text B}T}{\sqrt 2 \pi \sigma^2pl}
-```
-where $\lambda$ is the mean free path length of the fluid, ideal gas in this case and $l$ is the pore diameter of the porous medium. Determine the mean free path length for ideal gas from kinetic gas theory and kinetic collision cross-sections (diameter).
-
--  $\text{Kn} < 0.01$: Continuum flow
--  $0.01 <\text{Kn} < 0.1$: Slip flow
--  $0.1 < \text{Kn} < 10$: Transitional flow
--  $\text{Kn} > 10$: Free molecular flow
-"""
-
-# ╔═╡ 5bbe72b2-2f80-4dae-9706-7ddb0b8b6dbe
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	(;dp,Tamb,p) = data
-	σs = Dict(:H2 => 289*ufac"pm", :CH4 => 380*ufac"pm", :H2O => 265*ufac"pm", :N2 => 364*ufac"pm", :CO => 376*ufac"pm", :CO2 => 330*ufac"pm")
-
-	Kn = ph"k_B"*Tamb/(sqrt(2)*pi*σs[:H2O]^2*p*dp)	
-end
-  ╠═╡ =#
-
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─d3278ac7-db94-4119-8efd-4dd18107e248
@@ -713,22 +541,18 @@ end
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═bc811695-8394-4c35-8ad6-25856fa29183
 # ╟─a078e1e1-c9cd-4d34-86d9-df4a052b6b96
-# ╟─0fadb9d2-1ccf-4d44-b748-b76d911784ca
-# ╟─b94513c2-c94e-4bcb-9342-47ea48fbfd14
-# ╟─c886dd12-a90c-40ab-b9d0-32934c17baee
-# ╟─8f2549f4-b0a6-440f-af94-6880e0814dc2
-# ╟─05ef2813-194a-4ba8-81aa-4ec96f68b01c
-# ╟─87d3a394-47b1-4c16-aa67-2ad1f16e48ff
+# ╠═a1ea393e-f123-4ad0-affa-885db325cfd5
+# ╠═415f6fa7-d5b5-40a2-806e-3d8a61541c2e
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
+# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═0e86c197-32ae-4cff-8ab2-fe7847e5514a
 # ╠═994d4a87-3f27-4a51-b061-6111c3346d60
 # ╠═3207839f-48a9-49b6-9861-e5e74bc593a4
 # ╟─5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
-# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╟─99b59260-7651-45d0-b364-4f86db9927f8
 # ╟─58c0b05d-bb0e-4a3f-af05-71782040c8b9
 # ╟─8de4b22d-080c-486f-a6a9-41e8a5489966
@@ -736,12 +560,3 @@ end
 # ╟─111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╟─eb9dd385-c4be-42a2-8565-cf3cc9b2a078
 # ╟─de69f808-2618-4add-b092-522a1d7e0bb7
-# ╟─68ca72ae-3b24-4c09-ace1-5e340c8be3d4
-# ╟─db77fca9-4118-4825-b023-262d4073b2dd
-# ╠═ae8c7993-a89f-438a-a72a-d4a0c9a8ce57
-# ╟─e7497364-75ef-4bd9-87ca-9a8c2d97064c
-# ╠═e000c100-ee46-454e-b049-c1c29daa9a56
-# ╟─f6e54602-b63e-4ce5-b8d5-f626fbe5ae7a
-# ╠═f690c19f-22e3-4428-bc1c-3ed7d1646e71
-# ╟─0d507c5e-eb0f-4094-a30b-a4a82fd5c302
-# ╠═5bbe72b2-2f80-4dae-9706-7ddb0b8b6dbe

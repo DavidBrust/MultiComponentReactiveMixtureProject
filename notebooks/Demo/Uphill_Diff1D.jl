@@ -23,7 +23,7 @@ begin
 	using ExtendableGrids, GridVisualize,ExtendableSparse,SparseArrays
 	using NLsolve, LinearSolve
 	using StaticArrays
-
+	using Test
 	using LessUnitful
 	
 	using PlutoVista, Plots
@@ -44,7 +44,7 @@ A grid study is performed to assess if that "hump" corresponds to "uphill diffus
 
 Check the box to start the simulation:
 
-__Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=false))
+__Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=true))
 """
 
 # ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
@@ -56,8 +56,7 @@ function grid1D(nref=0)
     h=1/nx
 	X=(0:h:1)*ufac"cm"
 	grid=simplexgrid(X)
-	# catalyst region
-	cellmask!(grid,[0.4]*ufac"cm",[0.6]*ufac"cm",2)	
+	cellmask!(grid,[0.4]*ufac"cm",[0.6]*ufac"cm",2)	# catalyst region
 	grid
 end
 
@@ -70,33 +69,8 @@ begin
 	const Γ_right = 2
 end;
 
-# ╔═╡ 0fadb9d2-1ccf-4d44-b748-b76d911784ca
-md"""
-## Mass Continuity
-```math
-\begin{align}
-	\frac{\partial \rho}{\partial t} + \nabla \cdot \left ( \rho \vec v \right)  &= 0\\
-	\vec v  &= -\frac{\kappa}{\mu} \vec \nabla p\\
-\end{align}
-```
-"""
-
-# ╔═╡ b94513c2-c94e-4bcb-9342-47ea48fbfd14
-md"""
-## Species Mass Transport
-```math
-\begin{align}
-	\frac{\partial \rho_i}{\partial t} + \nabla \cdot \left( \vec \Phi_i + \rho_i \vec v \right ) - R_i &= 0 ~, \qquad i = 1 ... \nu \\
-		\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} \right) &= -\sum_{j=1 \atop j \neq i}^{\nu} \frac{w_j \vec \Phi_i-w_i \vec \Phi_j}{D_{ij} M_i M_j} \\
-		\sum_{i=1}^\nu x_i &= 1
-\end{align}
-```
-"""
-
-# ╔═╡ c886dd12-a90c-40ab-b9d0-32934c17baee
-md"""
-where $\rho$ is the (total) mixture density, $\vec v$ is the mass-averaged (barycentric)  mixture velocity calculated with the Darcy equation, $x_i$, $w_i$ and $M_i$ are the molar fraction, mass fraction and molar mass of species $i$ respectively, $\vec \Phi_i$ is the mass flux of species $i$ ($\frac{\text{kg}}{\text{m}^2 \text{s}}$) and $R_i$ is the species mass volumetric source/sink ($\frac{\text{mol}}{\text{m}^3 \text{s}}$) of gas phase species $i$.
-"""
+# ╔═╡ e17a383e-4e57-4c4d-9e08-0a24ae53af4f
+@doc FixedBed.DMS_Info_isothermal()
 
 # ╔═╡ 9d0f4f0f-2a09-4f6c-a102-e45c8d39bd3e
 md"""
@@ -179,7 +153,7 @@ end
 
 # ╔═╡ bb2ef3c0-96fc-4a90-a714-a0cfa08ac178
 begin
-	if RunSim
+	#if RunSim
 	 	refmax = 6
 	 	aDeltaCO2 = []
 	 	an = []
@@ -206,7 +180,7 @@ begin
 			push!(aDeltaCO2, DeltaCO2)
 	 		push!(an, n)			
 	 	end	 	
-	end
+	#end
  end
 
 # ╔═╡ abedcbf9-c99c-4969-b97a-3bc0295061bb
@@ -225,27 +199,13 @@ let
 	end
 end
 
-# ╔═╡ c5190db5-ed3d-4084-ba16-496cc825fa9d
-if RunSim
-	p=Plots.plot(xlabel="Number of gridpoints (1D)",ylabel="Delta xCO2")
-	Plots.plot!(p,an,aDeltaCO2, m=:circle,label="$(flowrate) flow rate",ylim=(0,1.25*maximum(aDeltaCO2)))
-end
-
-# ╔═╡ f7818384-23bf-4be3-848e-2d5e88a8ed6b
-function checkinout(sys,sol)	
-	tfact=TestFunctionFactory(sys)
-	tf_in=testfunction(tfact,[Γ_right],[Γ_left])
-	tf_out=testfunction(tfact,[Γ_left],[Γ_right])	
-	(;in=integrate(sys,tf_in,sol),out=integrate(sys,tf_out,sol) )
-end
-
 # ╔═╡ aee47c66-97ba-43fa-a8ec-dad7c0d4f20c
 let
 	if RunSim
 		(;gn,gni,m,mfluxin,mmix0,X0,ng,ip) = data_uh
 		sol=asol[end]
 		sys=asys[end]
-		in_,out_=checkinout(sys,sol)
+		in_,out_=FixedBed.DMS_checkinout(sol,sys,data_uh)
 	
 		nout(i) = out_[i]/m[i]
 		nin(i) = mfluxin/mmix0 *1.0*ufac"m^2"*X0[i]
@@ -261,6 +221,15 @@ let
 	end
 end
 
+# ╔═╡ c5190db5-ed3d-4084-ba16-496cc825fa9d
+if RunSim
+	p=Plots.plot(xlabel="Number of gridpoints (1D)",ylabel="Delta xCO2")
+	Plots.plot!(p,an,aDeltaCO2, m=:circle,label="$(flowrate) flow rate",ylim=(0,1.25*maximum(aDeltaCO2)))
+end
+
+# ╔═╡ 7a798fbc-472a-44fc-a058-f1db25b09459
+@test aDeltaCO2[end] ≈ 0.01702152459546069
+
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─2c4b16ab-8f60-467b-b608-2fea9fbc741c
@@ -268,9 +237,7 @@ end
 # ╠═83fa22fa-451d-4c30-a4b7-834974245996
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
 # ╠═832f3c15-b75a-4afe-8cc5-75ff3b4704d6
-# ╟─0fadb9d2-1ccf-4d44-b748-b76d911784ca
-# ╟─b94513c2-c94e-4bcb-9342-47ea48fbfd14
-# ╟─c886dd12-a90c-40ab-b9d0-32934c17baee
+# ╠═e17a383e-4e57-4c4d-9e08-0a24ae53af4f
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╟─9d0f4f0f-2a09-4f6c-a102-e45c8d39bd3e
 # ╟─04acab16-0848-40a7-8d70-9c2ae6c1ca9b
@@ -279,6 +246,6 @@ end
 # ╟─aee47c66-97ba-43fa-a8ec-dad7c0d4f20c
 # ╟─05e5e167-7c1c-43f4-8a8d-e173f2fb7029
 # ╠═c5190db5-ed3d-4084-ba16-496cc825fa9d
+# ╠═7a798fbc-472a-44fc-a058-f1db25b09459
 # ╠═bb2ef3c0-96fc-4a90-a714-a0cfa08ac178
 # ╠═3f56ffca-8ab8-4c32-b2b1-f2ec28ccf8b7
-# ╠═f7818384-23bf-4be3-848e-2d5e88a8ed6b

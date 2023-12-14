@@ -110,7 +110,7 @@ function flux_convection_bottom(f,u,bnode,data)
    end
 end
 
-function TotalFlows(solt,grid,sys,data)
+function TotalFlows(t,solt,grid,sys,data)
     (;iT,Fluids,inlet_boundaries,outlet_boundaries,mfluxin,mmix0,nflowin, T_gas_in,X0)=data
 
     tfact=TestFunctionFactory(sys)	
@@ -127,23 +127,26 @@ function TotalFlows(solt,grid,sys,data)
 		push!(outflow_rate,ofr)        
    	end
 
-    inflow_rate[end], outflow_rate[end]
+    ind = findfirst(x->x.== t, solt.t) -1 
+    inflow_rate[ind], outflow_rate[ind]
 
 
 end
 
 
-function HeatFluxes_EB_I(solt,grid,sys,data)
+function HeatFluxes_EB_I(t,solt,grid,sys,data)
 
     (;iT,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,dt_hf_irrad)=data
 
-    inf_t, outf_t = TotalFlows(solt,grid,sys,data)
+    inf_t, outf_t = TotalFlows(t,solt,grid,sys,data)
     dE_dt = inf_t + outf_t
-    tend = solt.t[end]
-    sol = solt(tend)
+    # tend = solt.t[end]
+    # sol = solt(tend)
+    sol = solt(t)
 
 
-    calc_hf = tend >= dt_hf_irrad[1]
+    # calc_hf = tend >= dt_hf_irrad[1]
+    calc_hf = t >= dt_hf_irrad[1]
 
     Qconv_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,irradiated_boundaries]
     Qconv_10 = calc_hf ? sum(Qconv_10) : 0.0

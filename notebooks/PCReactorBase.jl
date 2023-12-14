@@ -142,67 +142,11 @@ This notebook covers overall mass transport through porous material based on Dar
 Also the thermal energy equation is solved, taking into account convective-diffusive heat fluxes and irradiation boundary conditions.
 """
 
-# ╔═╡ 0fadb9d2-1ccf-4d44-b748-b76d911784ca
-md"""
-## Overall Mass Continuity
-Mixture mass flow (overall mass flow) through the pore space of the porous medium. Mixture mass averaged velocity is calculated from Darcy equation. The void fraction (porosity) is given by $\epsilon$.
+# ╔═╡ 1b38a2bb-20b2-4d98-a28b-d4cd1a8242c4
+@doc FixedBed.DMS_Info_isothermal()
 
-```math
-\begin{align}
-	\frac{\partial \epsilon \rho}{\partial t} + \nabla \cdot \left ( \rho \vec v \right)  &= 0\\
-	\vec v  &= -\frac{\kappa}{\mu} \vec \nabla p\\
-\end{align}
-```
-"""
-
-# ╔═╡ b94513c2-c94e-4bcb-9342-47ea48fbfd14
-md"""
-## Species Mass Continuity and Transport
-```math
-\begin{align}
-	\frac{\partial \epsilon \rho_i}{\partial t} + \nabla \cdot \left( \vec \Phi_i + \rho_i \vec v \right ) - r_i(\varrho) &= 0 ~, \qquad i = 1 ... \nu \\
-		\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} \right) &= -\sum_{j=1 \atop j \neq i}^{\nu} \frac{w_j \vec \Phi_i-w_i \vec \Phi_j}{D_{ij} M_i M_j} \\
-		\sum_{i=1}^\nu x_i &= 1
-\end{align}
-```
-"""
-
-# ╔═╡ c886dd12-a90c-40ab-b9d0-32934c17baee
-md"""
-where $\rho$ is the (total) mixture density, $\vec v$ is the mass-averaged (barycentric)  mixture velocity calculated with the Darcy equation, $x_i$, $w_i$ and $M_i$ are the molar fraction, mass fraction and molar mass of species $i$ respectively, $\vec \Phi_i$ is the __diffusive__ mass flux of species $i$ ($\frac{\text{kg}}{\text{m}^2 \text{s}}$) and $r_i$ is the species mass volumetric source/sink ($\frac{\text{kg}}{\text{m}^3 \text{s}}$) of gas phase species $i$.
-
-The __convective__ mass flux of species $i$ is the product of the superficial mean velocity with the partial mass density $\rho_i \vec v$. The combined __convective-diffusive__ species mass flux $\vec \Psi_i = \vec \Phi_i + \rho_i \vec v$ can be introduced as an auxiliary variable.
-"""
-
-# ╔═╡ 8f2549f4-b0a6-440f-af94-6880e0814dc2
-md"""
-## Thermal Energy Transport
-"""
-
-# ╔═╡ 05ef2813-194a-4ba8-81aa-4ec96f68b01c
-md"""
-The thermal energy equation considers convective-diffusive transport of thermal energy and is formulated with effective transport parameters that are a consequence of the quasi-homogeneous phase approach:
-
-```math
-\begin{align}
-\frac{\partial ( \varepsilon c c_p + (1-\varepsilon) \rho_{\text s} c_{\text s}) T}{\partial t} - \nabla \cdot \left(\lambda_{\text{eff}} \nabla T - h_{\text{mix}} \rho \vec v \right) = 0
-\end{align}
-```
-The term for the time derivative of the temperature describes the heat storage capacity of the media in the domain and is a superposition of the heat capacities for gas and solid phase weighted by their respective volume fraction.
-
-Here $\lambda_{\text{eff}}$ is the effective thermal conductivity in the quasi-homogeneous approach, which is a (complicated) function of the thermal conductivities of the solid and gas phases.
-
-The convective heat transport ("thermal drift") within the porous medium is a result of gas phase mass flow carrying enthalpy and is expressed via the sum  of species (mass) fluxes and species mass-specific enthalpies $\sum_i^n \vec \Psi_i h_i$.
-A simplification is made under the assumption that $\sum_i^n\vec \Psi_i h_i \approx (\rho \vec v) h_{\text{mix}}$, leading to above thermal energy transport equation.
-Here the mixture mass specific enthalpy is defined by $h_{\text{mix}}=\sum_i^n x_i h_i / M_{\text{mix}}$.
-
-The heat release from chemical reactions is considered as part of the species enthalpies.
-"""
-
-# ╔═╡ 87d3a394-47b1-4c16-aa67-2ad1f16e48ff
-md"""
-As part of the initialisation strategy (see next section) the convective contribution of heat flux is ramped up at the same time with the heat transport boundary conditions after the flow field has been established.
-"""
+# ╔═╡ ac8d1e2e-a049-44ef-ba85-0fb78c46b1ff
+@doc FixedBed.DMS_Info_thermal()
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
 function PCR_base(dim; times=nothing, mfluxin = nothing, verbose="aen")
@@ -218,7 +162,7 @@ function PCR_base(dim; times=nothing, mfluxin = nothing, verbose="aen")
 		#is_reactive = false,
 		G_lamp = 70.0*ufac"kW/m^2",
 		#G_lamp = 0.0,
-		dt_hf_enth = (2.0,6.0),
+		dt_hf_enth = (2.0,16.0),
 		#T_gas_in = 273.15 +300,
 		#X0 = [0,0,0,0,0,1.0], # N2
 		inlet_boundaries=inb,
@@ -315,11 +259,6 @@ The mass flow boundary condition into the reactor domain is "ramped up" starting
 """
   ╠═╡ =#
 
-# ╔═╡ 589feab3-f94d-4f32-9526-a41cf9a5e439
-#=╠═╡
-HeatFluxes_EB_I(solt,grid,sys,data)
-  ╠═╡ =#
-
 # ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╠═╡ skip_as_script = true
 #=╠═╡
@@ -406,6 +345,11 @@ md"""
 # ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 #=╠═╡
 @bind t Slider(solt.t,show_value=true,default=solt.t[end])
+  ╠═╡ =#
+
+# ╔═╡ 589feab3-f94d-4f32-9526-a41cf9a5e439
+#=╠═╡
+HeatFluxes_EB_I(t,solt,grid,sys,data)
   ╠═╡ =#
 
 # ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
@@ -709,12 +653,8 @@ end
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═bc811695-8394-4c35-8ad6-25856fa29183
 # ╟─a078e1e1-c9cd-4d34-86d9-df4a052b6b96
-# ╟─0fadb9d2-1ccf-4d44-b748-b76d911784ca
-# ╟─b94513c2-c94e-4bcb-9342-47ea48fbfd14
-# ╟─c886dd12-a90c-40ab-b9d0-32934c17baee
-# ╟─8f2549f4-b0a6-440f-af94-6880e0814dc2
-# ╟─05ef2813-194a-4ba8-81aa-4ec96f68b01c
-# ╟─87d3a394-47b1-4c16-aa67-2ad1f16e48ff
+# ╠═1b38a2bb-20b2-4d98-a28b-d4cd1a8242c4
+# ╠═ac8d1e2e-a049-44ef-ba85-0fb78c46b1ff
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
