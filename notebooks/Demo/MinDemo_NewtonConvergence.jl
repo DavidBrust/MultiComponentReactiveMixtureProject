@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.27
+# v0.19.36
 
 using Markdown
 using InteractiveUtils
@@ -161,8 +161,9 @@ $A \rightarrow 3 B$
 
 # ╔═╡ 3bb2deff-7816-4749-9f1e-c1e451372b1e
 function reaction(f,u,node,data)
-	(;p,m,ip,Tamb,isreactive)=data
+	(;p,m,ip,Tamb)=data
 	ng=ngas(data)
+	isreactive=1
 	if node.region == 2 && isreactive == 1 # catalyst layer		
 		
 		# R1: u2 -> 3 u1 
@@ -206,11 +207,7 @@ function bcond(f,u,bnode,data)
 	r_mfluxin = mfluxin*ramp(bnode.time; du=(0.1,1), dt=dt_mf)
 	boundary_neumann!(f,u,bnode, species=ip, region=Γ_left, value=r_mfluxin)
 	for i=1:(ng-1)
-		# !!! QUADRATIC CONVERGENCE
-		# no more quadratic convergence of Newton's method when specifying flux through boundary (Neumann bc.)		
 		boundary_neumann!(f,u,bnode, species=i,region=Γ_left,value=r_mfluxin*W0[i])
-		#boundary_dirichlet!(f,u,bnode, species=i,region=Γ_left,value=X0[i])		
-		# !!! QUADRATIC CONVERGENCE
 	end	
 	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
 end
@@ -280,7 +277,7 @@ function flux(f,u,edge,data)
 	@inline MoleFrac!(X,u,data)
 	@inline mmix = molarweight_mix(X,data)
 	@inline MassFrac!(X,W,data)
-	
+
 	rho = c*mmix
 	mumix = 2.0e-5*ufac"Pa*s"
 	v = DarcyVelo(u,data,mumix)
@@ -298,15 +295,10 @@ function flux(f,u,edge,data)
 	
 
 	@inline inplace_linsolve!(M,F)
-
+	
 	@inbounds for i=1:(ng-1)
-		# !!! QUADRATIC CONVERGENCE
-		# no more quadratic convergence of Newton's method when applying any flux other than pure diffusion with Diffusivity = 1
 		f[i] = -(F[i] + c*X[i]*m[i]*v)
-		#f[i] = u[i,1]-u[i,2]
-		# !!! QUADRATIC CONVERGENCE
 	end
-
 end
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
@@ -360,13 +352,16 @@ begin
 
 	control = SolverControl(strategy, sys;)
 		control.handle_exceptions=true
-		control.Δu_opt=1.0e5
+		control.Δu_opt=1
 		control.damp_initial=0.5
 
 	if RunSim
-		solt=solve(sys;inival=inival,times,control,verbose="nae")
+		solt=solve(sys;inival=inival,times,control,verbose="nae",log=true)
 	end
 end;
+
+# ╔═╡ 596fb57f-d5ee-498a-9bc9-aac37031e1b6
+plothistory(solt)
 
 # ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 @bind t Slider(solt.t,show_value=true,default=solt.t[end])
@@ -498,6 +493,7 @@ end
 # ╠═4af1792c-572e-465c-84bf-b67dd6a7bc93
 # ╠═5f88937b-5802-4a4e-81e2-82737514b9e4
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
+# ╠═596fb57f-d5ee-498a-9bc9-aac37031e1b6
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
 # ╠═ed7d1dc5-af4b-4e15-9eb8-92e346cdbb83
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
