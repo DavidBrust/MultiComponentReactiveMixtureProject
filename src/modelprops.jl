@@ -195,12 +195,14 @@ function DMS_flux(f,u,edge,data)
 	mass_flux = zero(eltype(u))
 	@inbounds for i=1:(ng-1)
 		f[i] = -(F[i] + c*X[i]*m[i]*v)
-		mass_flux += f[i]
-		enthalpy_flux += f[i] * enthalpy_gas(Fluids[i], Tm) / m[i]
+		if solve_T_equation
+			mass_flux += f[i]
+			enthalpy_flux += f[i] * enthalpy_gas(Fluids[i], Tm) / m[i]
+		end
 	end	
-	enthalpy_flux += (f[ip] - mass_flux) * enthalpy_gas(Fluids[ng], Tm) / m[ng]# species n
 	
     if solve_T_equation
+		enthalpy_flux += (f[ip] - mass_flux) * enthalpy_gas(Fluids[ng], Tm) / m[ng]# species n
         lambda_bed=kbed(data,lambdamix)*lambdamix
         # @inline hf_conv = f[ip] * enthalpy_mix(data, Tm, X) / mmix * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth) 
         # Bp,Bm = fbernoulli_pm(hf_conv/lambda_bed/Tm)

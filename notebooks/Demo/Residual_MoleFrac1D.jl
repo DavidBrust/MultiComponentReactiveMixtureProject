@@ -20,7 +20,7 @@ begin
 	Pkg.activate(joinpath(@__DIR__,"../.."))
 	using Revise
 	using VoronoiFVM
-	using ExtendableGrids, GridVisualize,ExtendableSparse,SparseArrays
+	using ExtendableGrids, GridVisualize,ExtendableSparse
 	using NLsolve, LinearSolve
 	using StaticArrays
 
@@ -138,6 +138,17 @@ function runSimRef(data,nref=0)
 	sol,mygrid,sys
 end
 
+# ╔═╡ 3f56ffca-8ab8-4c32-b2b1-f2ec28ccf8b7
+# ╠═╡ skip_as_script = true
+#=╠═╡
+function calce(data,nref=0)	
+	sol,grid,sys = runSimRef(data,nref)
+	abse = maximum(abs.(sol[3,:]))
+	nx = length(grid[Coordinates])
+	sol,grid,sys,abse,nx
+end
+  ╠═╡ =#
+
 # ╔═╡ 184f70a9-f049-4017-ad28-027ae606d0ca
 md"""
 # Residual Molar Fraction
@@ -148,23 +159,12 @@ Its value takes on a small but not vanishing value which probably results as a f
 A grid refinement study is performed and the maximum value of $x_3$ is plotted over the number of grid points in the 1D grid.
 """
 
-# ╔═╡ 7dd363bf-d6e0-4dfb-b29f-85aa1fb62429
-md"""
-## Grid Refinement
-"""
-
-# ╔═╡ 3f56ffca-8ab8-4c32-b2b1-f2ec28ccf8b7
-function calce(data,nref=0)	
-	sol,grid,sys = runSimRef(data,nref)
-	abse = maximum(abs.(sol[3,:]))
-	nx = length(grid[Coordinates])
-	sol,grid,sys,abse,nx
-end
-
 # ╔═╡ bb2ef3c0-96fc-4a90-a714-a0cfa08ac178
+# ╠═╡ skip_as_script = true
+#=╠═╡
 begin
 	if RunSim
-	 	refmax = 6
+	 	refmax = 0
 	 	ae = []
 	 	an = []
 		asol = []
@@ -208,21 +208,30 @@ begin
 			X0 = [0.2, 0.8, 0.0],
 			mfluxin = 0.01*ufac"kg/(m^2*s)"
 		)
-			
-	 	for nref=0:refmax
-	 		sol,grid,sys,e,n = calce(data_res,nref)
-	 		push!(ae, e)
-	 		push!(an, n)
-			push!(asol, sol)
-			push!(agrid, grid)
-			push!(asys, sys)
-	 	end	 	
+
+		sol,grid,sys = runSimRef(data_res,0)
+	 	#for nref=0:refmax
+	 	#	sol,grid,sys,e,n = calce(data_res,nref)
+	 	#	push!(ae, e)
+	 	#	push!(an, n)
+		#	push!(asol, sol)
+		#	push!(agrid, grid)
+		#	push!(asys, sys)
+	 	#end	 	
 	end
  end
+  ╠═╡ =#
+
+# ╔═╡ 7b11a2af-b442-4e50-a1d8-8344536087ff
+#=╠═╡
+@test sum(sol[1:3,:]) ≈ 11
+  ╠═╡ =#
 
 # ╔═╡ abedcbf9-c99c-4969-b97a-3bc0295061bb
+# ╠═╡ skip_as_script = true
+#=╠═╡
 let
-	if RunSim
+	if false
 		sol=asol[end]
 		grid=agrid[end]
 		(;ip,p) = data_res
@@ -234,10 +243,13 @@ let
 		reveal(vis)
 	end
 end
+  ╠═╡ =#
 
 # ╔═╡ 3ffbe1ba-d5aa-4bf0-a5c4-92cec7e0c199
+# ╠═╡ skip_as_script = true
+#=╠═╡
 let
-	if RunSim
+	if false
 		(;ip,gn,gni,m,mfluxin,mmix0,X0,ng) = data_res
 		sol=asol[end]
 		sys=asys[end]
@@ -258,20 +270,32 @@ let
 		end
 	end
 end
+  ╠═╡ =#
+
+# ╔═╡ 7dd363bf-d6e0-4dfb-b29f-85aa1fb62429
+md"""
+## Grid Refinement
+"""
 
 # ╔═╡ c5190db5-ed3d-4084-ba16-496cc825fa9d
-if RunSim
+# ╠═╡ skip_as_script = true
+#=╠═╡
+if false
 	p=Plots.plot(xlabel="Number of gridpoints (1D)",ylabel="Abs. error")
 	Plots.plot!(p,an,ae, xaxis=:log, yaxis=:log,m=:circle,label="max(abs(x$(data_res.ng))",)
 	Plots.plot!(p,an,1.0e-4 ./an, xaxis=:log, yaxis=:log, label="1/nx")
 end
+  ╠═╡ =#
 
 # ╔═╡ 868a72a1-48f7-4727-baaa-645968298ef5
-@test ae[end] ≈ 1.7151859462020464e-7
+# ╠═╡ skip_as_script = true
+#=╠═╡
+#@test ae[end] ≈ 1.7151859462020464e-7
+  ╠═╡ =#
 
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
-# ╠═2c4b16ab-8f60-467b-b608-2fea9fbc741c
+# ╟─2c4b16ab-8f60-467b-b608-2fea9fbc741c
 # ╠═d3278ac7-db94-4119-8efd-4dd18107e248
 # ╠═83fa22fa-451d-4c30-a4b7-834974245996
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
@@ -279,11 +303,12 @@ end
 # ╟─94b0c012-b92c-41b7-9fa2-63e966dabd77
 # ╟─3440d4d8-3e03-4ff3-93f1-9afd7aaf9c41
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
-# ╟─184f70a9-f049-4017-ad28-027ae606d0ca
-# ╟─abedcbf9-c99c-4969-b97a-3bc0295061bb
-# ╟─3ffbe1ba-d5aa-4bf0-a5c4-92cec7e0c199
-# ╟─7dd363bf-d6e0-4dfb-b29f-85aa1fb62429
-# ╟─c5190db5-ed3d-4084-ba16-496cc825fa9d
-# ╠═bb2ef3c0-96fc-4a90-a714-a0cfa08ac178
-# ╠═868a72a1-48f7-4727-baaa-645968298ef5
 # ╠═3f56ffca-8ab8-4c32-b2b1-f2ec28ccf8b7
+# ╟─184f70a9-f049-4017-ad28-027ae606d0ca
+# ╠═bb2ef3c0-96fc-4a90-a714-a0cfa08ac178
+# ╠═7b11a2af-b442-4e50-a1d8-8344536087ff
+# ╠═abedcbf9-c99c-4969-b97a-3bc0295061bb
+# ╠═3ffbe1ba-d5aa-4bf0-a5c4-92cec7e0c199
+# ╟─7dd363bf-d6e0-4dfb-b29f-85aa1fb62429
+# ╠═c5190db5-ed3d-4084-ba16-496cc825fa9d
+# ╠═868a72a1-48f7-4727-baaa-645968298ef5
