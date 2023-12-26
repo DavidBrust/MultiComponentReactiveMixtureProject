@@ -20,7 +20,7 @@ begin
 	Pkg.activate(joinpath(@__DIR__,"../.."))
 	using Revise
 	using VoronoiFVM
-	using ExtendableGrids, GridVisualize,ExtendableSparse,SparseArrays
+	using ExtendableGrids, GridVisualize,ExtendableSparse
 	using NLsolve, LinearSolve
 	using StaticArrays
 

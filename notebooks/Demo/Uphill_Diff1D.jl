@@ -41,10 +41,6 @@ Demo Notebook to investigate the isothermal 1D multi-component transport problem
 
 For high convective flowrates a "hump" in CO2 molar fraction occurs upstream of the reaction zone.
 A grid study is performed to assess if that "hump" corresponds to "uphill diffusion" or is a numerical artifact.
-
-Check the box to start the simulation:
-
-__Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=true))
 """
 
 # ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
@@ -140,6 +136,13 @@ md"""
 ## Grid Refinement
 """
 
+# ╔═╡ c5190db5-ed3d-4084-ba16-496cc825fa9d
+# ╠═╡ skip_as_script = true
+#=╠═╡
+p=Plots.plot(xlabel="Number of gridpoints (1D)",ylabel="Delta xCO2")
+Plots.plot!(p,an,aDeltaCO2, m=:circle,label="$(flowrate) flow rate",ylim=(0,1.25*maximum(aDeltaCO2)))
+  ╠═╡ =#
+
 # ╔═╡ 3f56ffca-8ab8-4c32-b2b1-f2ec28ccf8b7
 function calc(data,nref=0)
 	(;gni) = data
@@ -153,34 +156,32 @@ end
 
 # ╔═╡ bb2ef3c0-96fc-4a90-a714-a0cfa08ac178
 begin
-	#if RunSim
-	 	refmax = 6
-	 	aDeltaCO2 = []
-	 	an = []
-		asol = []
-		agrid = []
-		asys = []
-		
-		nflowin = flowrate == :high ? 0.005 : 0.0001
-		data_uh = ReactorData(
-			inlet_boundaries=[Γ_left],
-			outlet_boundaries=[Γ_right],
-			irradiated_boundaries=[],
-			side_boundaries=[],
-			solve_T_equation=false,
-			nflowin=nflowin,
-			Treac = 273.15+650
-		)
-		
-	 	for nref=0:refmax
-	 		sol,grid,sys,DeltaCO2,n = calc(data_uh,nref)
-	 		push!(asol, sol)
-			push!(agrid, grid)
-			push!(asys, sys)
-			push!(aDeltaCO2, DeltaCO2)
-	 		push!(an, n)			
-	 	end	 	
-	#end
+	refmax = 6
+	aDeltaCO2 = []
+	an = []
+	asol = []
+	agrid = []
+	asys = []
+	
+	nflowin = flowrate == :high ? 0.005 : 0.0001
+	data_uh = ReactorData(
+		inlet_boundaries=[Γ_left],
+		outlet_boundaries=[Γ_right],
+		irradiated_boundaries=[],
+		side_boundaries=[],
+		solve_T_equation=false,
+		nflowin=nflowin,
+		Treac = 273.15+650
+	)
+	
+	for nref=0:refmax
+		sol,grid,sys,DeltaCO2,n = calc(data_uh,nref)
+		push!(asol, sol)
+		push!(agrid, grid)
+		push!(asys, sys)
+		push!(aDeltaCO2, DeltaCO2)
+		push!(an, n)			
+	end	 	
  end
 
 # ╔═╡ abedcbf9-c99c-4969-b97a-3bc0295061bb
@@ -221,18 +222,12 @@ let
 	end
 end
 
-# ╔═╡ c5190db5-ed3d-4084-ba16-496cc825fa9d
-if RunSim
-	p=Plots.plot(xlabel="Number of gridpoints (1D)",ylabel="Delta xCO2")
-	Plots.plot!(p,an,aDeltaCO2, m=:circle,label="$(flowrate) flow rate",ylim=(0,1.25*maximum(aDeltaCO2)))
-end
-
 # ╔═╡ 7a798fbc-472a-44fc-a058-f1db25b09459
 @test aDeltaCO2[end] ≈ 0.01702152459546069
 
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
-# ╟─2c4b16ab-8f60-467b-b608-2fea9fbc741c
+# ╠═2c4b16ab-8f60-467b-b608-2fea9fbc741c
 # ╠═d3278ac7-db94-4119-8efd-4dd18107e248
 # ╠═83fa22fa-451d-4c30-a4b7-834974245996
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
