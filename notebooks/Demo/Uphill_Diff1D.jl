@@ -136,13 +136,6 @@ md"""
 ## Grid Refinement
 """
 
-# ╔═╡ c5190db5-ed3d-4084-ba16-496cc825fa9d
-# ╠═╡ skip_as_script = true
-#=╠═╡
-p=Plots.plot(xlabel="Number of gridpoints (1D)",ylabel="Delta xCO2")
-Plots.plot!(p,an,aDeltaCO2, m=:circle,label="$(flowrate) flow rate",ylim=(0,1.25*maximum(aDeltaCO2)))
-  ╠═╡ =#
-
 # ╔═╡ 3f56ffca-8ab8-4c32-b2b1-f2ec28ccf8b7
 function calc(data,nref=0)
 	(;gni) = data
@@ -185,42 +178,53 @@ begin
  end
 
 # ╔═╡ abedcbf9-c99c-4969-b97a-3bc0295061bb
+# ╠═╡ skip_as_script = true
+#=╠═╡
 let
-	if RunSim
-		sol=asol[end]
-		grid=agrid[end]
-		(;ip,p,ng,gn) = data_uh
-		cols = distinguishable_colors(ng, [RGB(1,1,1), RGB(0,0,0)], dropseed=true)
-		pcols = map(col -> (red(col), green(col), blue(col)), cols)
-		vis=GridVisualizer(legend=:lt, title="Molar Fractions", resolution=(600,300))
-		for i=1:ng
-			scalarplot!(vis, grid, sol[i,:], clear=false, color=pcols[i],label=gn[i])
-		end
-		reveal(vis)
+	sol=asol[end]
+	grid=agrid[end]
+	(;ip,p,ng,gn) = data_uh
+	cols = distinguishable_colors(ng, [RGB(1,1,1), RGB(0,0,0)], dropseed=true)
+	pcols = map(col -> (red(col), green(col), blue(col)), cols)
+	vis=GridVisualizer(legend=:lt, title="Molar Fractions", resolution=(600,300))
+	for i=1:ng
+		scalarplot!(vis, grid, sol[i,:], clear=false, color=pcols[i],label=gn[i])
 	end
+	reveal(vis)
 end
+  ╠═╡ =#
 
 # ╔═╡ aee47c66-97ba-43fa-a8ec-dad7c0d4f20c
-let
-	if RunSim
-		(;gn,gni,m,mfluxin,mmix0,X0,ng,ip) = data_uh
-		sol=asol[end]
-		sys=asys[end]
-		in_,out_=FixedBed.DMS_checkinout(sol,sys,data_uh)
-	
-		nout(i) = out_[i]/m[i]
-		nin(i) = mfluxin/mmix0 *1.0*ufac"m^2"*X0[i]
-		RI=sum(integrate(sys,FixedBed.DMS_reaction,sol),dims=2) # reaction integral
+# ╠═╡ skip_as_script = true
+#=╠═╡
+let	
+	(;gn,gni,m,mfluxin,mmix0,X0,ng,ip) = data_uh
+	sol=asol[end]
+	sys=asys[end]
+	in_,out_=FixedBed.DMS_checkinout(sol,sys,data_uh)
 
-		println("Total mass inflows and outflows:")
-		@printf "IN: %2.6e \t OUT: %2.6e \t REACT: %2.6e kg/hr \nSUM: %2.6e kg/hr\n\n" in_[ip]/ufac"kg/hr" out_[ip]/ufac"kg/hr" RI[ip]/ufac"kg/hr" (in_[ip]+out_[ip]+RI[ip])/ufac"kg/hr"
-		
-		println("Molar species inflows, outflows and reaction integrals:")
-		for i = 1:ng
-			@printf "%s\tIN: %2.6e \t OUT: %2.6e \t REACT: %2.6e mol/hr \n\tSUM: %2.6e mol/hr\n" gn[i] nin(i)/ufac"mol/hr" nout(i)/ufac"mol/hr" -RI[i]/m[i]/ufac"mol/hr" (nin(i)+nout(i)-RI[i]/m[i])/ufac"mol/hr"
-		end
+	nout(i) = out_[i]/m[i]
+	nin(i) = mfluxin/mmix0 *1.0*ufac"m^2"*X0[i]
+	RI=sum(integrate(sys,FixedBed.DMS_reaction,sol),dims=2) # reaction integral
+
+	println("Total mass inflows and outflows:")
+	@printf "IN: %2.6e \t OUT: %2.6e \t REACT: %2.6e kg/hr \nSUM: %2.6e kg/hr\n\n" in_[ip]/ufac"kg/hr" out_[ip]/ufac"kg/hr" RI[ip]/ufac"kg/hr" (in_[ip]+out_[ip]+RI[ip])/ufac"kg/hr"
+	
+	println("Molar species inflows, outflows and reaction integrals:")
+	for i = 1:ng
+		@printf "%s\tIN: %2.6e \t OUT: %2.6e \t REACT: %2.6e mol/hr \n\tSUM: %2.6e mol/hr\n" gn[i] nin(i)/ufac"mol/hr" nout(i)/ufac"mol/hr" -RI[i]/m[i]/ufac"mol/hr" (nin(i)+nout(i)-RI[i]/m[i])/ufac"mol/hr"
 	end
 end
+  ╠═╡ =#
+
+# ╔═╡ c5190db5-ed3d-4084-ba16-496cc825fa9d
+# ╠═╡ skip_as_script = true
+#=╠═╡
+let
+	p=Plots.plot(xlabel="Number of gridpoints (1D)",ylabel="Delta xCO2")
+	Plots.plot!(p,an,aDeltaCO2, m=:circle,label="$(flowrate) flow rate",ylim=(0,1.25*maximum(aDeltaCO2)))
+end
+  ╠═╡ =#
 
 # ╔═╡ 7a798fbc-472a-44fc-a058-f1db25b09459
 @test aDeltaCO2[end] ≈ 0.01702152459546069
