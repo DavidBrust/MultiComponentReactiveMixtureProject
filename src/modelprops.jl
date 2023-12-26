@@ -436,14 +436,14 @@ end
 @kwdef mutable struct ReactorData{NG, KP}
     # time constants for ramp functions
     dt_mf::Tuple{Float64, Float64}=(0.0,1.0)
-	dt_hf_enth::Tuple{Float64, Float64}=(2.0,10.0)
-	dt_hf_irrad::Tuple{Float64, Float64}=(3.0,10.0)
-
+    dt_hf_enth::Tuple{Float64, Float64}=(2.0,10.0)
+    dt_hf_irrad::Tuple{Float64, Float64}=(3.0,10.0)
+    
     # vectors holding boundary information
-    inlet_boundaries::Vector{Int64}
-    irradiated_boundaries::Vector{Int64}
-    outlet_boundaries::Vector{Int64}
-    side_boundaries::Vector{Int64}
+    inlet_boundaries::Vector{Int64} = Int64[]
+    irradiated_boundaries::Vector{Int64} = Int64[]
+    outlet_boundaries::Vector{Int64} = Int64[]
+    side_boundaries::Vector{Int64} = Int64[]
     catalyst_regions::Vector{Int64} =[2]
     impermeable_regions::Vector{Int64} =[3]
 
