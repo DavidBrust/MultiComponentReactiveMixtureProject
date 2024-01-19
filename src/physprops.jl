@@ -550,9 +550,9 @@ function molarweight_mix(u::VoronoiFVM.NodeUnknowns,data)
 end
 
 
-function density_idealgas(Fluids, T, p, x)
+function density_idealgas(T, p, x, data)
 	#p/(ph"R"*T)*data.MW*ufac"kg/m^3"
-    p/(ph"R"*T)*molarweight_mix(Fluids, x)*ufac"kg/m^3"
+    p/(ph"R"*T)*molarweight_mix(x,data)*ufac"kg/m^3"
 end
 
 function binary_diff_coeff_gas(gas1, gas2, T, p)

@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.27
+# v0.19.36
 
 using Markdown
 using InteractiveUtils
@@ -7,7 +7,7 @@ using InteractiveUtils
 # ╔═╡ c21e1942-628c-11ee-2434-fd4adbdd2b93
 begin
 	using Pkg
-	Pkg.activate(joinpath(@__DIR__,".."))
+	Pkg.activate(joinpath(@__DIR__,"../.."))
 	using Revise
 	using VoronoiFVM
 	using ExtendableGrids, GridVisualize,ExtendableSparse,SparseArrays

@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.25
+# v0.19.36
 
 using Markdown
 using InteractiveUtils
@@ -7,10 +7,10 @@ using InteractiveUtils
 # ╔═╡ 37edeff2-f335-11ed-0a1a-67aa587d3a23
 begin
 	using Pkg
-	Pkg.activate(joinpath(@__DIR__,".."))
+	Pkg.activate(joinpath(@__DIR__,"../.."))
 	using Revise
 	using LessUnitful
-	using CSV
+	using CSV, Printf
 	using DataFrames
 	using Statistics
 
@@ -26,35 +26,59 @@ begin
 	GridVisualize.default_plotter!(PlutoVista)
 end;
 
+# ╔═╡ b4a07bfc-f30e-4970-b301-bed21f50e943
+nom_flux = 80.0
+
 # ╔═╡ 8e4d183d-fc6b-47b5-9c6a-3b18b14c4297
-begin
-	FluxMap = CSV.read("../data/IrradiationFluxProfiles/IrradFlux.csv", DataFrame, delim=";")
+function readFlux(flux)
+	path = "../../data/IrradiationFluxProfiles/"
+	fluxes = [40.0,60.0,80.0,100.0]
+	@assert flux in fluxes
+	d_flux_n = Dict(
+	40.0=>("FluxMap_Import_20230523_110038_40.csv","Target_coords_20230523_110038_40.csv"),
+	60.0=>	("FluxMap_Import_20230523_105203_60.csv","Target_coords_20230523_105203_60.csv"),
+	80.0=>("FluxMap_Import_20230523_105025_80.csv","Target_coords_20230523_105025_80.csv"),
+	100.0=>("FluxMap_Import_20230523_104820_100.csv","Target_coords_20230523_104820_100.csv")
+	)
+	fn_flux, fn_coord = d_flux_n[flux]
+	FluxMap = CSV.read(path*fn_flux, DataFrame, header=false,delim=";")
+	coords = CSV.read(path*fn_coord, DataFrame, header=1,delim=";")
 	M=Matrix(FluxMap)
-	reverse!(M; dims=1) 
+	reverse!(M; dims=1)
+	return M, coords
 end;
 
-# ╔═╡ c2c77844-c43c-4580-877f-62c238fc68bb
-md"""
-# Coordinate System
-X-Y coordinates, starting from the upper left corner (0,0)
+# ╔═╡ 545ad3b6-c2b5-472f-87c4-38a56df9dc78
+M, coords = readFlux(nom_flux);
 
-Δx = 0.06579 cm
-
-Δy = 0.06579 cm
-"""
-
-# ╔═╡ befaf37d-d1a1-49ae-8a15-6a86e2807e6b
-begin
-	Dx = 0.06579*ufac"cm"
-	Dy = 0.06579*ufac"cm"
-end;
-
-# ╔═╡ 6766a4cb-296a-4bbf-8577-a24674243dda
-let
-	p=Plots.plot(size=(400,400))
-	Plots.contourf!(p,M, aspect_ratio=1, levels=maximum(M).*[0.0,0.1,0.3,0.5,0.7,0.9,1.0], lw=0, color=[:black,:blue,:cyan,:lawngreen,:yellow,:orange])
-	
+# ╔═╡ 3e816f03-7cb2-4a54-80bd-4ed340c92149
+function find_offsets(M,lb,ub)
+	inds = 30:1:33
+		
+	for sc in inds
+		for ec in inds
+			for sr in inds
+				for er in inds
+					M_ = @views mean(M[sc:(end-ec),sr:(end-er)])
+					if M_ > lb && M_ < ub
+						return (sc=sc, ec=ec, sr=sr, er=er)
+					end
+				end
+			end
+		end
+	end
 end
+
+# ╔═╡ 2689148e-2fd5-40cf-95c9-90339c0e1532
+D_offsets = Dict(
+	40.0=>(39.050003, 39.0500032),
+	60.0=>(58.713004, 58.713005),
+	80.0=>(79.024620, 79.024621),
+	100.0=>(102.494731, 102.494732),
+)
+
+# ╔═╡ 2acc8661-8e67-4229-93ff-ebb82ae39d0b
+offsets = find_offsets(M,D_offsets[nom_flux]...)
 
 # ╔═╡ 872522e3-b7e8-4a96-8ce2-2bf3458ca32a
 md"""
@@ -70,52 +94,79 @@ md"""
 
 # ╔═╡ 1c953043-6424-4813-b88b-f8665bd1d317
 md"""
-From optimization w.r.t. "flatness" of the profile, for 10 cm x 10 cm the selection begins at __col 82__ and __row 80__
+Determined row and column offset through brute force search for 10 cm x 10 cm and comparison with average value reported previously.
+
+- Start column: $(offsets.sc)
+- End column: $(offsets.ec)
+- Start row: $(offsets.sr)
+- End row: $(offsets.er)
 """
 
-# ╔═╡ 60516a56-e663-44d3-ac8e-21b3064a2ab7
-function sel10by10(M)
-	sr=80
-	sc=82
-
-	nx=Integer(round(10.0*ufac"cm"/Dx))
-	ny=Integer(round(10.0*ufac"cm"/Dy))
-	
-	M=Matrix(FluxMap)
-	@views M_ = M[sr:(sr+ny),sc:(sc+nx)]
-
-	nx,ny,M_
-end
-
-# ╔═╡ 777c6089-7a78-4dfb-8017-cb3bc69f8ab3
+# ╔═╡ 1a51e389-6fdd-448d-a58f-48a7112af505
 begin
-	nx10,ny10,M10 = sel10by10(M)
-	
-	x10 = range(-5.0,5.0,length=nx10+1)
-	y10 = range(-5.0,5.0,length=ny10+1)
+	width12 =  coords.X[end] - coords.X[1]
+	height12 =  coords.Y[end] - coords.X[1]
+end;
 
-	itp10 = Interpolations.interpolate((x10,y10), M10, Gridded(Linear()))
-end
+# ╔═╡ caca277d-ecc9-47cc-9c88-1dc3d7ee3ce1
+md"""
+## 12 cm x 12 cm
+- Mean: __$(round(mean(M),digits=2))__ $\,\text{kW}\,\text{m}^{-2}$
+- Min: __$(round(minimum(M),digits=2))__ $\,\text{kW}\,\text{m}^{-2}$
+- Max: __$(round(maximum(M),digits=2))__ $\,\text{kW}\,\text{m}^{-2}$
+- Std: __$(round(std(M),digits=2))__ $\,\text{kW}\,\text{m}^{-2}$
+- Power: __$(round(sum(M)*width12*height12*ufac"cm"^2/length(M),digits=2))__ $\,\text{kW}$
+"""
+
+# ╔═╡ 7031781a-67b6-4ab1-91e1-2e5d1b853068
+begin
+	(;sc,ec,sr,er) = offsets
+	width10 =  coords.X[end-ec] - coords.X[sc]
+	height10 =  coords.Y[end-er] - coords.X[sr]
+	M10 = M[sc:end-ec,sr:end-er]
+end;
 
 # ╔═╡ a5a0dd80-0171-4540-9b86-b6be242a733d
 md"""
-- Mean: __$(round(mean(M10),digits=1))__ $\,\text{kW}\,\text{m}^{-2}$
-- Min: __$(round(minimum(M10),digits=1))__ $\,\text{kW}\,\text{m}^{-2}$
-- Max: __$(round(maximum(M10),digits=1))__ $\,\text{kW}\,\text{m}^{-2}$
-- Std: __$(round(std(M10),digits=1))__ $\,\text{kW}\,\text{m}^{-2}$
-- Power: __$(round(sum(M10)*Dx*Dy,digits=1))__ $\,\text{kW}$
+## 10 cm x 10 cm
+- Mean: __$(round(mean(M10),digits=2))__ $\,\text{kW}\,\text{m}^{-2}$
+- Min: __$(round(minimum(M10),digits=2))__ $\,\text{kW}\,\text{m}^{-2}$
+- Max: __$(round(maximum(M10),digits=2))__ $\,\text{kW}\,\text{m}^{-2}$
+- Std: __$(round(std(M10),digits=2))__ $\,\text{kW}\,\text{m}^{-2}$
+- Power: __$(round(sum(M10)*width10*height10*ufac"cm"^2/length(M10),digits=2))__ $\,\text{kW}$
 """
+
+# ╔═╡ a10e7372-4abd-4afa-9e29-7bb34a994deb
+D_levels = Dict(
+	40.0 => [0.0,10.0,15.0,20.0,25.0,30.0,35.0,40.0,45.0],
+	60.0 => [0.0,10.0,20.0,30.0,35.0,40.0,45.0,50.0,55.0,60.0,65.0],
+	80.0 => [0.0,10.0,20.0,30.0,40.0,50.0,60.0,70.0,75.0,80.0,120.0],
+	100.0 => [0.0,25.0,50.0,60.0,70.0,75.0,80.0,85.0,90.0,95.0,100.0,150.0],
+);
+
+# ╔═╡ e2ea9dbb-c2af-439d-bb60-4432df9cd6e1
+function plotBorder(p)
+	Plots.plot!(p, [1.0;11.0], [1.0;1.0], c=:black, lw=2, label=:none)
+	Plots.plot!(p, [1.0;1.0], [1.0;11.0], c=:black, lw=2, label=:none)
+	Plots.plot!(p, [1.0;11.0], [11.0;11.0], c=:black, lw=2, label=:none)
+	Plots.plot!(p, [11.0;11.0], [1.0;11.0], c=:black, lw=2, label=:none)
+end
+
+# ╔═╡ 6766a4cb-296a-4bbf-8577-a24674243dda
+let
+	p=Plots.plot(size=(400,400))
+	Plots.contourf!(p,coords.X,coords.Y,M, aspect_ratio=1, levels=maximum(M).*[0.0,0.1,0.3,0.5,0.7,0.9,1.0], lw=0, color=[:black,:blue,:cyan,:lawngreen,:yellow,:orange])
+	plotBorder(p)
+end
 
 # ╔═╡ cd6dfa70-db90-4d38-b265-a89da0abb93c
 let
-	p=Plots.plot(layout=(1,2))
-	Plots.contour!(p[1,1],M10, lw=0, aspect_ratio = 1, fill = true)
+	(;sc,ec,sr,er) = offsets
+	p = Plots.plot(xlabel="X / cm", ylabel="Y / cm", xlimits=(0,12.0), ylimits=(0,12.0) )
 
-	x_ = range(-5.0,5.0,length=20)
-	y_ = range(-5.0,5.0,length=20)
-
-	Plots.contour!(p[1,2],x_,y_,itp10(x_,y_), lw=0, aspect_ratio = 1, fill = true)
-	p
+	Plots.contour!(p,coords.X,coords.Y,M, lw=0, aspect_ratio = 1, fill = true, levels=D_levels[nom_flux], clabels=true, colorbar_title="Flux density / kW/m²")
+	plotBorder(p)
+	#Plots.savefig(p, "./out/img/$(Integer(round(nom_flux)))kw_m2.svg")
 end
 
 # ╔═╡ 832c53d5-c004-4f71-8947-4146529442f7
@@ -155,48 +206,24 @@ function sel12by12(M)
 	M_,itp	
 end
 
-# ╔═╡ bfcdd56d-8421-439e-89cb-a84ca6e659e8
-md"""
-# Irradiation FLux Profile
-"""
-
-# ╔═╡ b10b6dcd-cddd-47f0-b6c8-00f79eb7b3fa
-let
-	M12, itp12 = sel12by12(M)
-
-	wi=12.0*ufac"cm"
-	nx,ny=size(M12)
-	x_ = range(-wi/2,wi/2,length=nx)
-	y_ = range(-wi/2,wi/2,length=ny)
-	
-	p=Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm", colorbar_title="Irradiation Flux / kW m-2", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"))
-	
-	p1=Plots.contour!(p,x_./ufac"cm",y_./ufac"cm",M12, lw=0, aspect_ratio = 1, fill = true)	
-
-	
-	x_ = range(-wi/2,wi/2,length=20)
-	y_ = range(-wi/2,wi/2,length=20)
-
-	p=Plots.plot(xguide="X Coordinate / cm", yguide="Y Coordinate / cm", colorbar_title="Irradiation Flux / kW m-2", xlim=(-wi/2/ufac"cm", wi/2/ufac"cm"), ylim=(-wi/2/ufac"cm", wi/2/ufac"cm"))
-	
-	p2=Plots.contour!(p,x_/ufac"cm",y_/ufac"cm",itp12(x_,y_), lw=0, aspect_ratio = 1, fill = true)
-	Plots.plot(p1,p2)
-end
-
 # ╔═╡ Cell order:
 # ╠═37edeff2-f335-11ed-0a1a-67aa587d3a23
-# ╠═8e4d183d-fc6b-47b5-9c6a-3b18b14c4297
-# ╟─c2c77844-c43c-4580-877f-62c238fc68bb
-# ╠═befaf37d-d1a1-49ae-8a15-6a86e2807e6b
+# ╠═b4a07bfc-f30e-4970-b301-bed21f50e943
+# ╟─a5a0dd80-0171-4540-9b86-b6be242a733d
+# ╟─caca277d-ecc9-47cc-9c88-1dc3d7ee3ce1
 # ╠═6766a4cb-296a-4bbf-8577-a24674243dda
-# ╠═872522e3-b7e8-4a96-8ce2-2bf3458ca32a
+# ╠═8e4d183d-fc6b-47b5-9c6a-3b18b14c4297
+# ╠═545ad3b6-c2b5-472f-87c4-38a56df9dc78
+# ╠═3e816f03-7cb2-4a54-80bd-4ed340c92149
+# ╠═2689148e-2fd5-40cf-95c9-90339c0e1532
+# ╠═2acc8661-8e67-4229-93ff-ebb82ae39d0b
+# ╟─872522e3-b7e8-4a96-8ce2-2bf3458ca32a
 # ╟─4379a876-13da-4b1d-a3b5-ec11b1f25a27
 # ╟─1c953043-6424-4813-b88b-f8665bd1d317
-# ╟─a5a0dd80-0171-4540-9b86-b6be242a733d
-# ╠═60516a56-e663-44d3-ac8e-21b3064a2ab7
+# ╠═1a51e389-6fdd-448d-a58f-48a7112af505
+# ╠═7031781a-67b6-4ab1-91e1-2e5d1b853068
 # ╠═cd6dfa70-db90-4d38-b265-a89da0abb93c
-# ╠═777c6089-7a78-4dfb-8017-cb3bc69f8ab3
+# ╠═a10e7372-4abd-4afa-9e29-7bb34a994deb
+# ╠═e2ea9dbb-c2af-439d-bb60-4432df9cd6e1
 # ╟─832c53d5-c004-4f71-8947-4146529442f7
 # ╠═19951420-f1c2-47ea-9be0-a5db4ceebac0
-# ╟─bfcdd56d-8421-439e-89cb-a84ca6e659e8
-# ╠═b10b6dcd-cddd-47f0-b6c8-00f79eb7b3fa
