@@ -20,14 +20,14 @@ begin
 	Pkg.activate(joinpath(@__DIR__,"../.."))
 	using Revise
 	using LessUnitful
-	using DataFrames
+	using DataFrames, CSV
 	using Statistics, StatsPlots
 
 	using VoronoiFVM
 	using GridVisualize
 	using ExtendableGrids
-	using PlutoVista, Plots, Colors
-	using PlutoUI
+	using PlutoVista, Plots, Colors, PlutoUI
+	import PlutoUI: combine
 	using Roots
 	using ForwardDiff, DiffResults
 	using FixedBed
@@ -71,10 +71,18 @@ md"""
 # ╔═╡ 9b3a6003-7263-40ed-a11b-3a55c3a7a510
 rel_deltas=[0.1,0.2,0.3]
 
+# ╔═╡ caae0418-636e-4a68-8cea-0c3a70704fee
+eps1_mo(T) = 0.52 + 2.83*1.0e-4 *(T-25.0) # hemispherical emissivity, moderate oxidation
+
+# ╔═╡ 86b550c8-212b-4458-b701-2f150b87bcfd
+eps1_ho(T) = 0.66 + 2.06*1.0e-4 *(T-25.0) # hemispherical emissivity, heavy oxidation
+
 # ╔═╡ 3a0c71bd-339f-437f-9705-ddcc543c3e8d
 function G2(T2,abs2,eps2,G_lamp; phi02=phi02)
 	rho2 = 1-abs2
-	eps2*ph"σ"*T2^4 + rho2*phi02*G_lamp
+	G2_IR = eps2*ph"σ"*T2^4 
+	G2_VIS = rho2*phi02*G_lamp
+	G2_IR, G2_VIS
 end
 
 # ╔═╡ 8bd04d1e-08d6-495e-ad64-435a9b504c17
@@ -83,29 +91,61 @@ phi10 = phi12 = 0.5;
 # ╔═╡ 850a86cf-97db-40dd-994b-e9dd903a0522
 function EB_TC_conv(T1, T2, data; phi10=phi10, phi12=phi12,)
 	(;G_lamp, T_gas_in, k_nat_conv) = data
-	G2_ = G2(T2,data.uc_cat.alpha_vis,data.uc_cat.eps,G_lamp)
-	abs1 = data.uc_mask.alpha_vis
+	G2_IR, G2_VIS = G2(T2,data.uc_cat.alpha_vis,data.uc_cat.eps,G_lamp)
+	abs1_VIS = data.uc_mask.alpha_vis
 	eps1 = data.uc_mask.eps
+	abs1_IR = eps1
 	Tgas_avg = 0.5*(T2+T_gas_in)
 	
-	abs1*phi12*G2_ + abs1*phi10*G_lamp - eps1*ph"σ"*T1^4 - k_nat_conv*(T1-Tgas_avg)
+	phi12*(abs1_VIS*G2_VIS+abs1_IR*G2_IR) + abs1_VIS*phi10*G_lamp - eps1*ph"σ"*T1^4 - k_nat_conv*(T1-Tgas_avg)
 end
 
 # ╔═╡ 1aefe230-88fc-4397-91d6-7899499cb3ea
 T1_conv(T2,data) = find_zero(x -> EB_TC_conv(x, T2+273.15, data), 800) -273.15
+
+# ╔═╡ 06fb7b1b-3a36-4cd9-8485-8c2c55eab86c
+function transformSensPar(SensPar) 
+	return [SensPar[1] + 273.15, SensPar[2] * ufac"kW/m^2", SensPar[3:end]...]
+end
+
+# ╔═╡ 4027a2c5-9534-4b71-afe5-b83e0cc809d6
+function df_par_unc(SensPar)
+	
+	df = DataFrame(
+		par_name=[:T2, :G0, :abs1, :eps1, :abs2, :eps2, :h_conv],
+		mean_value=SensPar,
+		uncertainty_rel=[0.0, 0.05, 0.05, 0.05, 0.10, 0.10, 0.05],
+	)
+	
+	df[!, :uncertainty_interval] .= df.uncertainty_rel .* df.mean_value
+	replace!(df.uncertainty_interval, 0.0 => 30.0)	
+	df[!, :variance] .= df.uncertainty_interval.^2 ./ 3 # rectangular distribution
+	df
+end
+
+# ╔═╡ 382425a8-93c6-4fff-be01-3d4c196cdb7a
+md"""
+### Combined Standard Uncertainty
+Following calculation method in ISO/IEC Guide 98-3 (Guide to the Expression of Uncertainty in Measurement, GUM):
+```math
+u^2_{\text c} = \sum_{i=1}^N \left( \frac{\partial f}{\partial x_i} \right)^2 u^2(x_i)
+```
+Following procedure __Type B__ in determining the measurement uncertainty and assuming __rectangular distribution__ of estimate of measurand aroung the mean value, the variance $u^2(x_i)$ of an estimate $x_i$ is computed as $u^2(x_i)=a^2 /3$. Here $a$ is the symmetric interval of uncertainty of the measurement.
+"""
 
 # ╔═╡ 82315b1c-bfe3-48f3-a537-d5ef0cc2312c
 function EB1_sens(T1, par, data;  phi10=phi10, phi12=phi12)
 	T2, G_lamp, abs1, eps1, abs2, eps2, h_conv_D = par
 	(;T_gas_in, X0,) = data
 	
-	G2_ = G2(T2,abs2,eps2,G_lamp)
+	G2_IR, G2_VIS = G2(T2,abs2,eps2,G_lamp)
 	Tgas_avg = 0.5*(T2+T_gas_in)
 
 	h_in = enthalpy_mix(data, T_gas_in, X0)
 	h_out = enthalpy_mix(data, T2, X0)
 	
-	abs1*phi12*G2_ + abs1*phi10*G_lamp - eps1*ph"σ"*T1^4 - h_conv_D*(T1-Tgas_avg)
+	#abs1*phi12*G2_ + abs1*phi10*G_lamp - eps1*ph"σ"*T1^4 - h_conv_D*(T1-Tgas_avg)
+	phi12*(abs1*G2_VIS+eps1*G2_IR) + abs1*phi10*G_lamp - eps1*ph"σ"*T1^4 - h_conv_D*(T1-Tgas_avg) # abs1_IR = eps1
 end
 
 # ╔═╡ c3c54b35-3121-4f33-9c09-8dd659bd4f84
@@ -113,21 +153,50 @@ md"""
 # Parameter Variation
 """
 
+# ╔═╡ 36a032e5-d0f4-49a2-98fb-e362189b0901
+md"""
+## Absorbtance (solar) of Inconel
+Absorptance of different Ni/Cr materials after oxidation. 
+__Y.S. Touloukian and D.P.DeWitt__, "Thermal Radiative Properties: Metallic Elements and Alloys," ThermophysicalProperties of Matter, vol. 7, 1970
+Data and graph taken from pp. 1392-1394.
+
+$(
+LocalResource(
+	"./data/Inconel_solar_reflectance_data_edit.png"
+)
+)
+
+"""
+
+# ╔═╡ 8dc9a71b-759d-4440-a8c4-030f6a9e57e4
+abs1_mean = let 
+	rho1_meas = [0.432, 0.361, 0.443, 0.390, 0.559, 0.370]
+	1-sum(rho1_meas)/length(rho1_meas) # 1 = abs + rho, abs = 1 - rho
+end
+
 # ╔═╡ 9073c7da-cc86-4191-b8a8-b49379803c89
 md"""
-Mean values of main parameters.
+Mean values of main parameters. Calculate thermocouple hemispherical emissivity according to the proposed correlation for heavily oxidized Inconel 600 surfaces.
 
 Operating Conditions:
--  $G_0$ = $(@bind G_lamp NumberField(40:5:100, default=70)) kW/m^2
+-  $G_0$ = $(@bind G_lamp NumberField(40:1:100, default=70)) kW/m^2
 -  $\dot n_{\text{in,total}}$ = $(@bind nflowin NumberField(1.0:0.2:20.0, default=7.4)) mol/hr
 -  $h_{\text{conv}}$ = $(@bind h_conv_D NumberField(0.0:0.5:25.0, default=15)) W/m^2/K
+-  $T_2$ = $(@bind T2 NumberField(500:1:700, default=570)) °C
 Thermocouple optical properties:
--  $\alpha_1$ (vis) = $(@bind abs1 NumberField(0.1:0.01:0.9, default=0.67))
--  $\epsilon_1$ (IR) = $(@bind eps1 NumberField(0.1:0.01:0.9, default=0.67))
+-  $\alpha_1$ (vis) = $(@bind abs1 NumberField(0.1:0.01:0.9, default=abs1_mean))
+-  $\epsilon_1$ (IR) = $(@bind eps1 NumberField(0.1:0.01:0.9, default=eps1_ho(650.0)))
 Catalyst surface optical properties:
 -  $\alpha_2$ (vis) = $(@bind abs2 NumberField(0.1:0.01:0.9, default=0.39))
 -  $\epsilon_2$ (IR) = $(@bind eps2 NumberField(0.1:0.01:0.9, default=0.56))
 """
+
+# ╔═╡ c5c9bc3b-d460-4730-9637-64fd0443860e
+SensPar = [T2, G_lamp, abs1, eps1, abs2, eps2, h_conv_D]
+#SensPar = (T2=T2, G_lamp=G_lamp, abs1=abs1, eps1=eps1, abs2=abs2, eps2=eps2, h_conv_D=h_conv_D)
+
+# ╔═╡ 045f3f13-c606-4bf7-8416-2a95248ca35b
+df_par_unc(transformSensPar(SensPar))
 
 # ╔═╡ 5229e919-38eb-41e2-acc4-0355bb933528
 md"""
@@ -383,7 +452,7 @@ With the following parameters:
 -  $G_0$ = $(data.G_lamp/ufac"kW/m^2") kW/m^2
 -  $\alpha_2$ = $(data.uc_cat.alpha_vis)
 -  $\epsilon_2$ = $(data.uc_cat.eps)
--  $\mathbf{T_2=}$ __$(Integer(round(T2_enth(data)))) °C__
+-  $\mathbf{T_2=}$ __$(Integer(round(T2))) °C__
 
 -  $\alpha_1$ = $(data.uc_mask.alpha_vis)
 -  $\epsilon_1$ = $(data.uc_mask.eps)
@@ -398,30 +467,46 @@ Convective heat transfer is calculated for the mean gas temperature in the vicin
 ```math
 \begin{align}
 0 &= \dot Q_{\text{abs,2}} + \dot Q_{\text{abs,0}} - \dot Q_{\text{emit}} - \dot Q_{\text{conv}}\\
-0 &= \alpha_1 \phi_{12} A_1 G_2 + \alpha_1 \phi_{10} A_1 G_0- \epsilon_1 A_1 \sigma T_1^4 - A_1 h_{\text{conv}}(T_1 - \bar T_{\text{gas}})\\
-G_2 &= \epsilon_2 \sigma T_2^4 + \rho_2 \phi_{02} G_0 \\
+\end{align}
+```
+The  radiosity of the catalyst surface (2) consists of contributions in the visible (VIS) and infrared (IR) spectra. The VIS component results from the reflected light coming from the lamp, the IR component results from the thermal emission of the catalyst surface. The absorptivity of the thermocouple might behave differently in the VIS and IR spectral regions, accounted by $\alpha_1^{\text{IR}}$ and $\alpha_1^{\text{VIS}}$.
 
+```math
+\begin{align}
+
+G_2 &= G_2^{\text{IR}} + G_2^{\text{VIS}} \\
+&= \epsilon_2 \sigma T_2^4 + \rho_2 \phi_{02} G_0 \\
+\end{align}
+```
+
+```math
+\begin{align}
+0 &= \phi_{12} A_1 (\alpha_1^{\text{IR}} G_2^{\text{IR}} + \alpha_1^{\text{VIS}} G_2^{\text{VIS}}) + \alpha_1 \phi_{10} A_1 G_0- \epsilon_1 A_1 \sigma T_1^4 - A_1 h_{\text{conv}}(T_1 - \bar T_{\text{gas}})\\
 \end{align}
 ```
 """
 
 # ╔═╡ 28249727-2511-4ec1-9067-e2b6fb0651f1
 md"""
-Temperature of Thermocouple with convection: $\mathbf{T_1}$ = $(Integer(round(T1_conv(T2_enth(data),data)))) °C
+Temperature of Thermocouple with convection: $\mathbf{T_1}$ = $(Integer(round(T1_conv(T2,data)))) °C
 """
 
 # ╔═╡ c6d4d255-29e1-4d68-9f7e-77afec7186d6
 f1(x,p) = EB1_sens(x+273.15, p, data)
 
 # ╔═╡ 1d6a9361-0473-488d-a56a-914e908b7a83
-begin
+function calc_partial_derivs_T1(par)
 	# sensitivity parameter
-	p1 = [T2_enth(data)+273.15, G_lamp*ufac"kW/m^2", abs1, eps1, abs2, eps2, h_conv_D] 
-	x1_ = find_zero(f1, 800.0, Order1(), p1)
-	fx1 = ForwardDiff.derivative(x -> f1(x, p1), x1_)
-	fp1 = ForwardDiff.gradient(p -> f1(x1_, p), p1)
+	#p1 = transformSensPar(SensPar)
+	x1_ = find_zero(f1, 800.0, Order1(), par)
+	fx1 = ForwardDiff.derivative(x -> f1(x, par), x1_)
+	fp1 = ForwardDiff.gradient(p -> f1(x1_, p), par)
 	x1_p = -fp1 / fx1
+	x1_, x1_p
 end
+
+# ╔═╡ 8aca7493-e1d7-488f-a78b-e16517918fe4
+x1_, x1_p = calc_partial_derivs_T1(transformSensPar(SensPar))
 
 # ╔═╡ 687d9260-74dc-471a-a3bd-eb485db47d45
 md"""
@@ -445,10 +530,21 @@ Sensitivities:
 1.  $\partial T_1 / \partial h_{\text{conv}} =$  $(round(x1_p[7],sigdigits=2)) K/(W/m^2/K)
 """
 
+# ╔═╡ d19d7b31-d966-4a3b-a040-31667d8c4648
+function calc_combined_uncertainty_T1(SensPar)
+	x_, df_dx = calc_partial_derivs_T1(SensPar)
+	uc = df_par_unc(SensPar).variance
+	sqrt(sum(df_dx.^2 .* uc))
+end
+
+# ╔═╡ 379c89bb-07f6-4340-adc1-ca90e06eca90
+calc_combined_uncertainty_T1(transformSensPar(SensPar))
+
 # ╔═╡ 1a74b5da-438b-4e2d-9899-a1081d59d638
 let
 	p1 = Plots.plot(xlabel="Catalyst surface T (T2) / °C", ylabel="Thermocouple T (T1) / °C" )
-	T2_ = T2_enth(data)
+	#T2_ = T2_enth(data)
+	T2_ = T2
 	T2r = floor(T2_/100)*100
 	T2s = (T2r-100):20:(T2r+150)
 	T1s = map((x) -> T1_conv(x,data), T2s)
@@ -588,7 +684,8 @@ function runSensT1(SensPar;rel_deltas=rel_deltas)
 end
 
 # ╔═╡ 9e282b41-7870-4416-9b5f-e873b25cf032
-sensT1 = runSensT1( [T2_enth(data), G_lamp, abs1, eps1, abs2, eps2, h_conv_D])
+#sensT1 = runSensT1( [T2_enth(data), G_lamp, abs1, eps1, abs2, eps2, h_conv_D])
+sensT1 = runSensT1( [T2, G_lamp, abs1, eps1, abs2, eps2, h_conv_D])
 
 # ╔═╡ 964a2633-9c83-4fb7-8ac2-692018a536de
 let	
@@ -609,9 +706,10 @@ let
 	rec_abs = get_records(:T_TC)
 	rec_rel = get_records(:Delta_T_TC_rel)
 
-	T1_ = T1_conv(T2_enth(data),data)
+	#T1_ = T1_conv(T2_enth(data),data)
+	T1_ = T1_conv(T2,data)
 
-	p1 = Plots.plot(ylabel="Thermocouple (T1) / °C", legend=:outertopright, ylim=(600.0,Inf), title = "base ΔT= $(Integer(round(T1_))) °C")
+	p1 = Plots.plot(ylabel="Thermocouple (T1) / °C", legend=:outertopright, ylim=(0.85*T1_,Inf), title = "base T1= $(Integer(round(T1_))) °C")
 
 	cpal = palette(:bam, length(rel_deltas))
 	groupedbar!(p1, nam, rec_abs, group = ctg, bar_position = :dogde, bar_width=0.5, color_palette= cpal)
@@ -675,31 +773,43 @@ LocalResource(
 # ╟─72ed6c5e-a7cc-4d58-aeff-4209621b6fb5
 # ╠═1fcdb9b3-71c6-4b05-8460-d3c86504aad3
 # ╠═9b3a6003-7263-40ed-a11b-3a55c3a7a510
-# ╠═866e05f3-607d-46f5-8b4b-1424d66db3be
+# ╟─866e05f3-607d-46f5-8b4b-1424d66db3be
 # ╠═61af4717-2a0e-4667-aec2-1e13d20296e2
 # ╠═4f24e591-73d4-4b34-b812-24d80b531879
 # ╠═854a6121-40a6-4d62-8846-02963ae3c136
 # ╠═71e4bc55-058d-4c2d-9432-baae23a67ccb
 # ╠═4791481a-777f-476b-b6e9-be747317a277
 # ╟─bd4e7816-7790-4657-aa3c-78ce6bd578c7
+# ╠═caae0418-636e-4a68-8cea-0c3a70704fee
+# ╠═86b550c8-212b-4458-b701-2f150b87bcfd
 # ╠═850a86cf-97db-40dd-994b-e9dd903a0522
 # ╠═3a0c71bd-339f-437f-9705-ddcc543c3e8d
 # ╠═8bd04d1e-08d6-495e-ad64-435a9b504c17
 # ╠═1aefe230-88fc-4397-91d6-7899499cb3ea
 # ╟─28249727-2511-4ec1-9067-e2b6fb0651f1
-# ╟─687d9260-74dc-471a-a3bd-eb485db47d45
+# ╠═687d9260-74dc-471a-a3bd-eb485db47d45
 # ╟─51d8997b-1169-467e-9da4-50cd4cf2ef8d
+# ╠═8aca7493-e1d7-488f-a78b-e16517918fe4
 # ╟─b7db1ccc-7b9d-4332-bff7-04d9e97b7138
 # ╠═964a2633-9c83-4fb7-8ac2-692018a536de
 # ╠═9e282b41-7870-4416-9b5f-e873b25cf032
 # ╠═1d6a9361-0473-488d-a56a-914e908b7a83
+# ╠═06fb7b1b-3a36-4cd9-8485-8c2c55eab86c
+# ╠═4027a2c5-9534-4b71-afe5-b83e0cc809d6
+# ╟─382425a8-93c6-4fff-be01-3d4c196cdb7a
+# ╠═379c89bb-07f6-4340-adc1-ca90e06eca90
+# ╠═045f3f13-c606-4bf7-8416-2a95248ca35b
+# ╠═d19d7b31-d966-4a3b-a040-31667d8c4648
 # ╠═c6d4d255-29e1-4d68-9f7e-77afec7186d6
 # ╠═82315b1c-bfe3-48f3-a537-d5ef0cc2312c
 # ╠═a8114301-8e45-4cd6-93e1-e7596532324f
 # ╟─c3c54b35-3121-4f33-9c09-8dd659bd4f84
+# ╟─36a032e5-d0f4-49a2-98fb-e362189b0901
+# ╠═8dc9a71b-759d-4440-a8c4-030f6a9e57e4
+# ╠═c5c9bc3b-d460-4730-9637-64fd0443860e
 # ╟─9073c7da-cc86-4191-b8a8-b49379803c89
 # ╟─5229e919-38eb-41e2-acc4-0355bb933528
-# ╟─1a74b5da-438b-4e2d-9899-a1081d59d638
+# ╠═1a74b5da-438b-4e2d-9899-a1081d59d638
 # ╟─e7ecc92c-226f-4b00-9a29-72abda41225a
 # ╟─f7a6f0af-b34a-4fa1-ad1b-579eca0862c7
 # ╟─d7197aab-a552-47d0-8772-b647ff047d91

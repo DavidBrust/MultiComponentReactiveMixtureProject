@@ -665,46 +665,6 @@ function darcyvelo(u,data,mu)
 	-perm/mu*(u[ip,1]-u[ip,2])	
 end
 
-# ╔═╡ 389a4798-a9ee-4e9c-8b44-a06201b4c457
-function boutflow(f,u,edge,data)
-	(;iT,iTp,ip,m,lc_frit,lc_plate,dt_hf_enth)=data
-	ng=ngas(data)
-
-	k=outflownode(edge)
-	pout = u[ip,k]
-	cout = pout/(ph"R"*u[iT,k])
-	X = MVector{ng,eltype(u)}(undef)
-	
-	for i=1:ng
-		X[i] = u[i,k]
-	end
-	@inline mumix, _ = dynvisc_thermcond_mix(data, u[iT,k], X)
-	v = darcyvelo(u,data,mumix)
-	
-	for i=1:(ng-1)
-		f[i] = v*cout*u[i,k]*m[i] # species mass flux at outflow
-	end
-	# convective heat flux
-	@inline r_hf_conv = v *cout * enthalpy_mix(data.Fluids, u[iT,k], X) * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth)
-
-	f[iT] = r_hf_conv
-end
-
-# ╔═╡ f4dba346-61bc-420d-b419-4ea2d46be6da
-function D_matrix!(data, D, T, p)
-	(;m,γ_τ)=data
-	ng=ngas(data)
-	@inbounds for i=1:(ng-1)
-		for j=(i+1):ng
-			Dji = binary_diff_coeff_gas(data.Fluids[j], data.Fluids[i], T, p)
-			#Dji *= m[i]*m[j]
-			Dji *= m[i]*m[j]*γ_τ # porosity corrected eff. diffusivity
-			D[j,i] = Dji
-			D[i,j] = Dji
-		end
-	end
-end
-
 # ╔═╡ 5547d7ad-dd58-4b00-8238-6e1abb32874e
 function flux(f,u,edge,data)
 	(;m,ip,iT,dt_hf_enth)=data
@@ -771,6 +731,46 @@ function flux(f,u,edge,data)
 	
 	Bp,Bm = fbernoulli_pm(hf_conv/lambda_bed/Tm)
 	f[iT] = lambda_bed*(Bm*u[iT,1]-Bp*u[iT,2])
+end
+
+# ╔═╡ 389a4798-a9ee-4e9c-8b44-a06201b4c457
+function boutflow(f,u,edge,data)
+	(;iT,iTp,ip,m,lc_frit,lc_plate,dt_hf_enth)=data
+	ng=ngas(data)
+
+	k=outflownode(edge)
+	pout = u[ip,k]
+	cout = pout/(ph"R"*u[iT,k])
+	X = MVector{ng,eltype(u)}(undef)
+	
+	for i=1:ng
+		X[i] = u[i,k]
+	end
+	@inline mumix, _ = dynvisc_thermcond_mix(data, u[iT,k], X)
+	v = darcyvelo(u,data,mumix)
+	
+	for i=1:(ng-1)
+		f[i] = v*cout*u[i,k]*m[i] # species mass flux at outflow
+	end
+	# convective heat flux
+	@inline r_hf_conv = v *cout * enthalpy_mix(data.Fluids, u[iT,k], X) * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth)
+
+	f[iT] = r_hf_conv
+end
+
+# ╔═╡ f4dba346-61bc-420d-b419-4ea2d46be6da
+function D_matrix!(data, D, T, p)
+	(;m,γ_τ)=data
+	ng=ngas(data)
+	@inbounds for i=1:(ng-1)
+		for j=(i+1):ng
+			Dji = binary_diff_coeff_gas(data.Fluids[j], data.Fluids[i], T, p)
+			#Dji *= m[i]*m[j]
+			Dji *= m[i]*m[j]*γ_τ # porosity corrected eff. diffusivity
+			D[j,i] = Dji
+			D[i,j] = Dji
+		end
+	end
 end
 
 # ╔═╡ 37b5908c-dd4e-4fb8-9d5b-68402493e10d

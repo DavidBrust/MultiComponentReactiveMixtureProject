@@ -379,25 +379,25 @@ end;
 
 # optical parameters for quartz window in upper chamber (uc)
 const uc_window = SurfaceOpticalProps(	
-	alpha_IR=0.3,
-	tau_IR=0.7,	
+	alpha_IR=0.67,
+	tau_IR=0.33,	
 	alpha_vis=0.0,
-	tau_vis=0.9,
+	tau_vis=0.93,
 )
 
 #  optical parameters for catalyst layer in upper chamber (uc)
 const uc_cat = SurfaceOpticalProps(
-	alpha_IR=0.45, # measurement (ideally at high T) integrated over IR
+	alpha_IR=0.56, # measurement (ideally at high T) integrated over IR
 	tau_IR=0.0, # opaque surface
-	alpha_vis=0.45, # measurement (ideally at high T) integrated over vis
+	alpha_vis=0.39, # measurement (ideally at high T) integrated over vis
 	tau_vis=0.0 # opaque surface	
 )
 
 # optical parameters for uncoated frit in upper chamber (uc)
 const uc_mask = SurfaceOpticalProps(
-	alpha_IR=0.2, # measurement (ideally at high T) integrated over IR
+	alpha_IR=0.55, # measurement (ideally at high T) integrated over IR
 	tau_IR=0.0, # opaque surface
-	alpha_vis=0.2, # measurement (ideally at high T) integrated over vis
+	alpha_vis=0.15, # measurement (ideally at high T) integrated over vis
 	tau_vis=0.0 # opaque surface	
 )
 
@@ -406,31 +406,12 @@ const lc_frit = uc_mask
 
 # optical parameters for Al bottom plate in lower chamber (lc)
 const lc_plate = SurfaceOpticalProps(
-	# aluminium bottom plate (machined surface)
-	alpha_IR=0.1, # see in lit, assume large reflectivity
+	# aluminium bottom plate (anodized Al)
+	alpha_IR=0.8, # https://www.osti.gov/servlets/purl/1483461
 	tau_IR=0.0, # opaque surface
 	alpha_vis=0.1, # see in lit, assume large reflectivity
 	tau_vis=0.0 # opaque surface	
 )
-
-
-
-
-function DiffCoeffsMass(ng,m)
-	k=0
-	D=zeros(Float64, ng,ng)
-	for i=1:(ng-1)
-		for j=(i+1):ng
-			k +=1
-			#Dji = k*1.0e-5*ufac"m^2/s"
-			Dji = k*1.0e-5*ufac"m^2/s"
-			Dji *= m[i]*m[j]
-			D[j,i] = Dji
-			D[i,j] = Dji
-		end			
-	end
-	D
-end
 
 
 @kwdef mutable struct ReactorData{NG, KP}
@@ -518,7 +499,7 @@ end
 	delta_gap::Float64=1.5*ufac"mm" # gas gap between frit and reactor wall
 	delta_wall::Float64=15*ufac"mm" # reactor wall thickness
 	shell_h::Float64=20*ufac"mm" # height of heat transfer area adjancent to domain boundary 
-	k_nat_conv::Float64=17.5*ufac"W/(m^2*K)" # natural convection heat transfer coeff.
+	k_nat_conv::Float64=20.0*ufac"W/(m^2*K)" #17.5*ufac"W/(m^2*K)" # natural+forced convection heat transfer coeff.
     G_lamp::Float64 = 70.0*ufac"kW/m^2"
 
 	# VitraPor data
@@ -658,6 +639,7 @@ Helper function to calculate radiation emitted from the window towards the surfa
 """
 function radiosity_window(f,u,bnode,data)
     (;iTw,G_lamp,Tamb,uc_window,irradiated_boundaries)=data
+	
     # irrad. exchange between quartz window (1), cat surface (2), masked sruface (3) 
     tau1_vis=uc_window.tau_vis
     rho1_vis=uc_window.rho_vis
@@ -799,7 +781,7 @@ function PCR_bottom(f,u,bnode,data)
 		# f[iT] = zero(eltype(u))
 
 		# calculate (local) plate temperature from (local) flux balance
-		hflux_conv_bot_p = k_nat_conv*(u[iTp]-Tamb)*2
+		hflux_conv_bot_p = k_nat_conv*(u[iTp]-Tamb)
 		hflux_emit_p = lc_plate.eps*ph"σ"*u[iTp]^4
 		G1_IR = (eps1*ph"σ"*u[iT]^4 + rho1_IR*eps2*ph"σ"*u[iTp]^4)/(1-rho1_IR*rho2_IR)
 		hflux_abs_p = alpha2_IR*G1_IR + alpha2_IR*ph"σ"*Tamb^4

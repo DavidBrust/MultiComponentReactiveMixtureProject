@@ -24,8 +24,9 @@ begin
 	using NLsolve, LinearSolve,Pardiso, ILUZero
 	using StaticArrays
 
+	using FiniteDifferences
 	using LessUnitful
-	using DataFrames
+	using DataFrames, CSV
 	using PlutoVista, Plots
 	using PlutoUI, Colors
 	using FixedBed
@@ -47,9 +48,7 @@ Demonstration notebook for the photo thermal catalytic reactor (PCR) model. Solv
 
 Select problem dimension: $(@bind dim Select([2, 3], default=2))
 
-G0 = $(@bind G_lamp confirm(NumberField(40:1:100, default=70))) kW/m^2
-
-Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=true))
+Check the box to __start the sensitivity calculation__: $(@bind RunSens PlutoUI.CheckBox(default=false))
 """
 
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
@@ -85,9 +84,8 @@ function grid_boundaries_regions(dim)
 	
 		cellmask!(grid,[0,9/10*H].*ufac"cm",[W,H].*ufac"cm",Ω_catalyst) # catalyst layer	
 		bfacemask!(grid, [0,H].*ufac"cm",[W-1,H].*ufac"cm",Γ_top_permeable)
-		bfacemask!(grid, [0,H].*ufac"cm",[W-2,0.5].*ufac"cm",Γ_top_irradiated) 
-		#bfacemask!(grid, [W-1/10,0].*ufac"cm",[W,0].*ufac"cm",Γ_bottom_insulating) 
-		
+		bfacemask!(grid, [0,H].*ufac"cm",[W-2,0.5].*ufac"cm",Γ_top_irradiated)
+	
 		inb = [Γ_top_permeable,Γ_top_irradiated]
 		irrb = [Γ_top_irradiated]
 		outb = [Γ_bottom]
@@ -120,6 +118,102 @@ function grid_boundaries_regions(dim)
 	return grid, inb, irrb, outb, sb, [Ω_catalyst]
 end;
 
+# ╔═╡ 289753d9-08a7-4447-94ac-efabdee99fea
+md"""
+# Sensitivities
+Indices for surfaces and the involved properties:
+- 1: Window surface (upper chamber, uc)
+- 2: Catalyst surface (upper chamber)
+- 3: Porous frit surface (lower chamber, lc)
+- 4: Al plate surface (lower chamber)
+
+Formulation for sensitivity analysis, $T_2$ corresponds to the temperature in the center of the catalyst sheet.
+
+```math
+\begin{align}
+T_2 = T_2( &G_0, \dot n_{\text{feed,in}}, T_{\text{gas,in}}, X_0, \alpha^{\text{VIS}}_1,\alpha^{\text{IR}}_1, \alpha^{\text{VIS}}_2, \alpha^{\text{IR}}_2, \alpha^{\text{IR}}_3, \alpha^{\text{IR}}_4, \delta_{\text{uc}}, \delta_{\text{lc}}, \delta_{\text{gap,side}}, \\
+& \text{Nu}, h_{\text{conv}}, \lambda_{\text{window}}, \lambda_{\text{Al,plate}})
+\end{align}
+```
+
+"""
+
+# ╔═╡ d522205e-d7fb-4261-a43c-b746339d4071
+md"""
+Mean values of main parameters. Calculate thermocouple hemispherical emissivity according to the proposed correlation for heavily oxidized Inconel 600 surfaces.
+
+Operating Conditions:
+-  $G_0$ = $(@bind G_lamp NumberField(40.0:1.0:100.0, default=70.0)) kW/m^2
+-  $\dot n_{\text{in,total}}$ = $(@bind nflowin NumberField(1.0:0.2:20.0, default=7.4)) mol/hr
+-  $T_{\text{gas,in}}$ = $(@bind T_gas_in NumberField(25.0:1.0:300.0, default=25)) °C
+Window optical properties (upper chamber):
+-  $\alpha_1^{\text{VIS}}$ = $(@bind abs1_vis NumberField(0.0:0.01:0.9, default=0.0))
+-  $\alpha_1^{\text{IR}}$ = $(@bind abs1_IR NumberField(0.1:0.01:0.9, default=0.67))
+Catalyst surface optical properties (upper chamber):
+-  $\alpha_2^{\text{VIS}}$ = $(@bind abs2_vis NumberField(0.1:0.01:0.9, default=0.39))
+-  $\alpha_2^{\text{IR}}$ = $(@bind abs2_IR NumberField(0.1:0.01:0.9, default=0.56))
+Frit surface optical properties (lower chamber):
+-  $\alpha_3^{\text{IR}}$ = $(@bind abs3_IR NumberField(0.1:0.01:0.9, default=0.55))
+Al plate surface optical properties (lower chamber):
+-  $\alpha_4^{\text{IR}}$ = $(@bind abs4_IR NumberField(0.1:0.01:0.9, default=0.8))
+Catalyst loading and porous frit properties:
+-  $m_{\text{cat}}$ = $(@bind mcat NumberField(100.0:1.0:750.0, default=500.0)) mg
+-  $\text{porosity}$ = $(@bind poros NumberField(0.01:0.01:0.99, default=0.33))
+-  $d_{\text p}$ (avg. pore diameter) = $(@bind dp NumberField(20.0:1.0:500.0, default=200.0)) μm
+-  $\text{permeability}$ (for use in Darcy eq.) = $(@bind perm NumberField(5.0e-11:1.0e-11:6.0e-10, default=1.2e-10)) m²
+-  $\lambda_{\text{frit,solid}}$ = $(@bind lambdas NumberField(0.6:0.01:3.0, default=1.13)) W/m/K
+Geometric parameters (internal height in upper and lower chambers, gap betwwen frit and reactor wall):
+-  $\delta_{\text{uc}}$ = $(@bind delta_uc NumberField(10.0:0.5:20.0, default=17.0)) mm
+-  $\delta_{\text{lc}}$ = $(@bind delta_lc NumberField(10.0:0.5:20.0, default=18.0)) mm
+-  $\delta_{\text{gap,side}}$ = $(@bind delta_gap NumberField(0.1:0.1:3.0, default=1.5)) mm
+Parameters determining convective heat transport:
+-  $\text{Nu}$ = $(@bind Nu NumberField(1.0:0.1:10.0, default=4.8)) 
+-  $k_{\text{conv,outer}}$ = $(@bind k_conv NumberField(1.0:1.0:30.0, default=30.0)) W/m^2/K
+
+"""
+
+# ╔═╡ c7901b7f-27b9-469c-86f8-080df0cd3fa4
+SensPar = [G_lamp, nflowin, T_gas_in, abs1_vis, abs1_IR, abs2_vis, abs2_IR, abs3_IR, abs4_IR, mcat, poros, dp, perm, lambdas, delta_uc, delta_lc, delta_gap, Nu, k_conv]
+
+# ╔═╡ 2f03c691-ca0e-43d2-9577-c1eb245634bd
+function transformSensPar(SensPar) 
+	return [SensPar[1]*ufac"kW/m^2", SensPar[2]*ufac"mol/hr", SensPar[3]+273.15, SensPar[4:9]..., SensPar[10]*ufac"mg", SensPar[11], SensPar[12]*ufac"μm", SensPar[13], SensPar[14], SensPar[15:17].*ufac"mm"..., SensPar[18:end]... ]
+end
+
+# ╔═╡ 9ed2fdeb-f75d-4222-ad5e-2a6e5ab47fad
+transformSensPar(SensPar) 
+
+# ╔═╡ 115aebe4-459b-4113-b689-38e381cdf64f
+md"""
+### Combined Standard Uncertainty
+Following calculation method in ISO/IEC Guide 98-3 (Guide to the Expression of Uncertainty in Measurement, GUM):
+```math
+u^2_{\text c} = \sum_{i=1}^N \left( \frac{\partial f}{\partial x_i} \right)^2 u^2(x_i)
+```
+Following procedure __Type B__ in determining the measurement uncertainty and assuming __rectangular distribution__ of estimate of measurand aroung the mean value, the variance $u^2(x_i)$ of an estimate $x_i$ is computed as $u^2(x_i)=a^2 /3$. Here $a$ is the symmetric interval of uncertainty of the measurement.
+"""
+
+# ╔═╡ 6ed95794-b1f1-47ad-b655-5ef71e52776b
+function par_unc(SensPar,dT2_dp)
+	
+	df = DataFrame(
+		par_name=[:G0, :nflowin, :T_gas_in, :abs1_vis, :abs1_IR, :abs2_vis, :abs2_IR, :abs3_IR, :abs4_IR, :mcat, :poros, :dp, :perm, :lambdas, :delta_uc, :delta_lc, :delta_gap, :Nu, :k_conv],
+		mean_value=SensPar,
+		uncertainty_rel=[0.05, 0.02, 0.02, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.01, 0.05, 0.05, 0.05, 0.01, 0.01, 0.01, 0.50, 0.50]
+)
+	#df[!, :uncertainty_interval] .= df.uncertainty_rel .* SensPar
+	df[!, :uncertainty_interval] .= df.uncertainty_rel .* df.mean_value
+	df[!, :variance] .= df.uncertainty_interval.^2 ./ 3 # rectangular distribution
+	df[!, :var_times_sens] .= df.variance .* dT2_dp.^2
+	df
+end
+
+# ╔═╡ 8e710a52-937f-4a3a-9940-bcb5d1268281
+function calc_combined_uncertainty_T2(SensPar, dT2_dp)	
+	uc = par_unc(SensPar,dT2_dp).variance
+	sqrt(sum(dT2_dp.^2 .* uc))
+end
+
 # ╔═╡ a995f83c-6ff7-4b95-a798-ea636ccb1d88
 # ╠═╡ show_logs = false
 # ╠═╡ skip_as_script = true
@@ -134,38 +228,60 @@ let
 end
   ╠═╡ =#
 
-# ╔═╡ a078e1e1-c9cd-4d34-86d9-df4a052b6b96
-md"""
-# Introduction
-Reactor Simulation of PC reactor for cylindrical symmetrical geometry (2D).
-
-This notebook covers overall mass transport through porous material based on Darcy equation, multicomponent species transport based on Maxwell-Stefan equations for diffusion and superimposed by convective (bulk) transport with the velocity field obtained by Darcy equation.
-
-Also the thermal energy equation is solved, taking into account convective-diffusive heat fluxes and irradiation boundary conditions.
-"""
-
-# ╔═╡ 1b38a2bb-20b2-4d98-a28b-d4cd1a8242c4
-@doc FixedBed.DMS_Info_isothermal()
-
-# ╔═╡ ac8d1e2e-a049-44ef-ba85-0fb78c46b1ff
-@doc FixedBed.DMS_Info_thermal()
-
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
-function PCR_base(dim; times=nothing, G_lamp=nothing, verbose="aen")
-	
+function PCR_base(dim, par; times=nothing, verbose="aen")	
 	times = isnothing(times) ? [0,15.0] : times
-	uc_cat = SurfaceOpticalProps(
-		alpha_IR=0.56 * 1.1, # measurement (ideally at high T) integrated over IR
-		tau_IR=0.0, # opaque surface
-		alpha_vis=0.39 * 1.1, # measurement (ideally at high T) integrated over vis
-		tau_vis=0.0 # opaque surface	
+	
+	G_lamp, nflowin, T_gas_in, abs1_vis, abs1_IR, abs2_vis, abs2_IR, abs3_IR, abs4_IR, mcat, poros, dp, perm, lambdas, delta_uc, delta_lc, delta_gap, Nu, k_conv= par
+
+	uc_window = SurfaceOpticalProps( # upper chamber: window surface, 1
+		alpha_IR=abs1_IR, 
+		tau_IR=1-abs1_IR,
+		alpha_vis=abs1_vis, 
+		tau_vis=0.93 
+	)
+	
+	uc_cat = SurfaceOpticalProps( # upper chamber: catalyst surface, 2
+		alpha_IR=abs2_IR, 
+		tau_IR=0.0,
+		alpha_vis=abs2_vis, 
+		tau_vis=0.0 
+	)
+
+	lc_frit = SurfaceOpticalProps( # lower chamber: porous frit surface, 3
+		alpha_IR=abs3_IR, 
+		tau_IR=0.0,
+		alpha_vis=0.15, 
+		tau_vis=0.0 
+	)
+	
+	lc_plate = SurfaceOpticalProps( # lower chamber: Al plate surface, 4
+		alpha_IR=abs4_IR, 
+		tau_IR=0.0,
+		alpha_vis=0.1, 
+		tau_vis=0.0 
 	)
 
 	grid, inb,irrb,outb,sb,catr =  grid_boundaries_regions(dim)
 	
 	data=ReactorData(
-		G_lamp = (isnothing(G_lamp) ? 70.0 : G_lamp)*ufac"kW/m^2" ,
-		uc_cat = uc_cat,
+		G_lamp=G_lamp,
+		nflowin=nflowin,
+		T_gas_in=T_gas_in,
+		uc_window=uc_window,
+		uc_cat=uc_cat,
+		lc_frit=lc_frit,
+		lc_plate=lc_plate,
+		uc_h=delta_uc,
+		lc_h=delta_lc,
+		Nu=Nu,
+		k_nat_conv=k_conv,
+		mcat=mcat,
+		poros=poros,
+		dp=dp,
+		perm=perm,
+		lambdas=lambdas,
+		delta_gap=delta_gap,
 		inlet_boundaries=inb,
 		irradiated_boundaries=irrb,
 		outlet_boundaries=outb,
@@ -186,12 +302,13 @@ function PCR_base(dim; times=nothing, G_lamp=nothing, verbose="aen")
 							bstorage=FixedBed.PCR_bstorage,
 							boutflow=FixedBed.DMS_boutflow,
 							outflowboundaries=outb,
-							assembly=:edgewise
+							assembly=:edgewise,
 							)
 
 	enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
 	enable_boundary_species!(sys, iTw, irrb) # window temperature as boundary species in upper chamber
 	enable_boundary_species!(sys, iTp, outb) # plate temperature as boundary species in lower chamber
+
 	inival=unknowns(sys)
 
 	inival[ip,:].=p
@@ -221,9 +338,6 @@ function PCR_base(dim; times=nothing, G_lamp=nothing, verbose="aen")
 	else
 		control = SolverControl(;
         method_linear = KrylovJL_GMRES(
-           # gmres_restart = 10,
-           # restart = true,
-           # itmax = 100,
         ),
         precon_linear = VoronoiFVM.factorizationstrategy(
 			MKLPardisoLU(), NoBlock(), sys),
@@ -232,18 +346,68 @@ function PCR_base(dim; times=nothing, G_lamp=nothing, verbose="aen")
 	control.handle_exceptions=true
 	control.Δu_opt=1_000.0
 	#control.Δu_opt=1.0
-		
-	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="nae")
+
+	
+	#solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="nae")
+	solt=VoronoiFVM.solve(sys;inival=inival,times,control)
 	
 	return solt,grid,sys,data
+end
+
+# ╔═╡ 12cd7938-1f1d-417f-861b-b340edbd668d
+function T2_center(p,data)
+	(;iT) = data
+
+	function f(p) 
+		solt,grid,sys,data=PCR_base(dim,p);
+		sol = solt(solt.t[end])
+		sol[iT,1]
+	end
+	grad(forward_fdm(3, 1), f, p)[1]
+end 
+
+# ╔═╡ 8c8e91bd-7abb-453a-b10c-3b10203b44a0
+if RunSens
+	dT2_dp = T2_center(transformSensPar(SensPar), ReactorData())
+end
+
+# ╔═╡ 2801c5bd-991f-4f85-aa49-43927369605f
+md"""
+Sensitivities:
+1.  $\partial T_2 / \partial G_0 =$  $(round(dT2_dp[1]*ufac"kW/m^2",sigdigits=2)) K/(kW/m^2)
+1.  $\partial T_2 / \partial \dot n_{\text{in,total}} =$  $(round(dT2_dp[2]*ufac"mol/hr",sigdigits=2)) K/(mol/hr)
+1.  $\partial T_2 / \partial T_{\text{gas,in}} =$  $(round(dT2_dp[3],sigdigits=2)) K/K
+1.  $\partial T_2 / \partial \alpha_1^{\text{VIS}} =$  $(round(dT2_dp[4],sigdigits=2)) K
+1.  $\partial T_2 / \partial \alpha_1^{\text{IR}} =$  $(round(dT2_dp[5],sigdigits=2)) K
+1.  $\partial T_2 / \partial \alpha_2^{\text{VIS}} =$  $(round(dT2_dp[6],sigdigits=2)) K
+1.  $\partial T_2 / \partial \alpha_2^{\text{IR}} =$  $(round(dT2_dp[7],sigdigits=2)) K
+1.  $\partial T_2 / \partial \alpha_3^{\text{IR}} =$  $(round(dT2_dp[8],sigdigits=2)) K
+1.  $\partial T_2 / \partial \alpha_4^{\text{IR}} =$  $(round(dT2_dp[9],sigdigits=2)) K
+1.  $\partial T_2 / \partial m_{\text{cat}} =$  $(round(dT2_dp[10]*ufac"mg",sigdigits=2)) K/mg
+1.  $\partial T_2 / \partial \text{porosity} =$  $(round(dT2_dp[11],sigdigits=2)) K
+1.  $\partial T_2 / \partial d_{\text p} =$  $(round(dT2_dp[12]*ufac"μm",sigdigits=2)) K/μm
+1.  $\partial T_2 / \partial \text{permeability} =$  $(round(dT2_dp[13],sigdigits=2)) K
+1.  $\partial T_2 / \partial \lambda_{\text{frit,solid}} =$  $(round(dT2_dp[14],sigdigits=2)) K/(W/m/K)
+1.  $\partial T_2 / \partial \delta_{\text{uc}} =$  $(round(dT2_dp[15]*ufac"mm",sigdigits=2)) K/mm
+1.  $\partial T_2 / \partial \delta_{\text{lc}} =$  $(round(dT2_dp[16]*ufac"mm",sigdigits=2)) K/mm
+1.  $\partial T_2 / \partial \delta_{\text{gap,side}} =$  $(round(dT2_dp[17]*ufac"mm",sigdigits=2)) K/mm
+1.  $\partial T_2 / \partial \text{Nu}$ = $(round(dT2_dp[18],sigdigits=2)) K
+1.  $\partial T_2 / \partial k_{\text{conv,outer}}$ =  $(round(dT2_dp[19],sigdigits=2)) K/(W/m^2/K)
+"""
+
+# ╔═╡ e75c1f26-ba4b-417d-95da-e9f4203298e7
+calc_combined_uncertainty_T2(transformSensPar(SensPar),dT2_dp)
+
+# ╔═╡ 5afd82af-4911-4342-8091-e663ea0b4f16
+let
+	df_par_unc = par_unc(transformSensPar(SensPar),dT2_dp)
+	#CSV.write("./data/T2_parameter_uncertainty.csv", df_par_unc)
 end
 
 # ╔═╡ fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 # ╠═╡ skip_as_script = true
 #=╠═╡
-if RunSim
-	solt,grid,sys,data=PCR_base(dim;G_lamp=G_lamp);
-end;
+solt,grid,sys,data=PCR_base(dim,transformSensPar(SensPar));
   ╠═╡ =#
 
 # ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
@@ -520,53 +684,6 @@ let
 end
   ╠═╡ =#
 
-# ╔═╡ eb9dd385-c4be-42a2-8565-cf3cc9b2a078
-md"""
-### Flow field
-1. Pressure
-2. Density
-3. Velocity X
-4. Velocity Y
-"""
-
-# ╔═╡ de69f808-2618-4add-b092-522a1d7e0bb7
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	(;p,m,ip,iT,Tamb,mfluxin) = data
-	ng = ngas(data)
-	mmix = []
-	for j in 1:length(sol[1,:])
-		_mmix=0
-		for i=1:ng
-			_mmix += sol[i,j]*m[i]
-		end
-		push!(mmix, _mmix)
-	end
-	
-	ps = sol[ip,:]
-	Ts = sol[iT,:]
-	#rho = @. ps * mmix /(ph"R"*T)
-	rho = @. ps * mmix /(ph"R"*Ts)
-	
-	if dim == 2
-		vis=GridVisualizer(layout=(4,1), resolution=(600,800))
-		scalarplot!(vis[1,1], grid, ps, aspect=4.0, zoom=3.5) # Total pressure
-		scalarplot!(vis[2,1], grid, rho, aspect=4.0, zoom=3.5) # Total Density
-		nf = nodeflux(sys, sol)
-		massflux = nf[:,ip,:]
-		scalarplot!(vis[3,1], grid, massflux[1,:]./rho, aspect=4.0, zoom=3.5) # Velocity - X
-		scalarplot!(vis[4,1], grid, massflux[2,:]./rho, aspect=4.0, zoom=3.5) # Velocity - Y
-	else
-		vis=GridVisualizer(layout=(2,1), resolution=(400,800), outlinealpha=0.0)
-		scalarplot!(vis[1,1], grid, ps, title="Total Pressure")
-		scalarplot!(vis[2,1], grid, rho, title="Total Density")
-		
-	end
-	reveal(vis)
-end
-  ╠═╡ =#
-
 # ╔═╡ 68ca72ae-3b24-4c09-ace1-5e340c8be3d4
 function len(grid)
 	coord = grid[Coordinates]
@@ -581,143 +698,41 @@ function len(grid)
 	L*ufac"m"
 end
 
-# ╔═╡ db77fca9-4118-4825-b023-262d4073b2dd
-md"""
-### Peclet Number
-```math
-\text{Pe}_L= \frac{L \vec v}{D}
-
-```
-"""
-
-# ╔═╡ ae8c7993-a89f-438a-a72a-d4a0c9a8ce57
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	L=maximum(grid[Coordinates][dim,:])
-	(;mfluxin,mmix0,p,Tamb) = data
-	ng = ngas(data)
-	rho0 = p*mmix0/(ph"R"*Tamb)
-	v0 = mfluxin / rho0
-	D = DiffCoeffs(mydata)
-	Pe = L*v0 / minimum(D[D.>0])
-end
-  ╠═╡ =#
-
-# ╔═╡ e7497364-75ef-4bd9-87ca-9a8c2d97064c
-md"""
-### Damköhler Number
-```math
-\text{Da}= \frac{k_{\text{react}}}{k_{\text{conv}}} = \frac{\dot r}{c_0} \tau = \frac{\dot r L}{c_0 v}
-
-```
-"""
-
-# ╔═╡ e000c100-ee46-454e-b049-c1c29daa9a56
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	L=maximum(grid[Coordinates][dim,:])
-	(;mfluxin,mmix0,lcat,p,X0,gni) = data
-	T = 650 + 273.15
-	c0 = p*X0/(ph"R"*T)
-	rho0 = p*mmix0/(ph"R"*T)
-	v0 = mfluxin / rho0	
-	RR = -lcat*ri(data,T,p*X0)
-	tau = L/v0
-	Da = maximum(RR)/c0[gni[:H2]] * tau
-end
-  ╠═╡ =#
-
-# ╔═╡ f6e54602-b63e-4ce5-b8d5-f626fbe5ae7a
-md"""
-### Reynolds Number
-```math
-\text{Re} = \frac{\rho v D}{\eta}  
-```
-where $\rho$ is the density of the fluid, ideal gas in this case, $v$ is the magnitufe of the velocity, $D$ is a representative length scale, here it is the mean pore diameter, and $\eta$ is the dynamic viscosity of the fluid.
-"""
-
-# ╔═╡ f690c19f-22e3-4428-bc1c-3ed7d1646e71
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let	
-	(;mfluxin,mmix0,X0,p,Tamb,m,dp,Fluids) = data
-	ng = ngas(data)
-	rho0 = p*mmix0/(ph"R"*Tamb)
-	v0 = mfluxin / rho0
-
-	ηf, λf = dynvisc_thermcond_mix(data, Tamb, X0)
-    
-    cf = heatcap_mix(Fluids, Tamb, X0)
-	
-	Re = v0*rho0*dp/ηf # Reynolds number
-	#Pr = cf*ηf/λf # Prandtl number
-	#Pe = u0*ρf*cf*d/λf # Peclet
-	#Re,Pr,Pe
-end
-  ╠═╡ =#
-
-# ╔═╡ 0d507c5e-eb0f-4094-a30b-a4a82fd5c302
-md"""
-### Knudsen Number
-```math
-\text{Kn} = \frac{\lambda}{l} = \frac{k_{\text B}T}{\sqrt 2 \pi \sigma^2pl}
-```
-where $\lambda$ is the mean free path length of the fluid, ideal gas in this case and $l$ is the pore diameter of the porous medium. Determine the mean free path length for ideal gas from kinetic gas theory and kinetic collision cross-sections (diameter).
-
--  $\text{Kn} < 0.01$: Continuum flow
--  $0.01 <\text{Kn} < 0.1$: Slip flow
--  $0.1 < \text{Kn} < 10$: Transitional flow
--  $\text{Kn} > 10$: Free molecular flow
-"""
-
-# ╔═╡ 5bbe72b2-2f80-4dae-9706-7ddb0b8b6dbe
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	(;dp,Tamb,p) = data
-	σs = Dict(:H2 => 289*ufac"pm", :CH4 => 380*ufac"pm", :H2O => 265*ufac"pm", :N2 => 364*ufac"pm", :CO => 376*ufac"pm", :CO2 => 330*ufac"pm")
-
-	Kn = ph"k_B"*Tamb/(sqrt(2)*pi*σs[:H2O]^2*p*dp)	
-end
-  ╠═╡ =#
-
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─d3278ac7-db94-4119-8efd-4dd18107e248
 # ╟─b2791860-ae0f-412d-9082-bb2e27f990bc
-# ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
-# ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
 # ╠═d6a073e4-f4f6-4589-918f-20b61a780dad
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═bc811695-8394-4c35-8ad6-25856fa29183
-# ╟─a078e1e1-c9cd-4d34-86d9-df4a052b6b96
-# ╠═1b38a2bb-20b2-4d98-a28b-d4cd1a8242c4
-# ╠═ac8d1e2e-a049-44ef-ba85-0fb78c46b1ff
+# ╟─289753d9-08a7-4447-94ac-efabdee99fea
+# ╠═d522205e-d7fb-4261-a43c-b746339d4071
+# ╠═12cd7938-1f1d-417f-861b-b340edbd668d
+# ╟─2801c5bd-991f-4f85-aa49-43927369605f
+# ╠═8c8e91bd-7abb-453a-b10c-3b10203b44a0
+# ╠═c7901b7f-27b9-469c-86f8-080df0cd3fa4
+# ╠═2f03c691-ca0e-43d2-9577-c1eb245634bd
+# ╠═9ed2fdeb-f75d-4222-ad5e-2a6e5ab47fad
+# ╟─115aebe4-459b-4113-b689-38e381cdf64f
+# ╠═e75c1f26-ba4b-417d-95da-e9f4203298e7
+# ╠═8e710a52-937f-4a3a-9940-bcb5d1268281
+# ╠═5afd82af-4911-4342-8091-e663ea0b4f16
+# ╠═6ed95794-b1f1-47ad-b655-5ef71e52776b
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
+# ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
+# ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 # ╠═589feab3-f94d-4f32-9526-a41cf9a5e439
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
 # ╠═994d4a87-3f27-4a51-b061-6111c3346d60
-# ╠═3207839f-48a9-49b6-9861-e5e74bc593a4
-# ╠═5d5ac33c-f738-4f9e-bcd2-efc43b638109
+# ╟─3207839f-48a9-49b6-9861-e5e74bc593a4
+# ╟─5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╟─99b59260-7651-45d0-b364-4f86db9927f8
 # ╟─58c0b05d-bb0e-4a3f-af05-71782040c8b9
-# ╟─8de4b22d-080c-486f-a6a9-41e8a5489966
+# ╠═8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
 # ╟─111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╠═a4165336-17ae-42a7-823e-d75b58983a34
-# ╟─eb9dd385-c4be-42a2-8565-cf3cc9b2a078
-# ╟─de69f808-2618-4add-b092-522a1d7e0bb7
 # ╟─68ca72ae-3b24-4c09-ace1-5e340c8be3d4
-# ╟─db77fca9-4118-4825-b023-262d4073b2dd
-# ╠═ae8c7993-a89f-438a-a72a-d4a0c9a8ce57
-# ╟─e7497364-75ef-4bd9-87ca-9a8c2d97064c
-# ╠═e000c100-ee46-454e-b049-c1c29daa9a56
-# ╟─f6e54602-b63e-4ce5-b8d5-f626fbe5ae7a
-# ╠═f690c19f-22e3-4428-bc1c-3ed7d1646e71
-# ╟─0d507c5e-eb0f-4094-a30b-a4a82fd5c302
-# ╠═5bbe72b2-2f80-4dae-9706-7ddb0b8b6dbe
