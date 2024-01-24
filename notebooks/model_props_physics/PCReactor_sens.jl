@@ -199,7 +199,7 @@ function par_unc(SensPar,dT2_dp)
 	df = DataFrame(
 		par_name=[:G0, :nflowin, :T_gas_in, :abs1_vis, :abs1_IR, :abs2_vis, :abs2_IR, :abs3_IR, :abs4_IR, :mcat, :poros, :dp, :perm, :lambdas, :delta_uc, :delta_lc, :delta_gap, :Nu, :k_conv],
 		mean_value=SensPar,
-		uncertainty_rel=[0.05, 0.02, 0.02, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.01, 0.05, 0.05, 0.05, 0.01, 0.01, 0.01, 0.50, 0.50]
+		uncertainty_rel=[0.05, 0.02, 0.02, 0.05, 0.05, 0.10, 0.10, 0.10, 0.10, 0.05, 0.05, 0.05, 0.05, 0.05, 0.01, 0.01, 0.01, 0.50, 0.50]
 )
 	#df[!, :uncertainty_interval] .= df.uncertainty_rel .* SensPar
 	df[!, :uncertainty_interval] .= df.uncertainty_rel .* df.mean_value
@@ -425,6 +425,9 @@ The mass flow boundary condition into the reactor domain is "ramped up" starting
 """
   ╠═╡ =#
 
+# ╔═╡ 3b2296c1-73c7-45be-9d8b-1a8de7adf167
+
+
 # ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╠═╡ skip_as_script = true
 #=╠═╡
@@ -438,7 +441,7 @@ let
 	tf_in=testfunction(tfact,outlet_boundaries,inlet_boundaries)
 		
 	inflow_rate=Float64[]
-	inflow_rate_manual=Float64[]
+	#inflow_rate_manual=Float64[]
 	outflow_rate=Float64[]
 	reaction_rate=Float64[]
 	stored_amount=Float64[]
@@ -458,7 +461,7 @@ let
 			
 			#ifr_manual=nflowin*(enthalpy_mix(data, T_gas_in, X0)-enthalpy_mix(data, Tamb, X0)) * ramp(solt.t[i]; du=(0.0,1), dt=dt_hf_enth)
 			ifr_manual=nflowin*enthalpy_mix(data, T_gas_in, X0) * ramp(solt.t[i]; du=(0.0,1), dt=dt_hf_enth)
-			push!(inflow_rate_manual,ifr_manual)		
+			#push!(inflow_rate_manual,ifr_manual)		
 		end
 		ofr=integrate(sys,tf_out,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])
 		push!(inflow_rate,ifr/m_)
@@ -491,7 +494,7 @@ let
 	@printf "%s In: %2.2e \t Out: %2.2e \t React: %2.2e \nIn - Out: %2.4e \nStorage tEnd -t0: %2.4e" name I_in I_out I_reac I_in+I_out-I_reac stored_amount[end]-stored_amount[1]
 
 	scalarplot!(vis, solt.t[2:end], inflow_rate, label="Inflow rate")
-	scalarplot!(vis, solt.t[2:end], inflow_rate_manual, label="Inflow MANUAL", color=:pink, clear=false)
+	#scalarplot!(vis, solt.t[2:end], inflow_rate_manual, label="Inflow MANUAL", color=:pink, clear=false)
 	scalarplot!(vis, solt.t[2:end], outflow_rate, label="Outflow rate", color=:red, clear=false)	
 	scalarplot!(vis, solt.t[2:end], -reaction_rate, label="Reaction rate",  color=:blue, clear=false)
 	scalarplot!(vis, solt.t[2:end], stored_amount, label="Stored amount", color=:green, clear=false, )
@@ -722,6 +725,7 @@ end
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
+# ╠═3b2296c1-73c7-45be-9d8b-1a8de7adf167
 # ╠═589feab3-f94d-4f32-9526-a41cf9a5e439
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
 # ╠═994d4a87-3f27-4a51-b061-6111c3346d60

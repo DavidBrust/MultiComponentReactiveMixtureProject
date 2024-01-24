@@ -47,8 +47,6 @@ Demonstration notebook for the photo thermal catalytic reactor (PCR) model. Solv
 
 Select problem dimension: $(@bind dim Select([2, 3], default=2))
 
-G0 = $(@bind G_lamp confirm(NumberField(40:1:100, default=70))) kW/m^2
-
 Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=true))
 """
 
@@ -151,21 +149,13 @@ Also the thermal energy equation is solved, taking into account convective-diffu
 @doc FixedBed.DMS_Info_thermal()
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
-function PCR_base(dim; times=nothing, G_lamp=nothing, verbose="aen")
+function PCR_base(dim; times=nothing, verbose="aen")
 	
 	times = isnothing(times) ? [0,15.0] : times
-	uc_cat = SurfaceOpticalProps(
-		alpha_IR=0.56 * 1.1, # measurement (ideally at high T) integrated over IR
-		tau_IR=0.0, # opaque surface
-		alpha_vis=0.39 * 1.1, # measurement (ideally at high T) integrated over vis
-		tau_vis=0.0 # opaque surface	
-	)
 
 	grid, inb,irrb,outb,sb,catr =  grid_boundaries_regions(dim)
 	
 	data=ReactorData(
-		G_lamp = (isnothing(G_lamp) ? 70.0 : G_lamp)*ufac"kW/m^2" ,
-		uc_cat = uc_cat,
 		inlet_boundaries=inb,
 		irradiated_boundaries=irrb,
 		outlet_boundaries=outb,
@@ -242,7 +232,7 @@ end
 # ╠═╡ skip_as_script = true
 #=╠═╡
 if RunSim
-	solt,grid,sys,data=PCR_base(dim;G_lamp=G_lamp);
+	solt,grid,sys,data=PCR_base(dim);
 end;
   ╠═╡ =#
 
@@ -274,7 +264,7 @@ let
 	tf_in=testfunction(tfact,outlet_boundaries,inlet_boundaries)
 		
 	inflow_rate=Float64[]
-	inflow_rate_manual=Float64[]
+	#inflow_rate_manual=Float64[]
 	outflow_rate=Float64[]
 	reaction_rate=Float64[]
 	stored_amount=Float64[]
@@ -293,8 +283,8 @@ let
 			ifr=integrate(sys,tf_in,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])[iT]
 			
 			#ifr_manual=nflowin*(enthalpy_mix(data, T_gas_in, X0)-enthalpy_mix(data, Tamb, X0)) * ramp(solt.t[i]; du=(0.0,1), dt=dt_hf_enth)
-			ifr_manual=nflowin*enthalpy_mix(data, T_gas_in, X0) * ramp(solt.t[i]; du=(0.0,1), dt=dt_hf_enth)
-			push!(inflow_rate_manual,ifr_manual)		
+			#ifr_manual=nflowin*enthalpy_mix(data, T_gas_in, X0) * ramp(solt.t[i]; du=(0.0,1), dt=dt_hf_enth)
+			#push!(inflow_rate_manual,ifr_manual)		
 		end
 		ofr=integrate(sys,tf_out,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])
 		push!(inflow_rate,ifr/m_)
@@ -327,7 +317,7 @@ let
 	@printf "%s In: %2.2e \t Out: %2.2e \t React: %2.2e \nIn - Out: %2.4e \nStorage tEnd -t0: %2.4e" name I_in I_out I_reac I_in+I_out-I_reac stored_amount[end]-stored_amount[1]
 
 	scalarplot!(vis, solt.t[2:end], inflow_rate, label="Inflow rate")
-	scalarplot!(vis, solt.t[2:end], inflow_rate_manual, label="Inflow MANUAL", color=:pink, clear=false)
+	#scalarplot!(vis, solt.t[2:end], inflow_rate_manual, label="Inflow MANUAL", color=:pink, clear=false)
 	scalarplot!(vis, solt.t[2:end], outflow_rate, label="Outflow rate", color=:red, clear=false)	
 	scalarplot!(vis, solt.t[2:end], -reaction_rate, label="Reaction rate",  color=:blue, clear=false)
 	scalarplot!(vis, solt.t[2:end], stored_amount, label="Stored amount", color=:green, clear=false, )
@@ -347,11 +337,6 @@ md"""
 # ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 #=╠═╡
 @bind t Slider(solt.t,show_value=true,default=solt.t[end])
-  ╠═╡ =#
-
-# ╔═╡ 589feab3-f94d-4f32-9526-a41cf9a5e439
-#=╠═╡
-HeatFluxes_EB_I(t,solt,grid,sys,data)
   ╠═╡ =#
 
 # ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
@@ -381,6 +366,11 @@ FixedBed.DMS_print_summary(sol,grid,sys,data)
 # ╠═╡ skip_as_script = true
 #=╠═╡
 FixedBed.DMS_print_summary_ext(sol,sys,data)
+  ╠═╡ =#
+
+# ╔═╡ 589feab3-f94d-4f32-9526-a41cf9a5e439
+#=╠═╡
+HeatFluxes_EB_I(t,solt,grid,sys,data)
   ╠═╡ =#
 
 # ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
@@ -567,127 +557,10 @@ let
 end
   ╠═╡ =#
 
-# ╔═╡ 68ca72ae-3b24-4c09-ace1-5e340c8be3d4
-function len(grid)
-	coord = grid[Coordinates]
-	L=0.0
-	if dim == 1
-		L=coord[end]
-	elseif dim == 2
-		L=coord[1,end]
-	else
-		L=coord[2,end]
-	end
-	L*ufac"m"
-end
-
-# ╔═╡ db77fca9-4118-4825-b023-262d4073b2dd
-md"""
-### Peclet Number
-```math
-\text{Pe}_L= \frac{L \vec v}{D}
-
-```
-"""
-
-# ╔═╡ ae8c7993-a89f-438a-a72a-d4a0c9a8ce57
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	L=maximum(grid[Coordinates][dim,:])
-	(;mfluxin,mmix0,p,Tamb) = data
-	ng = ngas(data)
-	rho0 = p*mmix0/(ph"R"*Tamb)
-	v0 = mfluxin / rho0
-	D = DiffCoeffs(mydata)
-	Pe = L*v0 / minimum(D[D.>0])
-end
-  ╠═╡ =#
-
-# ╔═╡ e7497364-75ef-4bd9-87ca-9a8c2d97064c
-md"""
-### Damköhler Number
-```math
-\text{Da}= \frac{k_{\text{react}}}{k_{\text{conv}}} = \frac{\dot r}{c_0} \tau = \frac{\dot r L}{c_0 v}
-
-```
-"""
-
-# ╔═╡ e000c100-ee46-454e-b049-c1c29daa9a56
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	L=maximum(grid[Coordinates][dim,:])
-	(;mfluxin,mmix0,lcat,p,X0,gni) = data
-	T = 650 + 273.15
-	c0 = p*X0/(ph"R"*T)
-	rho0 = p*mmix0/(ph"R"*T)
-	v0 = mfluxin / rho0	
-	RR = -lcat*ri(data,T,p*X0)
-	tau = L/v0
-	Da = maximum(RR)/c0[gni[:H2]] * tau
-end
-  ╠═╡ =#
-
-# ╔═╡ f6e54602-b63e-4ce5-b8d5-f626fbe5ae7a
-md"""
-### Reynolds Number
-```math
-\text{Re} = \frac{\rho v D}{\eta}  
-```
-where $\rho$ is the density of the fluid, ideal gas in this case, $v$ is the magnitufe of the velocity, $D$ is a representative length scale, here it is the mean pore diameter, and $\eta$ is the dynamic viscosity of the fluid.
-"""
-
-# ╔═╡ f690c19f-22e3-4428-bc1c-3ed7d1646e71
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let	
-	(;mfluxin,mmix0,X0,p,Tamb,m,dp,Fluids) = data
-	ng = ngas(data)
-	rho0 = p*mmix0/(ph"R"*Tamb)
-	v0 = mfluxin / rho0
-
-	ηf, λf = dynvisc_thermcond_mix(data, Tamb, X0)
-    
-    cf = heatcap_mix(Fluids, Tamb, X0)
-	
-	Re = v0*rho0*dp/ηf # Reynolds number
-	#Pr = cf*ηf/λf # Prandtl number
-	#Pe = u0*ρf*cf*d/λf # Peclet
-	#Re,Pr,Pe
-end
-  ╠═╡ =#
-
-# ╔═╡ 0d507c5e-eb0f-4094-a30b-a4a82fd5c302
-md"""
-### Knudsen Number
-```math
-\text{Kn} = \frac{\lambda}{l} = \frac{k_{\text B}T}{\sqrt 2 \pi \sigma^2pl}
-```
-where $\lambda$ is the mean free path length of the fluid, ideal gas in this case and $l$ is the pore diameter of the porous medium. Determine the mean free path length for ideal gas from kinetic gas theory and kinetic collision cross-sections (diameter).
-
--  $\text{Kn} < 0.01$: Continuum flow
--  $0.01 <\text{Kn} < 0.1$: Slip flow
--  $0.1 < \text{Kn} < 10$: Transitional flow
--  $\text{Kn} > 10$: Free molecular flow
-"""
-
-# ╔═╡ 5bbe72b2-2f80-4dae-9706-7ddb0b8b6dbe
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	(;dp,Tamb,p) = data
-	σs = Dict(:H2 => 289*ufac"pm", :CH4 => 380*ufac"pm", :H2O => 265*ufac"pm", :N2 => 364*ufac"pm", :CO => 376*ufac"pm", :CO2 => 330*ufac"pm")
-
-	Kn = ph"k_B"*Tamb/(sqrt(2)*pi*σs[:H2O]^2*p*dp)	
-end
-  ╠═╡ =#
-
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─d3278ac7-db94-4119-8efd-4dd18107e248
 # ╟─b2791860-ae0f-412d-9082-bb2e27f990bc
-# ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
 # ╠═d6a073e4-f4f6-4589-918f-20b61a780dad
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
@@ -697,11 +570,12 @@ end
 # ╠═ac8d1e2e-a049-44ef-ba85-0fb78c46b1ff
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
-# ╠═589feab3-f94d-4f32-9526-a41cf9a5e439
+# ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
+# ╠═589feab3-f94d-4f32-9526-a41cf9a5e439
 # ╠═994d4a87-3f27-4a51-b061-6111c3346d60
 # ╠═3207839f-48a9-49b6-9861-e5e74bc593a4
-# ╠═5d5ac33c-f738-4f9e-bcd2-efc43b638109
+# ╟─5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╟─99b59260-7651-45d0-b364-4f86db9927f8
@@ -709,15 +583,6 @@ end
 # ╟─8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
 # ╟─111b1b1f-51a5-4069-a365-a713c92b79f4
-# ╠═a4165336-17ae-42a7-823e-d75b58983a34
+# ╟─a4165336-17ae-42a7-823e-d75b58983a34
 # ╟─eb9dd385-c4be-42a2-8565-cf3cc9b2a078
 # ╟─de69f808-2618-4add-b092-522a1d7e0bb7
-# ╟─68ca72ae-3b24-4c09-ace1-5e340c8be3d4
-# ╟─db77fca9-4118-4825-b023-262d4073b2dd
-# ╠═ae8c7993-a89f-438a-a72a-d4a0c9a8ce57
-# ╟─e7497364-75ef-4bd9-87ca-9a8c2d97064c
-# ╠═e000c100-ee46-454e-b049-c1c29daa9a56
-# ╟─f6e54602-b63e-4ce5-b8d5-f626fbe5ae7a
-# ╠═f690c19f-22e3-4428-bc1c-3ed7d1646e71
-# ╟─0d507c5e-eb0f-4094-a30b-a4a82fd5c302
-# ╠═5bbe72b2-2f80-4dae-9706-7ddb0b8b6dbe
