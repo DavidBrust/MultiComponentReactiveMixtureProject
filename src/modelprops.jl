@@ -693,15 +693,15 @@ function radiosity_window(f,u,bnode,data)
     rho1_IR=uc_window.rho_IR
     eps1=uc_window.eps
 	
-	# if dim == 2
-	# 	G_lamp = nom_flux
-	# elseif dim == 3
+	if dim == 2
+		G_lamp = nom_flux
+	elseif dim == 3
 		# obtain local irradiation flux value from interpolation
 		@views y,x,_ = bnode.coord[:,bnode.index]
 		G_lamp = FluxIntp(x,y)
 		#G_lamp = FluxIntp([x,y])
 		#G_lamp = nom_flux
-	# end
+	end
 
     Tglass = u[iTw] # local tempererature of quartz window
     G1_bot_IR = eps1*ph"σ"*(Tglass^4-Tamb^4)+ph"σ"*Tamb^4
