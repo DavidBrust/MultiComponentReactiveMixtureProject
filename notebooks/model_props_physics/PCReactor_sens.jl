@@ -21,7 +21,7 @@ begin
 	using Revise
 	using VoronoiFVM
 	using ExtendableGrids, GridVisualize,ExtendableSparse,SparseArrays
-	using NLsolve, LinearSolve,Pardiso, ILUZero
+	using NLsolve, LinearSolve,Pardiso, ILUZero, LinearAlgebra
 	using StaticArrays
 
 	using FiniteDifferences
@@ -120,12 +120,6 @@ function grid_boundaries_regions(dim)
 
 	return grid, inb, irrb, outb, sb, [Ω_catalyst]
 end;
-
-# ╔═╡ 94a01d86-2ed9-4610-bc8e-979f2d79f7f2
-let
-	grid, inb,irrb,outb,sb,catr =  grid_boundaries_regions(3)
-	DataFrame(grid[Coordinates][:,3035:3035], :auto)
-end
 
 # ╔═╡ 289753d9-08a7-4447-94ac-efabdee99fea
 md"""
@@ -395,7 +389,7 @@ end
 # ╠═╡ skip_as_script = true
 #=╠═╡
 if RunSens
-	dT2_dp = T2_part_deriv(transformSensPar(SensPar), ReactorData())
+	dT2_dp = T2_part_deriv(2,transformSensPar(SensPar), ReactorData())
 end
   ╠═╡ =#
 
@@ -592,7 +586,7 @@ let
 	(;iT,iTw,iTp,irradiated_boundaries,outlet_boundaries)=data
 	#vis=GridVisualizer(layout=(3,1), resolution=(680,900))
 	vis=GridVisualizer(layout=(1,1), resolution=(680,300))
-	scalarplot!(vis[1,1],grid, sol[iT,:] .- 273.15, zoom = 2.8, aspect=4.0, show=true)
+	scalarplot!(vis[1,1],grid, sol[iT,:] .- 273.15, zoom = 2.8, aspect=4.0, levelalpha=0.0, show=true)
 end
   ╠═╡ =#
 
@@ -734,14 +728,13 @@ end
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─d3278ac7-db94-4119-8efd-4dd18107e248
-# ╠═b2791860-ae0f-412d-9082-bb2e27f990bc
+# ╟─b2791860-ae0f-412d-9082-bb2e27f990bc
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
-# ╠═94a01d86-2ed9-4610-bc8e-979f2d79f7f2
 # ╠═bc811695-8394-4c35-8ad6-25856fa29183
 # ╟─289753d9-08a7-4447-94ac-efabdee99fea
 # ╟─d522205e-d7fb-4261-a43c-b746339d4071
 # ╠═12cd7938-1f1d-417f-861b-b340edbd668d
-# ╠═2801c5bd-991f-4f85-aa49-43927369605f
+# ╟─2801c5bd-991f-4f85-aa49-43927369605f
 # ╠═8c8e91bd-7abb-453a-b10c-3b10203b44a0
 # ╠═c7901b7f-27b9-469c-86f8-080df0cd3fa4
 # ╠═2f03c691-ca0e-43d2-9577-c1eb245634bd
@@ -763,7 +756,7 @@ end
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═ec21bd68-27f5-4595-9f2c-ed99b06f503e
-# ╟─99b59260-7651-45d0-b364-4f86db9927f8
+# ╠═99b59260-7651-45d0-b364-4f86db9927f8
 # ╟─58c0b05d-bb0e-4a3f-af05-71782040c8b9
 # ╟─8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12

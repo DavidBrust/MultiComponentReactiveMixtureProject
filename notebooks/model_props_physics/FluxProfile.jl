@@ -27,7 +27,7 @@ begin
 end;
 
 # ╔═╡ b4a07bfc-f30e-4970-b301-bed21f50e943
-nom_flux = 40.0
+nom_flux = 60.0
 
 # ╔═╡ 8e4d183d-fc6b-47b5-9c6a-3b18b14c4297
 function readFlux(flux)
@@ -206,6 +206,67 @@ function sel12by12(M)
 	M_,itp	
 end
 
+# ╔═╡ abd8d54f-f236-4bd0-a9cd-4067ca97ded3
+function flux_intp_old(M;wi=16.0*ufac"cm",wi_apt=12.0*ufac"cm")
+		
+	# starting coordinates for optimum 10 cm x 10 cm selection
+	sr=33
+	sc=33
+
+	# (inverse) resolution of flux measurements, distance between data points
+	Dx = 0.031497*ufac"cm"
+	Dy = 0.031497*ufac"cm"
+	
+	
+	# calculate coordinate offsets, when deviating (expanding/shrinking from the center) from 10cm x 10cm selection 	
+	Dsr=Integer(round((wi_apt-10.0*ufac"cm")/(2*Dy)))
+	Dsc=Integer(round((wi_apt-10.0*ufac"cm")/(2*Dx)))
+
+	sr-=Dsr
+	sc-=Dsc
+
+	nx=Integer(round(wi_apt/Dx))
+	ny=Integer(round(wi_apt/Dy))
+	
+	@views M_ = M[sr:(sr+ny-1),sc:(sc+nx-1)]*ufac"kW/m^2"
+
+	# pad Flux Map with zeros outside of aperture area
+	nx_dom = Integer(round(wi/Dx))
+	ny_dom = Integer(round(wi/Dy))
+	M__ = zeros(nx_dom,ny_dom)
+		
+	Dsr_dom_apt=Integer(round((wi - wi_apt)/(2*Dy)))
+	Dsc_dom_apt=Integer(round((wi - wi_apt)/(2*Dx)))
+
+	M__[(Dsr_dom_apt+1):(Dsr_dom_apt+ny), (Dsc_dom_apt+1):(Dsc_dom_apt+nx)] = M[sr:(sr+ny-1),sc:(sc+nx-1)]*ufac"kW/m^2"
+
+	x = range(0.0,wi,length=nx_dom)
+	y = range(0.0,wi,length=nx_dom)
+	
+	itp = Interpolations.interpolate((x,y), M__, Gridded(Linear()))
+	#M_,itp	
+	#M__,itp	
+end
+
+# ╔═╡ 78041718-de60-4b79-bb96-8234b7609cea
+function plotBorder_(p)
+	Plots.plot!(p, [3.0;13.0].*ufac"cm", [3.0;3.0].*ufac"cm", c=:black, lw=2, label=:none)
+	Plots.plot!(p, [3.0;3.0].*ufac"cm", [3.0;13.0].*ufac"cm", c=:black, lw=2, label=:none)
+	Plots.plot!(p, [3.0;13.0].*ufac"cm", [13.0;13.0].*ufac"cm", c=:black, lw=2, label=:none)
+	Plots.plot!(p, [13.0;13.0].*ufac"cm", [3.0;13.0].*ufac"cm", c=:black, lw=2, label=:none)
+end
+
+# ╔═╡ 58c788de-ad27-4869-8a04-c1277772a6e9
+let
+	M, coords = readFlux(nom_flux);
+	intp = flux_intp_old(M)
+	xs = 0.0:0.01:0.16
+	ys = 0.0:0.01:0.16
+	p = Plots.plot()
+	Plots.contour!(p,xs,ys,intp(xs,ys), lw=0, aspect_ratio = 1, fill = true,  clabels=true, levels=D_levels[nom_flux].*ufac"kW/m^2", colorbar_title="Flux density / kW/m²")
+	plotBorder_(p)
+end
+
 # ╔═╡ 1d2daf9b-e0df-4e12-bd97-956f975e717b
 function flux_interpol(flux)
 	nom_flux = 0.0
@@ -225,16 +286,10 @@ end
 
 # ╔═╡ 76365437-d304-4a4d-be35-057d2ae39927
 let
-	xs = 0.0:0.01:0.12
-	ys = xs
-	xys = Vector{Float64}[]
-	for x in xs
-		for y in ys
-			push!(xys, [x,y])
-		end
-	end
-	intp = flux_interpol(70.0)
-	intp(0.13,0.13)
+	M, coords = readFlux(nom_flux);
+	sel12by12(M)
+	#intp = flux_interpol(70.0)
+	#intp(0.13,0.13)
 end
 
 # ╔═╡ Cell order:
@@ -258,5 +313,8 @@ end
 # ╠═e2ea9dbb-c2af-439d-bb60-4432df9cd6e1
 # ╟─832c53d5-c004-4f71-8947-4146529442f7
 # ╠═19951420-f1c2-47ea-9be0-a5db4ceebac0
+# ╠═abd8d54f-f236-4bd0-a9cd-4067ca97ded3
+# ╠═58c788de-ad27-4869-8a04-c1277772a6e9
+# ╠═78041718-de60-4b79-bb96-8234b7609cea
 # ╠═1d2daf9b-e0df-4e12-bd97-956f975e717b
 # ╠═76365437-d304-4a4d-be35-057d2ae39927

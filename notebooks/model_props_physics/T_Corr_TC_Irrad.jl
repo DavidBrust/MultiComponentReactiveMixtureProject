@@ -179,10 +179,10 @@ md"""
 Mean values of main parameters. Calculate thermocouple hemispherical emissivity according to the proposed correlation for heavily oxidized Inconel 600 surfaces.
 
 Operating Conditions:
--  $G_0$ = $(@bind G_lamp NumberField(40:1:100, default=70)) kW/m^2
+-  $G_0$ = $(@bind G_lamp NumberField(40.0:1.0:100.0, default=70.0)) kW/m^2
 -  $\dot n_{\text{in,total}}$ = $(@bind nflowin NumberField(1.0:0.2:20.0, default=7.4)) mol/hr
 -  $h_{\text{conv}}$ = $(@bind h_conv_D NumberField(0.0:0.5:25.0, default=15)) W/m^2/K
--  $T_2$ = $(@bind T2 NumberField(500:1:700, default=590)) °C
+-  $T_2$ = $(@bind T2 NumberField(400.0:1.0:800.0, default=590.0)) °C
 Thermocouple optical properties:
 -  $\alpha_1$ (vis) = $(@bind abs1 NumberField(0.1:0.01:0.9, default=abs1_mean))
 -  $\epsilon_1$ (IR) = $(@bind eps1 NumberField(0.1:0.01:0.9, default=eps1_ho(650.0)))
