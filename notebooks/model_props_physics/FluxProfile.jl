@@ -27,7 +27,7 @@ begin
 end;
 
 # ╔═╡ b4a07bfc-f30e-4970-b301-bed21f50e943
-nom_flux = 80.0
+nom_flux = 40.0
 
 # ╔═╡ 8e4d183d-fc6b-47b5-9c6a-3b18b14c4297
 function readFlux(flux)
@@ -206,6 +206,37 @@ function sel12by12(M)
 	M_,itp	
 end
 
+# ╔═╡ 1d2daf9b-e0df-4e12-bd97-956f975e717b
+function flux_interpol(flux)
+	nom_flux = 0.0
+	if flux >= 40.0 && flux < 50.0
+		nom_flux = 40.0
+	elseif flux >= 50.0 && flux < 70.0
+		nom_flux = 60.0
+	elseif flux >= 70.0 && flux < 90.0
+		nom_flux = 80.0
+	elseif flux >= 90.0 && flux <= 100.0
+		nom_flux = 100.0
+	end
+	M, coords = readFlux(nom_flux);
+	M .*= flux/nom_flux*ufac"kW/m^2"
+	intp = 		Interpolations.linear_interpolation((coords.X*ufac"cm",coords.Y*ufac"cm"), M,extrapolation_bc=Flat())	
+end
+
+# ╔═╡ 76365437-d304-4a4d-be35-057d2ae39927
+let
+	xs = 0.0:0.01:0.12
+	ys = xs
+	xys = Vector{Float64}[]
+	for x in xs
+		for y in ys
+			push!(xys, [x,y])
+		end
+	end
+	intp = flux_interpol(70.0)
+	intp(0.13,0.13)
+end
+
 # ╔═╡ Cell order:
 # ╠═37edeff2-f335-11ed-0a1a-67aa587d3a23
 # ╠═b4a07bfc-f30e-4970-b301-bed21f50e943
@@ -227,3 +258,5 @@ end
 # ╠═e2ea9dbb-c2af-439d-bb60-4432df9cd6e1
 # ╟─832c53d5-c004-4f71-8947-4146529442f7
 # ╠═19951420-f1c2-47ea-9be0-a5db4ceebac0
+# ╠═1d2daf9b-e0df-4e12-bd97-956f975e717b
+# ╠═76365437-d304-4a4d-be35-057d2ae39927

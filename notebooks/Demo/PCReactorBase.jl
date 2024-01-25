@@ -47,7 +47,7 @@ Demonstration notebook for the photo thermal catalytic reactor (PCR) model. Solv
 
 Select problem dimension: $(@bind dim Select([2, 3], default=2))
 
-Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=true))
+Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=false))
 """
 
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
@@ -156,6 +156,7 @@ function PCR_base(dim; times=nothing, verbose="aen")
 	grid, inb,irrb,outb,sb,catr =  grid_boundaries_regions(dim)
 	
 	data=ReactorData(
+		dim=dim,
 		inlet_boundaries=inb,
 		irradiated_boundaries=irrb,
 		outlet_boundaries=outb,
@@ -560,7 +561,7 @@ end
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─d3278ac7-db94-4119-8efd-4dd18107e248
-# ╟─b2791860-ae0f-412d-9082-bb2e27f990bc
+# ╠═b2791860-ae0f-412d-9082-bb2e27f990bc
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
 # ╠═d6a073e4-f4f6-4589-918f-20b61a780dad
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715

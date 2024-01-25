@@ -182,7 +182,7 @@ Operating Conditions:
 -  $G_0$ = $(@bind G_lamp NumberField(40:1:100, default=70)) kW/m^2
 -  $\dot n_{\text{in,total}}$ = $(@bind nflowin NumberField(1.0:0.2:20.0, default=7.4)) mol/hr
 -  $h_{\text{conv}}$ = $(@bind h_conv_D NumberField(0.0:0.5:25.0, default=15)) W/m^2/K
--  $T_2$ = $(@bind T2 NumberField(500:1:700, default=570)) °C
+-  $T_2$ = $(@bind T2 NumberField(500:1:700, default=590)) °C
 Thermocouple optical properties:
 -  $\alpha_1$ (vis) = $(@bind abs1 NumberField(0.1:0.01:0.9, default=abs1_mean))
 -  $\epsilon_1$ (IR) = $(@bind eps1 NumberField(0.1:0.01:0.9, default=eps1_ho(650.0)))
@@ -805,7 +805,7 @@ LocalResource(
 # ╠═a8114301-8e45-4cd6-93e1-e7596532324f
 # ╟─c3c54b35-3121-4f33-9c09-8dd659bd4f84
 # ╟─36a032e5-d0f4-49a2-98fb-e362189b0901
-# ╠═8dc9a71b-759d-4440-a8c4-030f6a9e57e4
+# ╟─8dc9a71b-759d-4440-a8c4-030f6a9e57e4
 # ╠═c5c9bc3b-d460-4730-9637-64fd0443860e
 # ╟─9073c7da-cc86-4191-b8a8-b49379803c89
 # ╟─5229e919-38eb-41e2-acc4-0355bb933528

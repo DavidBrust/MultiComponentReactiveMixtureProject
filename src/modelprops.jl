@@ -413,12 +413,56 @@ const lc_plate = SurfaceOpticalProps(
 	tau_vis=0.0 # opaque surface	
 )
 
+#
+# ## Irradiation
+# Irradiation flux coming from the solar simulator enters the aperture of the reactor with the specified flux profile as determined via photo-metric measurement. The measured profile is imported from a csv-datafile, handled by DataFrames.jl and interpolated by methodes provided by Interpolations.jl to be used as boundary condition in the simulation.
+#
+
+function readFlux(flux)
+
+	path = pkgdir(FixedBed)*"/data/IrradiationFluxProfiles/"
+	fluxes = [40.0,60.0,80.0,100.0]
+	@assert flux in fluxes
+	d_flux_n = Dict(
+	40.0=>("FluxMap_Import_20230523_110038_40.csv","Target_coords_20230523_110038_40.csv"),
+	60.0=>	("FluxMap_Import_20230523_105203_60.csv","Target_coords_20230523_105203_60.csv"),
+	80.0=>("FluxMap_Import_20230523_105025_80.csv","Target_coords_20230523_105025_80.csv"),
+	100.0=>("FluxMap_Import_20230523_104820_100.csv","Target_coords_20230523_104820_100.csv")
+	)
+	fn_flux, fn_coord = d_flux_n[flux]
+	FluxMap = CSV.read(path*fn_flux, DataFrame, header=false,delim=";")
+	coords = CSV.read(path*fn_coord, DataFrame, header=1,delim=";")
+	M=Matrix(FluxMap)
+	reverse!(M; dims=1)
+	return M, coords
+end
+
+function flux_interpol(flux)
+	flux /= ufac"kW/m^2"
+	nom_flux = 0.0
+	if flux >= 30.0 && flux < 50.0
+		nom_flux = 40.0
+	elseif flux >= 50.0 && flux < 70.0
+		nom_flux = 60.0
+	elseif flux >= 70.0 && flux < 90.0
+		nom_flux = 80.0
+	elseif flux >= 90.0 && flux <= 100.0
+		nom_flux = 100.0
+	end
+	M, coords = readFlux(nom_flux);
+	M .*= flux/nom_flux*ufac"kW/m^2"
+	#extrapolate(Interpolations.interpolate((coords.X*ufac"cm",coords.Y*ufac"cm"), M, Gridded(Linear()) ), Line())
+	Interpolations.linear_interpolation((coords.X*ufac"cm",coords.Y*ufac"cm"), M,extrapolation_bc=Flat())	
+end
+
+const itp12 = flux_interpol(70.0*ufac"kW/m^2")
 
 @kwdef mutable struct ReactorData{NG, KP}
+	dim::Int64 = 2
     # time constants for ramp functions
     dt_mf::Tuple{Float64, Float64}=(0.0,1.0)
     dt_hf_enth::Tuple{Float64, Float64}=(2.0,10.0)
-    dt_hf_irrad::Tuple{Float64, Float64}=(3.0,10.0)
+    dt_hf_irrad::Tuple{Float64, Float64}=(3.0,15.0)
     
     # vectors holding boundary information
     inlet_boundaries::Vector{Int64} = Int64[]
@@ -501,7 +545,8 @@ const lc_plate = SurfaceOpticalProps(
 	shell_h::Float64=20*ufac"mm" # height of heat transfer area adjancent to domain boundary 
 	k_nat_conv::Float64=20.0*ufac"W/(m^2*K)" #17.5*ufac"W/(m^2*K)" # natural+forced convection heat transfer coeff.
     G_lamp::Float64 = 70.0*ufac"kW/m^2"
-
+	nom_flux::Float64 = 70.0*ufac"kW/m^2"
+	FluxIntp::typeof(itp12)=itp12
 	# VitraPor data
 	dp::Float64=200.0*ufac"μm" # average pore size, por class 0
 	poros::Float64=0.33 # porosity, VitraPor sintetered filter class 0
@@ -517,9 +562,10 @@ const lc_plate = SurfaceOpticalProps(
 	lambda_window::Float64=1.38*ufac"W/(m*K)"
 	lambda_Al::Float64=235.0*ufac"W/(m*K)"
 
-    function ReactorData(dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,G_lamp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+    function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,G_lamp,nom_flux,FluxIntp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
         KP = FixedBed.KinData{nreac(kinpar)}
-        new{ng,KP}(dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,G_lamp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+		FluxIntp = flux_interpol(nom_flux)
+        new{ng,KP}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,G_lamp,nom_flux,FluxIntp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
 
     end
 end
@@ -638,7 +684,7 @@ Helper function to calculate radiation emitted from the window towards the surfa
     reactor (PCR) model.
 """
 function radiosity_window(f,u,bnode,data)
-    (;iTw,G_lamp,Tamb,uc_window,irradiated_boundaries)=data
+    (;dim,iTw,G_lamp,nom_flux,FluxIntp,Tamb,uc_window,irradiated_boundaries)=data
 	
     # irrad. exchange between quartz window (1), cat surface (2), masked sruface (3) 
     tau1_vis=uc_window.tau_vis
@@ -646,11 +692,21 @@ function radiosity_window(f,u,bnode,data)
     tau1_IR=uc_window.tau_IR
     rho1_IR=uc_window.rho_IR
     eps1=uc_window.eps
+	
+	# if dim == 2
+	# 	G_lamp = nom_flux
+	# elseif dim == 3
+		# obtain local irradiation flux value from interpolation
+		@views y,x,_ = bnode.coord[:,bnode.index]
+		G_lamp = FluxIntp(x,y)
+		#G_lamp = FluxIntp([x,y])
+		#G_lamp = nom_flux
+	# end
 
     Tglass = u[iTw] # local tempererature of quartz window
     G1_bot_IR = eps1*ph"σ"*(Tglass^4-Tamb^4)+ph"σ"*Tamb^4
 	#G1_bot_IR = ph"σ"*Tamb^4
-	G1_bot_vis = 0.0
+	G1_bot_vis = zero(eltype(u))
     if bnode.region in irradiated_boundaries		
 		G1_bot_vis += G_lamp # flux profile measured behind quarz in plane of cat layer
     end
@@ -675,7 +731,7 @@ function PCR_top(f,u,bnode,data)
 	alpha2_IR=uc_cat.alpha_IR
 	eps2=uc_cat.eps
 
-	G1_vis, G1_IR = radiosity_window(f,u,bnode,data)
+	
 	
 	if bnode.region in inlet_boundaries
 		r_mfluxin = mfluxin*ramp(bnode.time; du=(0.1,1), dt=dt_mf)
@@ -694,6 +750,8 @@ function PCR_top(f,u,bnode,data)
 			f[iT] = -r_hf_enth
 			
 			if bnode.region in irradiated_boundaries
+				G1_vis, G1_IR = radiosity_window(f,u,bnode,data)
+
 				hflux_irrad = (-eps2*ph"σ"*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR) # irradiation heatflux 
 				#hflux_irrad = (-eps2*ph"σ"*(u[iT]^4-Tamb^4) + alpha2_vis*G1_vis) # irradiation heatflux 
 				
@@ -869,66 +927,6 @@ function bareas(bfaceregion,sys,grid)
 		end
 	end
 	area
-end
-
-
-#
-# ## Irradiation
-# Irradiation flux coming from the solar simulator enters the aperture of the reactor with the specified flux profile as determined via photo-metric measurement. The measured profile is imported from a csv-datafile, handled by DataFrames.jl and interpolated by methodes provided by Interpolations.jl to be used as boundary condition in the simulation.
-#
-
-# domain width (porous frit = 15.7 cm, ~ 16.0)
-function sel12by12(M;wi=16.0*ufac"cm",wi_apt=12.0*ufac"cm")
-	
-	
-	
-	# starting coordinates for optimum 10 cm x 10 cm selection
-	sr=33
-	sc=33
-
-	# (inverse) resolution of flux measurements, distance between data points
-	Dx = 0.031497*ufac"cm"
-	Dy = 0.031497*ufac"cm"
-	
-	
-	# calculate coordinate offsets, when deviating (expanding/shrinking from the center) from 10cm x 10cm selection 	
-	Dsr=Integer(round((wi_apt-10.0*ufac"cm")/(2*Dy)))
-	Dsc=Integer(round((wi_apt-10.0*ufac"cm")/(2*Dx)))
-
-	sr-=Dsr
-	sc-=Dsc
-
-	nx=Integer(round(wi_apt/Dx))
-	ny=Integer(round(wi_apt/Dy))
-	
-	M=Matrix(FluxMap)
-	# coordinate system of measurement data matrix has its origin at bottom left corner, the excel data matrix (and its coordiinates) start in top left corner
-	reverse!(M; dims=1) 
-	@views M_ = M[sr:(sr+ny-1),sc:(sc+nx-1)]*ufac"kW/m^2"
-
-	# pad Flux Map with zeros outside of aperture area
-	nx_dom = Integer(round(wi/Dx))
-	ny_dom = Integer(round(wi/Dy))
-	M__ = zeros(nx_dom,ny_dom)
-		
-	Dsr_dom_apt=Integer(round((wi - wi_apt)/(2*Dy)))
-	Dsc_dom_apt=Integer(round((wi - wi_apt)/(2*Dx)))
-
-	M__[(Dsr_dom_apt+1):(Dsr_dom_apt+ny), (Dsc_dom_apt+1):(Dsc_dom_apt+nx)] = M[sr:(sr+ny-1),sc:(sc+nx-1)]*ufac"kW/m^2"
-	#Dsc=Integer(round((wi_apt-10.0*ufac"cm")/(2*Dy)))
-	
-	# origin of coordinate system in the center of the plane
-	#x = range(-wi/2,wi/2,length=nx)
-	#y = range(-wi/2,wi/2,length=ny)
-
-	#itp = Interpolations.interpolate((x,y), M_, Gridded(Linear()))
-	x = range(-wi/2,wi/2,length=nx_dom)
-	y = range(-wi/2,wi/2,length=ny_dom)
-
-	itp = Interpolations.interpolate((x,y), M__, Gridded(Linear()))
-
-	#M_,itp	
-	M__,itp	
 end
 
 

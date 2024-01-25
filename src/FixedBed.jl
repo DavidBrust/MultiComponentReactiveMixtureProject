@@ -1,7 +1,7 @@
 module FixedBed
 
 using VoronoiFVM
-using LessUnitful, Printf, Dates
+using LessUnitful, Printf, Dates, CSV, DataFrames, Interpolations
 using StaticArrays
 using Documenter
 

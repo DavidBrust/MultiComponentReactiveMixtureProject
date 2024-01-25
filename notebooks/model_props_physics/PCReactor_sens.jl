@@ -42,6 +42,8 @@ PlutoUI.TableOfContents(title="Photo Catalytic (PC) Reactor")
   ╠═╡ =#
 
 # ╔═╡ b2791860-ae0f-412d-9082-bb2e27f990bc
+# ╠═╡ skip_as_script = true
+#=╠═╡
 md"""
 # Introduction
 Demonstration notebook for the photo thermal catalytic reactor (PCR) model. Solve energy equation alongside multicomponent species transport. Include reactive gas mixture (CO2,H2,CO,CH4,H2O,N2) with variable physical properties and a Ni based catalyst described with kinetics from published literature.
@@ -50,6 +52,7 @@ Select problem dimension: $(@bind dim Select([2, 3], default=2))
 
 Check the box to __start the sensitivity calculation__: $(@bind RunSens PlutoUI.CheckBox(default=false))
 """
+  ╠═╡ =#
 
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═╡ skip_as_script = true
@@ -118,6 +121,12 @@ function grid_boundaries_regions(dim)
 	return grid, inb, irrb, outb, sb, [Ω_catalyst]
 end;
 
+# ╔═╡ 94a01d86-2ed9-4610-bc8e-979f2d79f7f2
+let
+	grid, inb,irrb,outb,sb,catr =  grid_boundaries_regions(3)
+	DataFrame(grid[Coordinates][:,3035:3035], :auto)
+end
+
 # ╔═╡ 289753d9-08a7-4447-94ac-efabdee99fea
 md"""
 # Sensitivities
@@ -167,7 +176,7 @@ Geometric parameters (internal height in upper and lower chambers, gap betwwen f
 -  $\delta_{\text{lc}}$ = $(@bind delta_lc NumberField(10.0:0.5:20.0, default=18.0)) mm
 -  $\delta_{\text{gap,side}}$ = $(@bind delta_gap NumberField(0.1:0.1:3.0, default=1.5)) mm
 Parameters determining convective heat transport:
--  $\text{Nu}$ = $(@bind Nu NumberField(1.0:0.1:10.0, default=4.8)) 
+-  $\text{Nu}$ = $(@bind Nu NumberField(1.0:0.1:10.0, default=1.0)) 
 -  $k_{\text{conv,outer}}$ = $(@bind k_conv NumberField(1.0:1.0:30.0, default=30.0)) W/m^2/K
 
 """
@@ -180,10 +189,9 @@ function transformSensPar(SensPar)
 	return [SensPar[1]*ufac"kW/m^2", SensPar[2]*ufac"mol/hr", SensPar[3]+273.15, SensPar[4:9]..., SensPar[10]*ufac"mg", SensPar[11], SensPar[12]*ufac"μm", SensPar[13], SensPar[14], SensPar[15:17].*ufac"mm"..., SensPar[18:end]... ]
 end
 
-# ╔═╡ 9ed2fdeb-f75d-4222-ad5e-2a6e5ab47fad
-transformSensPar(SensPar) 
-
 # ╔═╡ 115aebe4-459b-4113-b689-38e381cdf64f
+# ╠═╡ skip_as_script = true
+#=╠═╡
 md"""
 ### Combined Standard Uncertainty
 Following calculation method in ISO/IEC Guide 98-3 (Guide to the Expression of Uncertainty in Measurement, GUM):
@@ -192,18 +200,27 @@ u^2_{\text c} = \sum_{i=1}^N \left( \frac{\partial f}{\partial x_i} \right)^2 u^
 ```
 Following procedure __Type B__ in determining the measurement uncertainty and assuming __rectangular distribution__ of estimate of measurand aroung the mean value, the variance $u^2(x_i)$ of an estimate $x_i$ is computed as $u^2(x_i)=a^2 /3$. Here $a$ is the symmetric interval of uncertainty of the measurement.
 """
+  ╠═╡ =#
+
+# ╔═╡ 9ed1cea4-e032-4f29-a746-e91519ff1d86
+function par_unc(SensPar)
+df = DataFrame(
+		par_name=[:G0, :nflowin, :T_gas_in, :abs1_vis, :abs1_IR, :abs2_vis, :abs2_IR, :abs3_IR, :abs4_IR, :mcat, :poros, :dp, :perm, :lambdas, :delta_uc, :delta_lc, :delta_gap, :Nu, :k_conv],
+		mean_value=SensPar,
+		uncertainty_rel=[0.05, 0.02, 0.02, 0.05, 0.05, 0.20, 0.20, 0.20, 0.10, 0.05, 0.05, 0.05, 0.05, 0.05, 0.01, 0.01, 0.01, 1.0, 0.50]
+)
+	df[!, :uncertainty_interval] .= df.uncertainty_rel .* df.mean_value
+	df[!, :variance] .= df.uncertainty_interval.^2 ./ 3 # rectangular distribution
+	df
+end
 
 # ╔═╡ 6ed95794-b1f1-47ad-b655-5ef71e52776b
 function par_unc(SensPar,dT2_dp)
 	
-	df = DataFrame(
-		par_name=[:G0, :nflowin, :T_gas_in, :abs1_vis, :abs1_IR, :abs2_vis, :abs2_IR, :abs3_IR, :abs4_IR, :mcat, :poros, :dp, :perm, :lambdas, :delta_uc, :delta_lc, :delta_gap, :Nu, :k_conv],
-		mean_value=SensPar,
-		uncertainty_rel=[0.05, 0.02, 0.02, 0.05, 0.05, 0.10, 0.10, 0.10, 0.10, 0.05, 0.05, 0.05, 0.05, 0.05, 0.01, 0.01, 0.01, 0.50, 0.50]
-)
+	df = par_unc(SensPar)
 	#df[!, :uncertainty_interval] .= df.uncertainty_rel .* SensPar
-	df[!, :uncertainty_interval] .= df.uncertainty_rel .* df.mean_value
-	df[!, :variance] .= df.uncertainty_interval.^2 ./ 3 # rectangular distribution
+	#df[!, :uncertainty_interval] .= df.uncertainty_rel .* df.mean_value
+	#df[!, :variance] .= df.uncertainty_interval.^2 ./ 3 # rectangular distribution
 	df[!, :var_times_sens] .= df.variance .* dT2_dp.^2
 	df
 end
@@ -213,6 +230,12 @@ function calc_combined_uncertainty_T2(SensPar, dT2_dp)
 	uc = par_unc(SensPar,dT2_dp).variance
 	sqrt(sum(dT2_dp.^2 .* uc))
 end
+
+# ╔═╡ debdf189-7269-4d96-aa12-ff1c2c162f02
+# ╠═╡ skip_as_script = true
+#=╠═╡
+par_unc(transformSensPar(SensPar))
+  ╠═╡ =#
 
 # ╔═╡ a995f83c-6ff7-4b95-a798-ea636ccb1d88
 # ╠═╡ show_logs = false
@@ -230,7 +253,7 @@ end
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
 function PCR_base(dim, par; times=nothing, verbose="aen")	
-	times = isnothing(times) ? [0,15.0] : times
+	times = isnothing(times) ? [0,20.0] : times
 	
 	G_lamp, nflowin, T_gas_in, abs1_vis, abs1_IR, abs2_vis, abs2_IR, abs3_IR, abs4_IR, mcat, poros, dp, perm, lambdas, delta_uc, delta_lc, delta_gap, Nu, k_conv= par
 
@@ -265,7 +288,9 @@ function PCR_base(dim, par; times=nothing, verbose="aen")
 	grid, inb,irrb,outb,sb,catr =  grid_boundaries_regions(dim)
 	
 	data=ReactorData(
-		G_lamp=G_lamp,
+		dim=dim,
+		#G_lamp=G_lamp,
+		nom_flux=G_lamp,
 		nflowin=nflowin,
 		T_gas_in=T_gas_in,
 		uc_window=uc_window,
@@ -348,30 +373,35 @@ function PCR_base(dim, par; times=nothing, verbose="aen")
 	#control.Δu_opt=1.0
 
 	
-	#solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="nae")
-	solt=VoronoiFVM.solve(sys;inival=inival,times,control)
+	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose= dim==3 ? "nae" : "")
+	#solt=VoronoiFVM.solve(sys;inival=inival,times,control)
 	
 	return solt,grid,sys,data
 end
 
 # ╔═╡ 12cd7938-1f1d-417f-861b-b340edbd668d
-function T2_center(p,data)
+function T2_part_deriv(dim,p,data)
 	(;iT) = data
 
 	function f(p) 
 		solt,grid,sys,data=PCR_base(dim,p);
 		sol = solt(solt.t[end])
-		sol[iT,1]
+		sol[iT,91] # corresponds to node at (r,z) = (0,5 mmm), center at cat surface
 	end
 	grad(forward_fdm(3, 1), f, p)[1]
 end 
 
 # ╔═╡ 8c8e91bd-7abb-453a-b10c-3b10203b44a0
+# ╠═╡ skip_as_script = true
+#=╠═╡
 if RunSens
-	dT2_dp = T2_center(transformSensPar(SensPar), ReactorData())
+	dT2_dp = T2_part_deriv(transformSensPar(SensPar), ReactorData())
 end
+  ╠═╡ =#
 
 # ╔═╡ 2801c5bd-991f-4f85-aa49-43927369605f
+# ╠═╡ skip_as_script = true
+#=╠═╡
 md"""
 Sensitivities:
 1.  $\partial T_2 / \partial G_0 =$  $(round(dT2_dp[1]*ufac"kW/m^2",sigdigits=2)) K/(kW/m^2)
@@ -394,15 +424,22 @@ Sensitivities:
 1.  $\partial T_2 / \partial \text{Nu}$ = $(round(dT2_dp[18],sigdigits=2)) K
 1.  $\partial T_2 / \partial k_{\text{conv,outer}}$ =  $(round(dT2_dp[19],sigdigits=2)) K/(W/m^2/K)
 """
+  ╠═╡ =#
 
 # ╔═╡ e75c1f26-ba4b-417d-95da-e9f4203298e7
+# ╠═╡ skip_as_script = true
+#=╠═╡
 calc_combined_uncertainty_T2(transformSensPar(SensPar),dT2_dp)
+  ╠═╡ =#
 
 # ╔═╡ 5afd82af-4911-4342-8091-e663ea0b4f16
+# ╠═╡ skip_as_script = true
+#=╠═╡
 let
 	df_par_unc = par_unc(transformSensPar(SensPar),dT2_dp)
 	#CSV.write("./data/T2_parameter_uncertainty.csv", df_par_unc)
 end
+  ╠═╡ =#
 
 # ╔═╡ fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 # ╠═╡ skip_as_script = true
@@ -424,9 +461,6 @@ The simulation is setup as a transient simulation. An initialisation strategy is
 The mass flow boundary condition into the reactor domain is "ramped up" starting from a low value and linearly increasing until the final value is reached. A time delay is given to let the flow stabilize. Once the flow field is established, heat transport is ramped up until a stable temperature field is established. Finally, the reactivity of the catalyst is "ramped up" until its final reactivity value is reached.
 """
   ╠═╡ =#
-
-# ╔═╡ 3b2296c1-73c7-45be-9d8b-1a8de7adf167
-
 
 # ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╠═╡ skip_as_script = true
@@ -512,13 +546,9 @@ md"""
 """
 
 # ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
+# ╠═╡ skip_as_script = true
 #=╠═╡
 @bind t Slider(solt.t,show_value=true,default=solt.t[end])
-  ╠═╡ =#
-
-# ╔═╡ 589feab3-f94d-4f32-9526-a41cf9a5e439
-#=╠═╡
-HeatFluxes_EB_I(t,solt,grid,sys,data)
   ╠═╡ =#
 
 # ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
@@ -527,19 +557,8 @@ HeatFluxes_EB_I(t,solt,grid,sys,data)
 sol = solt(t);
   ╠═╡ =#
 
-# ╔═╡ d6a073e4-f4f6-4589-918f-20b61a780dad
-#=╠═╡
-let
-	(;inlet_boundaries,outlet_boundaries)=data
-	tfact=TestFunctionFactory(sys)
-	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
-	#tf_out=testfunction(tfact,[1,3,4,5,6,7],[2])
-	out=integrate(sys,tf_out,sol)
-	#scalarplot(grid,tf_out)
-end
-  ╠═╡ =#
-
 # ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
+# ╠═╡ skip_as_script = true
 #=╠═╡
 FixedBed.DMS_print_summary(sol,grid,sys,data)
   ╠═╡ =#
@@ -548,6 +567,21 @@ FixedBed.DMS_print_summary(sol,grid,sys,data)
 # ╠═╡ skip_as_script = true
 #=╠═╡
 FixedBed.DMS_print_summary_ext(sol,sys,data)
+  ╠═╡ =#
+
+# ╔═╡ ec21bd68-27f5-4595-9f2c-ed99b06f503e
+#=╠═╡
+let
+	(;iT) = data
+	Tc = 0.0
+	if dim == 2
+		Tc = sol[iT,91]
+	elseif dim == 3
+		Tc = sol[iT,3035]
+	end
+	Tc -= 273.15
+	@printf "Temperature on catalyst surface: %2.f °C" Tc 
+end
   ╠═╡ =#
 
 # ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
@@ -563,6 +597,7 @@ end
   ╠═╡ =#
 
 # ╔═╡ 58c0b05d-bb0e-4a3f-af05-71782040c8b9
+#=╠═╡
 if dim == 2
 md"""
 - (1,1): T-profile at r=0
@@ -571,9 +606,11 @@ md"""
 - (2,2): Bottom Plate T-profile
 """
 end
+  ╠═╡ =#
 
 # ╔═╡ 8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╠═╡ show_logs = false
+# ╠═╡ skip_as_script = true
 #=╠═╡
 let
 	if dim == 2
@@ -610,48 +647,10 @@ end
 # ╔═╡ c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
 md"""
 ### Molar fractions
-1) CO
-2) CO2
 """
 
-# ╔═╡ 111b1b1f-51a5-4069-a365-a713c92b79f4
-# ╠═╡ show_logs = false
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	(;ip,p,gn,gni) = data
-	ng=ngas(data)
-	if dim == 2
-		vis=GridVisualizer(layout=(3,1), resolution=(680,900))
-		scalarplot!(vis[1,1], grid, sol[gni[:CO],:], aspect = 4.0,zoom = 2.8) # CO
-		scalarplot!(vis[2,1], grid, sol[gni[:CO2],:], aspect = 4.0,zoom = 2.8) # CO2
-
-		cols = distinguishable_colors(ng)
-		# plot species molar fractions along frit thickness (along y axis)
-		function _2to1(a,b)
-			a[1]=b[2]
-		end
-		_grid,_,_,_,_,_ = grid_boundaries_regions(dim)
-		max_bfr = maximum(grid[BFaceRegions])
-		bfacemask!(_grid, [3.0,0.0].*ufac"cm",[3.0,0.5].*ufac"cm",max_bfr+1)
-	    grid1D = subgrid(_grid, [max_bfr+1]; boundary = true, transform = _2to1)
-		for i=1:ng
-			sol1D=view(sol[i, :], grid1D)
-			scalarplot!(vis[3,1],grid1D, sol1D, label=gn[i], color=cols[i],clear=false)
-		end
-		reveal(vis)
-	
-	else
-		vis=GridVisualizer(layout=(3,1), resolution=(400,1200), outlinealpha=0.0)
-		scalarplot!(vis[1,1], grid, sol[1,:])
-		scalarplot!(vis[2,1], grid, sol[2,:])
-		scalarplot!(vis[3,1], grid, sol[3,:])
-	end	
-	reveal(vis)
-end
-  ╠═╡ =#
-
 # ╔═╡ a4165336-17ae-42a7-823e-d75b58983a34
+# ╠═╡ skip_as_script = true
 #=╠═╡
 let
 	(;ip,p,gn,gni) = data
@@ -687,56 +686,87 @@ let
 end
   ╠═╡ =#
 
-# ╔═╡ 68ca72ae-3b24-4c09-ace1-5e340c8be3d4
-function len(grid)
-	coord = grid[Coordinates]
-	L=0.0
-	if dim == 1
-		L=coord[end]
-	elseif dim == 2
-		L=coord[1,end]
+# ╔═╡ 2a8d25e4-e5e0-4eba-b25c-931a76e4b248
+md"""
+1) CO
+1) CO2
+1) CH4
+"""
+
+# ╔═╡ 111b1b1f-51a5-4069-a365-a713c92b79f4
+# ╠═╡ show_logs = false
+# ╠═╡ skip_as_script = true
+#=╠═╡
+let
+	(;ip,p,gn,gni) = data
+	ng=ngas(data)
+	if dim == 2
+		vis=GridVisualizer(layout=(4,1), resolution=(680,900))
+		scalarplot!(vis[1,1], grid, sol[gni[:CO],:], aspect = 4.0,zoom = 2.8) # CO
+		scalarplot!(vis[2,1], grid, sol[gni[:CO2],:], aspect = 4.0,zoom = 2.8) # CO2
+		scalarplot!(vis[3,1], grid, sol[gni[:CH4],:], aspect = 4.0,zoom = 2.8) # CH4
+
+		cols = distinguishable_colors(ng)
+		# plot species molar fractions along frit thickness (along y axis)
+		function _2to1(a,b)
+			a[1]=b[2]
+		end
+		_grid,_,_,_,_,_ = grid_boundaries_regions(dim)
+		max_bfr = maximum(grid[BFaceRegions])
+		bfacemask!(_grid, [3.0,0.0].*ufac"cm",[3.0,0.5].*ufac"cm",max_bfr+1)
+	    grid1D = subgrid(_grid, [max_bfr+1]; boundary = true, transform = _2to1)
+		for i=1:ng
+			sol1D=view(sol[i, :], grid1D)
+			scalarplot!(vis[4,1],grid1D, sol1D, label=gn[i], color=cols[i],clear=false)
+		end
+		reveal(vis)
+	
 	else
-		L=coord[2,end]
-	end
-	L*ufac"m"
+		vis=GridVisualizer(layout=(3,1), resolution=(400,1200), outlinealpha=0.0)
+		scalarplot!(vis[1,1], grid, sol[gni[:CO],:])
+		scalarplot!(vis[2,1], grid, sol[gni[:CO2],:])
+		scalarplot!(vis[3,1], grid, sol[gni[:CH4],:])
+	end	
+	reveal(vis)
 end
+  ╠═╡ =#
 
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─d3278ac7-db94-4119-8efd-4dd18107e248
-# ╟─b2791860-ae0f-412d-9082-bb2e27f990bc
-# ╠═d6a073e4-f4f6-4589-918f-20b61a780dad
+# ╠═b2791860-ae0f-412d-9082-bb2e27f990bc
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
+# ╠═94a01d86-2ed9-4610-bc8e-979f2d79f7f2
 # ╠═bc811695-8394-4c35-8ad6-25856fa29183
 # ╟─289753d9-08a7-4447-94ac-efabdee99fea
-# ╠═d522205e-d7fb-4261-a43c-b746339d4071
+# ╟─d522205e-d7fb-4261-a43c-b746339d4071
 # ╠═12cd7938-1f1d-417f-861b-b340edbd668d
-# ╟─2801c5bd-991f-4f85-aa49-43927369605f
+# ╠═2801c5bd-991f-4f85-aa49-43927369605f
 # ╠═8c8e91bd-7abb-453a-b10c-3b10203b44a0
 # ╠═c7901b7f-27b9-469c-86f8-080df0cd3fa4
 # ╠═2f03c691-ca0e-43d2-9577-c1eb245634bd
-# ╠═9ed2fdeb-f75d-4222-ad5e-2a6e5ab47fad
 # ╟─115aebe4-459b-4113-b689-38e381cdf64f
 # ╠═e75c1f26-ba4b-417d-95da-e9f4203298e7
 # ╠═8e710a52-937f-4a3a-9940-bcb5d1268281
 # ╠═5afd82af-4911-4342-8091-e663ea0b4f16
+# ╠═debdf189-7269-4d96-aa12-ff1c2c162f02
+# ╠═9ed1cea4-e032-4f29-a746-e91519ff1d86
 # ╠═6ed95794-b1f1-47ad-b655-5ef71e52776b
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
-# ╠═3b2296c1-73c7-45be-9d8b-1a8de7adf167
-# ╠═589feab3-f94d-4f32-9526-a41cf9a5e439
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
 # ╠═994d4a87-3f27-4a51-b061-6111c3346d60
 # ╟─3207839f-48a9-49b6-9861-e5e74bc593a4
 # ╟─5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
+# ╠═ec21bd68-27f5-4595-9f2c-ed99b06f503e
 # ╟─99b59260-7651-45d0-b364-4f86db9927f8
 # ╟─58c0b05d-bb0e-4a3f-af05-71782040c8b9
-# ╠═8de4b22d-080c-486f-a6a9-41e8a5489966
+# ╟─8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
-# ╟─111b1b1f-51a5-4069-a365-a713c92b79f4
-# ╠═a4165336-17ae-42a7-823e-d75b58983a34
-# ╟─68ca72ae-3b24-4c09-ace1-5e340c8be3d4
+# ╟─a4165336-17ae-42a7-823e-d75b58983a34
+# ╟─2a8d25e4-e5e0-4eba-b25c-931a76e4b248
+# ╠═111b1b1f-51a5-4069-a365-a713c92b79f4
