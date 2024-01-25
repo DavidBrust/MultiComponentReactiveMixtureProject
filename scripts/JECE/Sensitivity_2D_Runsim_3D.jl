@@ -57,7 +57,7 @@ function run(nom_fluxs, nflowins; SensPar=SensPar)
     T_12s = Float64[]
     T_13s = Float64[]
     T_14s = Float64[]
-    # Ucs = Float64[]
+    T_03_Ucs = Float64[]
     for nom_flux in nom_fluxs
         par = transformSensPar([nom_flux, nflowins[1], SensPar[3:end]...])
         T_03,T_04,T_05,T_06,T_07,T_12,T_13,T_14 = probe_Temps(par;dim=3)
@@ -69,7 +69,7 @@ function run(nom_fluxs, nflowins; SensPar=SensPar)
         push!(T_12s, T_12)
         push!(T_13s, T_13)
         push!(T_14s, T_14)
-        push!(Ucs, SensitivityUncertainty(par)        )
+        push!(T_03_Ucs, SensitivityUncertainty(par)        )
     end
     
     df = DataFrame()
@@ -83,7 +83,7 @@ function run(nom_fluxs, nflowins; SensPar=SensPar)
     df[!, :T_12] .= T_12s
     df[!, :T_13] .= T_13s
     df[!, :T_14] .= T_14s
-    # df[!, :Ucombined] .= Ucs
+    df[!, :T_03_Uc] .= T_03_Ucs
 
     CSV.write("data/out/2024-01-24/Tc_Uc.csv", df)
 
