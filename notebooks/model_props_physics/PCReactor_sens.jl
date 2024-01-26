@@ -363,11 +363,20 @@ function PCR_base(dim, par; times=nothing, verbose="aen")
    		)
 	end
 	control.handle_exceptions=true
-	control.Δu_opt=1_000.0
+	control.Δu_opt=1000
+	# control.num_final_steps=1
+	# control.damp_initial=0.5
 	#control.Δu_opt=1.0
 
 	
 	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose= dim==3 ? "nae" : "")
+
+	# control.damp_initial=0.5
+	#control.Δu_opt=1.0
+	#control.Δt=1.0
+	
+	# solt2=VoronoiFVM.solve(sys;inival=solt(solt.t[end]),times=times.+[5.0,8.0],control,verbose= dim==3 ? "nae" : "")
+
 	#solt=VoronoiFVM.solve(sys;inival=inival,times,control)
 	
 	return solt,grid,sys,data
