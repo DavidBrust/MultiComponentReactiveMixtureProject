@@ -27,10 +27,15 @@ function run(nom_fluxs, nflowins; SensPar=SensPar)
         end
 
         [index(c,grid[Coordinates]) for c in [T_03,T_04,T_05,T_06,T_07,T_12,T_13,T_14]]
+        # [index(c,grid[Coordinates]) for c in [T_03]] # only get center temperature
     end
 
     function probe_Temps(par;dim=2)
-        solt,grid,sys,data=PCR_base(dim,par;times=[0.0,10.0]);
+        # solt,grid,sys,data=PCR_base(dim,par;times=[0.0,5.0]);
+        # return solt,grid,sys,data
+        return PCR_base(dim,par;times=[0.0,15.0]);
+        
+
         sol = solt(solt.t[end])
         (;iT) = data
 
@@ -58,20 +63,25 @@ function run(nom_fluxs, nflowins; SensPar=SensPar)
     T_13s = Float64[]
     T_14s = Float64[]
     T_03_Ucs = Float64[]
+
+
     for nom_flux in nom_fluxs
-        par = transformSensPar([nom_flux, nflowins[1], SensPar[3:end]...])
-        T_03,T_04,T_05,T_06,T_07,T_12,T_13,T_14 = probe_Temps(par;dim=3)
-        push!(T_03s, T_03)
-        push!(T_04s, T_04)
-        push!(T_05s, T_05)
-        push!(T_06s, T_06)
-        push!(T_07s, T_07)
-        push!(T_12s, T_12)
-        push!(T_13s, T_13)
-        push!(T_14s, T_14)
-        push!(T_03_Ucs, SensitivityUncertainty(par)        )
+        for nflowin in nflowins
+            par = transformSensPar([nom_flux, nflowin, SensPar[3:end]...])
+            # T_03,T_04,T_05,T_06,T_07,T_12,T_13,T_14 = probe_Temps(par;dim=3)
+            return probe_Temps(par;dim=3)
+            # T_03 = probe_Temps(par;dim=3)
+            push!(T_03s, T_03)
+            push!(T_04s, T_04)
+            push!(T_05s, T_05)
+            push!(T_06s, T_06)
+            push!(T_07s, T_07)
+            push!(T_12s, T_12)
+            push!(T_13s, T_13)
+            push!(T_14s, T_14)
+            # push!(T_03_Ucs, SensitivityUncertainty(par)        )
+        end
     end
-    
     df = DataFrame()
     df[!, :nom_flux]  = nom_fluxs
     df[!, :nflowin]  .= repeat([nflowins[1]], length(nom_fluxs))
@@ -83,9 +93,9 @@ function run(nom_fluxs, nflowins; SensPar=SensPar)
     df[!, :T_12] .= T_12s
     df[!, :T_13] .= T_13s
     df[!, :T_14] .= T_14s
-    df[!, :T_03_Uc] .= T_03_Ucs
+    # df[!, :T_03_Uc] .= T_03_Ucs
 
-    CSV.write("data/out/2024-01-24/Tc_Uc.csv", df)
+    CSV.write("data/out/2024-01-26/Tc_Uc.csv", df)
 
 end
 

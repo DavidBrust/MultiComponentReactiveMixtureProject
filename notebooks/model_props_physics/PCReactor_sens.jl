@@ -54,6 +54,12 @@ Check the box to __start the sensitivity calculation__: $(@bind RunSens PlutoUI.
 """
   ╠═╡ =#
 
+# ╔═╡ 6e82c62c-4d3b-46ec-9d91-bdcbeb8693e2
+@doc FixedBed.DMS_Info_isothermal
+
+# ╔═╡ 670ea109-33be-42c0-a1fc-8959bbda5990
+@doc FixedBed.DMS_Info_thermal()
+
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═╡ skip_as_script = true
 #=╠═╡
@@ -283,6 +289,7 @@ function PCR_base(dim, par; times=nothing, verbose="aen")
 	
 	data=ReactorData(
 		dim=dim,
+		constant_properties=true,
 		#G_lamp=G_lamp,
 		nom_flux=G_lamp,
 		nflowin=nflowin,
@@ -308,7 +315,7 @@ function PCR_base(dim, par; times=nothing, verbose="aen")
 		catalyst_regions=catr,
 		rhos=5.0*ufac"kg/m^3" # set solid density to low value to reduce thermal inertia of system
 		)
-	(;p,ip,Tamb,iT,iTw,iTp,ng,gni,X0)=data
+	(;p,ip,Tamb,iT,iTw,iTp,ibf,irradiated_boundaries,FluxIntp,ng,X0)=data
 	ng=ngas(data)
 
 	sys=VoronoiFVM.System( 	grid;
@@ -326,12 +333,26 @@ function PCR_base(dim, par; times=nothing, verbose="aen")
 
 	enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
 	enable_boundary_species!(sys, iTw, irrb) # window temperature as boundary species in upper chamber
+	enable_boundary_species!(sys, ibf, irrb) # boundary flux species, workaround to implement spatially varying irradiation
 	enable_boundary_species!(sys, iTp, outb) # plate temperature as boundary species in lower chamber
 
 	inival=unknowns(sys)
 
 	inival[ip,:].=p
 	inival[[iT,iTw,iTp],:] .= Tamb
+
+	function d3tod2(a,b)
+		a[1]=b[1]
+		a[2]=b[2]
+	end
+	inival[ibf,:] .= 0.0
+	sub=subgrid(grid,irradiated_boundaries,boundary=true, transform=d3tod2 )
+		
+	for inode in sub[CellNodes]
+		c = sub[Coordinates][:,inode]
+		inodeip = sub[ExtendableGrids.NodeInParent][inode]
+		inival[ibf,inodeip] = FluxIntp(c[1]-0.02, c[2]-0.02)
+	end
 		
 	for i=1:ng
 		inival[i,:] .= X0[i]
@@ -738,6 +759,8 @@ end
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─d3278ac7-db94-4119-8efd-4dd18107e248
 # ╟─b2791860-ae0f-412d-9082-bb2e27f990bc
+# ╠═6e82c62c-4d3b-46ec-9d91-bdcbeb8693e2
+# ╠═670ea109-33be-42c0-a1fc-8959bbda5990
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═bc811695-8394-4c35-8ad6-25856fa29183
 # ╟─289753d9-08a7-4447-94ac-efabdee99fea

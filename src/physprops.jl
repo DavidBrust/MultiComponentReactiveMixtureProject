@@ -498,21 +498,28 @@ end
 
 # ideal gas mixture enthalpy
 # calculation according to VDI heat atlas 2010 D1.6 Equation (67), p. 140
-function enthalpy_mix(Fluids::AbstractVector, T, x)
-    hmix = zero(eltype(x))
-    ng=length(x)
-    for i=1:ng
-        hmix += x[i] * enthalpy_gas(Fluids[i], T)
-    end
-    hmix
-end
+# function enthalpy_mix(Fluids::AbstractVector, T, x)
+#     hmix = zero(eltype(x))
+#     ng=length(x)
+#     for i=1:ng
+#         hmix += x[i] * enthalpy_gas(Fluids[i], T)
+#     end
+#     hmix
+# end
 
 function enthalpy_mix(data, T, x)
     (;Fluids,constant_properties) = data
     hmix = zero(eltype(x))
-
+	
     if constant_properties
-        hmix += 0.0*ufac"J/mol"
+		# !!! DEBUG !!!
+        # hmix += 10.0*ufac"kJ/mol"
+		@inbounds for i=1:ngas(data)
+            # @inline hmix += x[i] * heatcap_mix(data, T, x) *(T-298.15)
+			@inline hmix += x[i] * (heatcap_gas(Fluids[i], T) *(T-298.15) )
+			# @inline hmix += x[i] * (Fluids[i].ΔHform + heatcap_gas(Fluids[i], T) *(T-298.15) ) # bad convergence
+			
+        end
     else
         ng=ngas(data)    
         @inbounds for i=1:ng
