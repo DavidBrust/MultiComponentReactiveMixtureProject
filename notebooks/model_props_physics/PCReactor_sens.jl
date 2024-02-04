@@ -251,6 +251,12 @@ let
 end
   ╠═╡ =#
 
+# ╔═╡ 0753dfad-a752-4f7a-8511-c6c0a1cde7e1
+let
+	dat = ReactorData()
+	dat.dim
+end
+
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
 function PCR_base(dim, par; times=nothing, verbose="aen")	
 	times = isnothing(times) ? [0,20.0] : times
@@ -289,7 +295,7 @@ function PCR_base(dim, par; times=nothing, verbose="aen")
 	
 	data=ReactorData(
 		dim=dim,
-		constant_properties=true,
+		#constant_properties=true,
 		#G_lamp=G_lamp,
 		nom_flux=G_lamp,
 		nflowin=nflowin,
@@ -315,7 +321,7 @@ function PCR_base(dim, par; times=nothing, verbose="aen")
 		catalyst_regions=catr,
 		rhos=5.0*ufac"kg/m^3" # set solid density to low value to reduce thermal inertia of system
 		)
-	(;p,ip,Tamb,iT,iTw,iTp,ibf,irradiated_boundaries,FluxIntp,ng,X0)=data
+	(;p,ip,Tamb,iT,iH,iTw,iTp,ibf,irradiated_boundaries,FluxIntp,ng,X0,Fluids)=data
 	ng=ngas(data)
 
 	sys=VoronoiFVM.System( 	grid;
@@ -331,33 +337,44 @@ function PCR_base(dim, par; times=nothing, verbose="aen")
 							assembly=:edgewise,
 							)
 
-	enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
+	enable_species!(sys; species=collect(1:(ng+3))) # gas phase species xi, ptotal & T
 	enable_boundary_species!(sys, iTw, irrb) # window temperature as boundary species in upper chamber
-	enable_boundary_species!(sys, ibf, irrb) # boundary flux species, workaround to implement spatially varying irradiation
+	if dim == 3
+		# boundary flux species, workaround to implement spatially varying irradiation
+		enable_boundary_species!(sys, ibf, irrb)
+	end
 	enable_boundary_species!(sys, iTp, outb) # plate temperature as boundary species in lower chamber
 
 	inival=unknowns(sys)
 
 	inival[ip,:].=p
 	inival[[iT,iTw,iTp],:] .= Tamb
-
-	function d3tod2(a,b)
-		a[1]=b[1]
-		a[2]=b[2]
+	hbar = 0.0
+	for i=1:ng
+		hbar += X0[i] * enthalpy_gas(Fluids[i], Tamb)
 	end
-	inival[ibf,:] .= 0.0
-	sub=subgrid(grid,irradiated_boundaries,boundary=true, transform=d3tod2 )
-		
-	for inode in sub[CellNodes]
-		c = sub[Coordinates][:,inode]
-		inodeip = sub[ExtendableGrids.NodeInParent][inode]
-		inival[ibf,inodeip] = FluxIntp(c[1]-0.02, c[2]-0.02)
-	end
-		
+	inival[iH,:].=hbar
+	
 	for i=1:ng
 		inival[i,:] .= X0[i]
 	end
-	
+
+	if dim == 3
+		function d3tod2(a,b)
+			a[1]=b[1]
+			a[2]=b[2]
+		end
+		inival[ibf,:] .= 0.0
+		sub=subgrid(grid,irradiated_boundaries,boundary=true, transform=d3tod2 )
+			
+		for inode in sub[CellNodes]
+			c = sub[Coordinates][:,inode]
+			inodeip = sub[ExtendableGrids.NodeInParent][inode]
+			inival[ibf,inodeip] = FluxIntp(c[1]-0.02, c[2]-0.02)
+		end
+	end
+		
+
 	#nd_ids = unique(grid[CellNodes][:,grid[CellRegions] .== Ω_catalyst])
 	catalyst_nodes = []
 	for reg in catr
@@ -384,7 +401,7 @@ function PCR_base(dim, par; times=nothing, verbose="aen")
    		)
 	end
 	control.handle_exceptions=true
-	control.Δu_opt=1000
+	control.Δu_opt=1_000_000
 	# control.num_final_steps=1
 	# control.damp_initial=0.5
 	#control.Δu_opt=1.0
@@ -392,13 +409,6 @@ function PCR_base(dim, par; times=nothing, verbose="aen")
 	
 	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose= dim==3 ? "nae" : "")
 
-	# control.damp_initial=0.5
-	#control.Δu_opt=1.0
-	#control.Δt=1.0
-	
-	# solt2=VoronoiFVM.solve(sys;inival=solt(solt.t[end]),times=times.+[5.0,8.0],control,verbose= dim==3 ? "nae" : "")
-
-	#solt=VoronoiFVM.solve(sys;inival=inival,times,control)
 	
 	return solt,grid,sys,data
 end
@@ -490,7 +500,7 @@ The mass flow boundary condition into the reactor domain is "ramped up" starting
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	(;m,ip,iT,gn,gni,poros,mflowin,nflowin,W0,T_gas_in,Tamb,X0,outlet_boundaries,inlet_boundaries,dt_mf,dt_hf_enth)=data
+	(;m,ip,iT,iH,gn,gni,poros,mflowin,nflowin,W0,T_gas_in,Tamb,X0,outlet_boundaries,inlet_boundaries,dt_mf,dt_hf_enth)=data
 	ng=ngas(data)
 	vis=GridVisualizer(resolution=(600,300), xlabel="Time / s", ylabel="Molar flow / Total Moles")
 	
@@ -505,7 +515,7 @@ let
 	stored_amount=Float64[]
 
 	#k=gni[:N2]
-	k=iT
+	k=iH
 	for i=2:length(solt)
 		m_ = 1
 		W_ = 1
@@ -514,8 +524,8 @@ let
 			m_ = m[k]
 			W_ = W0[k]
 			ifr=mflowin*W_*ramp(solt.t[i]; du=(0.1,1), dt=dt_mf)			
-		elseif k == iT
-			ifr=integrate(sys,tf_in,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])[iT]
+		elseif k == iH
+			ifr=integrate(sys,tf_in,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])[k]
 			
 			#ifr_manual=nflowin*(enthalpy_mix(data, T_gas_in, X0)-enthalpy_mix(data, Tamb, X0)) * ramp(solt.t[i]; du=(0.0,1), dt=dt_hf_enth)
 			ifr_manual=nflowin*enthalpy_mix(data, T_gas_in, X0) * ramp(solt.t[i]; du=(0.0,1), dt=dt_hf_enth)
@@ -545,7 +555,7 @@ let
 		name = gn[k]
 	elseif k == ip
 		name = "Total Mass"
-	elseif k == iT
+	elseif k == iH
 		name = "Enthalpy Flow"
 	end
 	
@@ -779,12 +789,13 @@ end
 # ╠═6ed95794-b1f1-47ad-b655-5ef71e52776b
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
+# ╠═0753dfad-a752-4f7a-8511-c6c0a1cde7e1
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
 # ╠═994d4a87-3f27-4a51-b061-6111c3346d60
 # ╟─3207839f-48a9-49b6-9861-e5e74bc593a4
-# ╟─5d5ac33c-f738-4f9e-bcd2-efc43b638109
+# ╠═5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═ec21bd68-27f5-4595-9f2c-ed99b06f503e

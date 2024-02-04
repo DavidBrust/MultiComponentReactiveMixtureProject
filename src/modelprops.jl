@@ -154,7 +154,7 @@ Flux function definition for use with VoronoiFVM.jl for the Darcy-Maxwell-Stefan
     (DMS) model for Multi-component gas transport in porous media.
 """
 function DMS_flux(f,u,edge,data)
-	(;m,ip,iT,dt_hf_enth,solve_T_equation,Tamb,Fluids)=data
+	(;m,ip,iH,iT,dt_hf_enth,solve_T_equation,Tamb,Fluids)=data
 	ng=ngas(data)
 		
 	F = MVector{ng-1,eltype(u)}(undef)
@@ -165,7 +165,6 @@ function DMS_flux(f,u,edge,data)
 
 	pm = 0.5*(u[ip,1]+u[ip,2])
     Tm = solve_T_equation ? 0.5*(u[iT,1]+u[iT,2]) : one(eltype(u))*Tamb
-	#Tm = 0.5*(u[iT,1]+u[iT,2])
 	c = pm/(ph"R"*Tm)
 	
 	δp = u[ip,1]-u[ip,2]
@@ -204,10 +203,9 @@ function DMS_flux(f,u,edge,data)
     if solve_T_equation
 		enthalpy_flux += (f[ip] - mass_flux) * enthalpy_gas(Fluids[ng], Tm) / m[ng]# species n
         lambda_bed=kbed(data,lambdamix)*lambdamix
-        # @inline hf_conv = f[ip] * enthalpy_mix(data, Tm, X) / mmix * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth) 
-        # Bp,Bm = fbernoulli_pm(hf_conv/lambda_bed/Tm)
-        # f[iT] = lambda_bed*(Bm*u[iT,1]-Bp*u[iT,2])
-		f[iT] = lambda_bed*(u[iT,1]-u[iT,2]) + enthalpy_flux * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth) 
+        
+		# f[iT] = lambda_bed*(u[iT,1]-u[iT,2]) + enthalpy_flux * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth)
+		f[iH] = lambda_bed*(u[iT,1]-u[iT,2]) + enthalpy_flux * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth)
     end
 end
 
@@ -216,7 +214,7 @@ Reaction function definition for use with VoronoiFVM.jl for the Darcy-Maxwell-St
     (DMS) model for Multi-component gas transport in porous media.
 """
 function DMS_reaction(f,u,node,data)
-	(;m,ip,iT,is_reactive,catalyst_regions)=data
+	(;m,ip,iT,iH,is_reactive,catalyst_regions,solve_T_equation,Fluids,poros,rhos,cs)=data
 	ng=ngas(data)
 
 	if node.region in catalyst_regions && is_reactive # catalyst layer
@@ -230,7 +228,6 @@ function DMS_reaction(f,u,node,data)
 
         T = solve_T_equation ? u[iT] : one(eltype(u))*Treac
         RR = @inline -lcat*ri(data,T,pi)
-        #RR = @inline -lcat*ri(data,u[iT],pi)
 		
 		for i=1:ng
 			f[i] = zero(eltype(u))
@@ -239,6 +236,17 @@ function DMS_reaction(f,u,node,data)
 			end			
 		end
 	end
+
+	hbar = zero(eltype(u))	
+	for i=1:ng
+		hbar += u[i] * enthalpy_gas(Fluids[i], u[iT])
+	end
+	c = u[ip]/(ph"R"*u[iT])
+	hbar *= poros * c
+	hbar += (u[iT] - 298.15) * rhos*cs*(1-poros) 
+	
+	f[iT] = u[iH] - hbar
+
 
 	for i=1:ng
 		f[ng] += u[i]
@@ -251,11 +259,11 @@ Storage function definition for use with VoronoiFVM.jl for the Darcy-Maxwell-Ste
     (DMS) model for Multi-component gas transport in porous media.
 """
 function DMS_storage(f,u,node,data)
-	(;ip,iT,Tamb,m,poros,rhos,cs,solve_T_equation)=data
+	(;ip,iT,iH,Tamb,m,poros,rhos,cs,solve_T_equation,Fluids)=data
 	ng=ngas(data)
 
     T = solve_T_equation ? u[iT] : one(eltype(u))*Tamb
-	#c = u[ip]/(ph"R"*u[iT])
+
     c = u[ip]/(ph"R"*T)
     mmix = zero(eltype(u))
 	for i=1:ng
@@ -266,12 +274,7 @@ function DMS_storage(f,u,node,data)
 	# total pressure
 	f[ip] = mmix*c*poros
 
-    if solve_T_equation
-        X=MVector{ng,eltype(u)}(undef)
-        @inline MoleFrac!(X,u,data)
-        @inline cpmix = heatcap_mix(data, T, X)
-        f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros)
-    end
+	f[iH] = u[iH]
 	
 end
 
@@ -280,7 +283,7 @@ Outflow boundary function definition for use with VoronoiFVM.jl for the Darcy-Ma
     (DMS) model for Multi-component gas transport in porous media.
 """
 function DMS_boutflow(f,u,edge,data)
-	(;iT,ip,m,dt_hf_enth,Tamb,solve_T_equation,Fluids)=data
+	(;iT,iH,ip,m,dt_hf_enth,Tamb,solve_T_equation,Fluids)=data
 	ng=ngas(data)
 
 	k=outflownode(edge)
@@ -303,7 +306,8 @@ function DMS_boutflow(f,u,edge,data)
 
     if solve_T_equation
         @inline r_hf_enth = v *cout * enthalpy_mix(data, Tout, X) * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth) # enthalpy heat flux
-        f[iT] = r_hf_enth
+        # f[iT] = r_hf_enth
+		f[iH] = r_hf_enth
     end
 end
 
@@ -560,8 +564,10 @@ const itp12 = flux_interpol(70.0*ufac"kW/m^2")
 	#ip::Int64 = NG+1
     ip::Int64 = ng+1
 	iT::Int64 = ip+1
+	iH::Int64 = iT+1
+	# iT2::Int64 = iH+1
 	# inlcude window & plate temperatures as boundary species
-	iTw::Int64=iT+1 # index of window Temperature (upper chamber)
+	iTw::Int64=iH+1 # index of window Temperature (upper chamber)
 	iTp::Int64=iTw+1 # index of plate Temperature (lower chamber)
 	
 	ibf::Int64=iTp+1 # index of boundary flux species, workaround to include spatially varying boundary flux
@@ -643,11 +649,11 @@ const itp12 = flux_interpol(70.0*ufac"kW/m^2")
 	lambda_window::Float64=1.38*ufac"W/(m*K)"
 	lambda_Al::Float64=235.0*ufac"W/(m*K)"
 
-    function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,flux_inner,flux_outer,nom_flux,FluxIntp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+    function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iH,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,flux_inner,flux_outer,nom_flux,FluxIntp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
         KP = FixedBed.KinData{nreac(kinpar)}
 		FluxIntp = flux_interpol(nom_flux)
 		flux_inner, flux_outer = flux_inner_outer(nom_flux)
-        new{ng,KP}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,flux_inner,flux_outer,nom_flux,FluxIntp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+        new{ng,KP}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iH,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,flux_inner,flux_outer,nom_flux,FluxIntp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
 
     end
 end
@@ -812,7 +818,7 @@ Function defining the top/inlet boundary condition in the photo thermal catalyti
     reactor (PCR) model.
 """
 function PCR_top(f,u,bnode,data)
-	(;ip,iT,iTw,Tamb,T_gas_in,mfluxin,X0,W0,mmix0,uc_window,uc_cat,uc_h,Nu,k_nat_conv,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,solve_T_equation)=data
+	(;ip,iT,iH,iTw,Tamb,T_gas_in,mfluxin,X0,W0,mmix0,uc_window,uc_cat,uc_h,Nu,k_nat_conv,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,solve_T_equation)=data
 	ng=ngas(data)
 
 	# irrad. exchange between quartz window (1), cat surface (2), masked surface (3)
@@ -841,7 +847,8 @@ function PCR_top(f,u,bnode,data)
 		if bnode.region in inlet_boundaries
 			# heatflux from enthalpy inflow
             @inline r_hf_enth = mfluxin/mmix0 * enthalpy_mix(data, T_gas_in, X0) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
-			f[iT] = -r_hf_enth
+			# f[iT] = -r_hf_enth
+			f[iH] = -r_hf_enth
 			
 			if bnode.region in irradiated_boundaries
 				@inline G1_vis, G1_IR = radiosity_window(f,u,bnode,data)
@@ -855,7 +862,8 @@ function PCR_top(f,u,bnode,data)
 				kconv=Nu*λf/dh*ufac"W/(m^2*K)"
 				hflux_conv = kconv*(u[iT]-Tm) # convection heatflux through top chamber
 				
-				f[iT] += (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+				# f[iT] += (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+				f[iH] += (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
                 # f[iT] += zero(eltype(u))
 				# f[iT] += (-hflux_irrad) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
 				
@@ -879,7 +887,7 @@ Function defining the side boundary condition in the photo thermal catalytic
     reactor (PCR) model.
 """
 function PCR_side(f,u,bnode,data)
-	(;iT,k_nat_conv,delta_gap,Tamb,side_boundaries,solve_T_equation)=data
+	(;iT,iH,k_nat_conv,delta_gap,Tamb,side_boundaries,solve_T_equation)=data
 	ng=ngas(data)
 
 	if solve_T_equation && bnode.region in side_boundaries
@@ -888,7 +896,8 @@ function PCR_side(f,u,bnode,data)
         @inline _,λf=dynvisc_thermcond_mix(data, u[iT], X)
 
         # w/o shell height
-        f[iT] = (u[iT]-Tamb)/(delta_gap/λf+1/k_nat_conv)
+        # f[iT] = (u[iT]-Tamb)/(delta_gap/λf+1/k_nat_conv)
+		f[iH] = (u[iT]-Tamb)/(delta_gap/λf+1/k_nat_conv)
         # f[iT] = zero(eltype(u))		
     end
 end
@@ -898,7 +907,7 @@ Function defining the bottom/outlet boundary condition in the photo thermal cata
     reactor (PCR) model.
 """
 function PCR_bottom(f,u,bnode,data)
-	(;iT,iTp,k_nat_conv,Tamb,lc_h,Nu,dt_hf_irrad,lc_frit,lc_plate,solve_T_equation,outlet_boundaries) = data
+	(;iT,iH,iTp,k_nat_conv,Tamb,lc_h,Nu,dt_hf_irrad,lc_frit,lc_plate,solve_T_equation,outlet_boundaries) = data
 	ng=ngas(data)
 	
 	if solve_T_equation && bnode.region in outlet_boundaries
@@ -928,7 +937,8 @@ function PCR_bottom(f,u,bnode,data)
 
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
 		
-        f[iT] = (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+        # f[iT] = (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+		f[iH] = (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
 		# f[iT] = (-hflux_irrad) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
 		# f[iT] = zero(eltype(u))
 

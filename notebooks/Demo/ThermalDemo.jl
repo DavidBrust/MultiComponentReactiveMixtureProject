@@ -151,7 +151,7 @@ Also the thermal energy equation is solved, taking into account convective-diffu
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
 function ThermalDemo(dim; times=nothing, mfluxin = nothing, verbose="aen")
 	if dim == 2
-		times = isnothing(times) ? [0,25.0] : times
+		times = isnothing(times) ? [0,15.0] : times
 	else
 		times = isnothing(times) ? [0,15.0] : times
 	end
@@ -159,13 +159,15 @@ function ThermalDemo(dim; times=nothing, mfluxin = nothing, verbose="aen")
 	grid, inb,irrb,outb,sb,catr =  grid_boundaries_regions(dim)
 	
 	data=ReactorData(
-		is_reactive = false,
+		#is_reactive = false,
+		#constant_properties = true,
 		#G_lamp = 70.0*ufac"kW/m^2",
-		G_lamp = 0.0*ufac"kW/m^2",
-		dt_hf_irrad = (30.0,31.0),
-		T_gas_in = 273.15 +300,
-		X0 = [0,0,0,0,0,1.0], # N2
-		k_nat_conv = 0.0,
+		#G_lamp = 0.0*ufac"kW/m^2",
+		dt_hf_irrad = (5.0,10.0),
+		#T_gas_in = 273.15 +300,
+		#X0 = [0,0,0,0,0,1.0], # N2
+		Nu = 0.0,
+		#k_nat_conv = 0.0,
 		inlet_boundaries=inb,
 		irradiated_boundaries=irrb,
 		outlet_boundaries=outb,
@@ -173,7 +175,8 @@ function ThermalDemo(dim; times=nothing, mfluxin = nothing, verbose="aen")
 		catalyst_regions=catr,
 		rhos=5.0*ufac"kg/m^3" # set solid density to low value to reduce thermal inertia of system
 		)
-	(;p,ip,Tamb,iT,iTw,iTp,ng,gni,X0)=data
+	(;p,ip,Tamb,iT,iH,iTw,iTp,ng,gni,X0,Fluids)=data
+	#(;p,ip,Tamb,iT,iTw,iTp,ng,gni,X0,Fluids)=data
 	ng=ngas(data)
 
 	sys=VoronoiFVM.System( 	grid;
@@ -189,13 +192,21 @@ function ThermalDemo(dim; times=nothing, mfluxin = nothing, verbose="aen")
 							assembly=:edgewise
 							)
 
-	enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
+	enable_species!(sys; species=collect(1:(ng+3))) # gas phase xi, pt, T, H
+	#enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
 	enable_boundary_species!(sys, iTw, irrb) # window temperature as boundary species in upper chamber
 	enable_boundary_species!(sys, iTp, outb) # plate temperature as boundary species in lower chamber
 	inival=unknowns(sys)
 
 	inival[ip,:].=p
 	inival[[iT,iTw,iTp],:] .= Tamb
+	
+	hbar = 0.0
+	for i=1:ng
+		hbar += X0[i] * enthalpy_gas(Fluids[i], Tamb)
+	end
+	inival[iH,:].=hbar
+	#inival[iT2,:].=Tamb
 		
 	for i=1:ng
 		inival[i,:] .= X0[i]
@@ -230,7 +241,7 @@ function ThermalDemo(dim; times=nothing, mfluxin = nothing, verbose="aen")
    		)
 	end
 		control.handle_exceptions=true
-		control.Δu_opt=10_000.0
+		control.Δu_opt=1_000_000.0
 		
 	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="nae")
 	
@@ -305,7 +316,7 @@ FixedBed.DMS_print_summary_ext(sol,sys,data)
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	(;m,ip,iT,gn,gni,poros,mflowin,nflowin,W0,T_gas_in,Tamb,X0,outlet_boundaries,inlet_boundaries,dt_mf,dt_hf_enth)=data
+	(;m,ip,iT,iH,gn,gni,poros,mflowin,nflowin,W0,T_gas_in,Tamb,X0,outlet_boundaries,inlet_boundaries,dt_mf,dt_hf_enth)=data
 	ng=ngas(data)
 	vis=GridVisualizer(resolution=(600,300), xlabel="Time / s", ylabel="Molar flow / Total Moles")
 	
@@ -314,13 +325,12 @@ let
 	tf_in=testfunction(tfact,outlet_boundaries,inlet_boundaries)
 		
 	inflow_rate=Float64[]
-	inflow_rate_manual=Float64[]
 	outflow_rate=Float64[]
 	reaction_rate=Float64[]
 	stored_amount=Float64[]
 
 	#k=gni[:N2]
-	k=iT
+	k=iH
 	for i=2:length(solt)
 		m_ = 1
 		W_ = 1
@@ -329,12 +339,9 @@ let
 			m_ = m[k]
 			W_ = W0[k]
 			ifr=mflowin*W_*ramp(solt.t[i]; du=(0.1,1), dt=dt_mf)			
-		elseif k == iT
-			ifr=integrate(sys,tf_in,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])[iT]
-			
-			#ifr_manual=nflowin*(enthalpy_mix(data, T_gas_in, X0)-enthalpy_mix(data, Tamb, X0)) * ramp(solt.t[i]; du=(0.0,1), dt=dt_hf_enth)
-			ifr_manual=nflowin*enthalpy_mix(data, T_gas_in, X0) * ramp(solt.t[i]; du=(0.0,1), dt=dt_hf_enth)
-			push!(inflow_rate_manual,ifr_manual)		
+		elseif k == iH
+			ifr=integrate(sys,tf_in,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])[k]
+				
 		end
 		ofr=integrate(sys,tf_out,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])
 		push!(inflow_rate,ifr/m_)
@@ -360,14 +367,14 @@ let
 		name = gn[k]
 	elseif k == ip
 		name = "Total Mass"
-	elseif k == iT
+	elseif k == iH
 		name = "Enthalpy Flow"
 	end
 	
 	@printf "%s In: %2.2e \t Out: %2.2e \t React: %2.2e \nIn - Out: %2.4e \nStorage tEnd -t0: %2.4e" name I_in I_out I_reac I_in+I_out-I_reac stored_amount[end]-stored_amount[1]
 
 	scalarplot!(vis, solt.t[2:end], inflow_rate, label="Inflow rate")
-	scalarplot!(vis, solt.t[2:end], inflow_rate_manual, label="Inflow MANUAL", color=:pink, clear=false)
+
 	scalarplot!(vis, solt.t[2:end], outflow_rate, label="Outflow rate", color=:red, clear=false)	
 	scalarplot!(vis, solt.t[2:end], -reaction_rate, label="Reaction rate",  color=:blue, clear=false)
 	#scalarplot!(vis, solt.t[2:end], stored_amount, label="Stored amount", color=:green, clear=false, )
