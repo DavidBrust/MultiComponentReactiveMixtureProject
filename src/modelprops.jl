@@ -776,7 +776,7 @@ function radiosity_window(f,u,bnode,data)
     rho1_IR=uc_window.rho_IR
     eps1=uc_window.eps
 	
-	G_lamp = u[ibf]
+	# G_lamp = u[ibf]
 	# G_lamp = zero(eltype(u))
 	# if dim == 2
 	# 	G_lamp += nom_flux

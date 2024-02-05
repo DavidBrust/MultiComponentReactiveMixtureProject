@@ -156,17 +156,8 @@ Its value takes on a small but not vanishing value which probably results as a f
 A grid refinement study is performed and the maximum value of $x_3$ is plotted over the number of grid points in the 1D grid.
 """
 
-# ╔═╡ bb2ef3c0-96fc-4a90-a714-a0cfa08ac178
-# ╠═╡ skip_as_script = true
-#=╠═╡
-begin
-	refmax = 6
-	ae = []
-	an = []
-	asol = []
-	agrid = []
-	asys = []
-
+# ╔═╡ a5e9ffdb-083a-4192-bd8e-6f0ccb79598e
+function make_data()
 	MinKin = KinData{}(;
 		ng = 3,
 		gnames = [:A, :B, :C],
@@ -188,7 +179,7 @@ begin
 		ΔHj = Dict( [:R1] .=> 0.0 ),
 	)
 	
-	data_res = ReactorData(;
+	data = ReactorData(;
 		inlet_boundaries=[Γ_left],
 		outlet_boundaries=[Γ_right],
 		irradiated_boundaries=[],
@@ -204,6 +195,21 @@ begin
 		X0 = [0.2, 0.8, 0.0],
 		mfluxin = 0.01*ufac"kg/(m^2*s)"
 	)
+	return data
+end
+
+# ╔═╡ bb2ef3c0-96fc-4a90-a714-a0cfa08ac178
+# ╠═╡ skip_as_script = true
+#=╠═╡
+begin
+	refmax = 6
+	ae = []
+	an = []
+	asol = []
+	agrid = []
+	asys = []
+
+	data_res = make_data()
 
 	sol,grid,sys = runSimRef(data_res,0)
 	for nref=0:refmax
@@ -266,15 +272,23 @@ md"""
 # ╔═╡ c5190db5-ed3d-4084-ba16-496cc825fa9d
 # ╠═╡ skip_as_script = true
 #=╠═╡
-p=Plots.plot(xlabel="Number of gridpoints (1D)",ylabel="Abs. error")
-Plots.plot!(p,an,ae, xaxis=:log, yaxis=:log,m=:circle,label="max(abs(x$(data_res.ng))",)
-Plots.plot!(p,an,1.0e-4 ./an, xaxis=:log, yaxis=:log, label="1/nx")
+let
+	p=Plots.plot(xlabel="Number of gridpoints (1D)",ylabel="Abs. error")
+	Plots.plot!(p,an,ae, xaxis=:log, yaxis=:log,m=:circle,label="max(abs(x$(data_res.ng))",)
+	Plots.plot!(p,an,1.0e-4 ./an, xaxis=:log, yaxis=:log, label="1/nx")
+end
   ╠═╡ =#
 
-# ╔═╡ 868a72a1-48f7-4727-baaa-645968298ef5
-#=╠═╡
-@test ae[end] ≈ 1.715081073444846e-7
-  ╠═╡ =#
+# ╔═╡ e3fdf239-d3f9-4244-9e78-f917584bda55
+function err(nref)
+	sol,grid,sys,e,n = calce(make_data(),nref)
+	return e
+end
+
+# ╔═╡ 6f02c9cf-7670-4224-9239-b825d8331174
+function runtests()                   
+    @test isapprox(err(6), 1.715081073444846e-7)	
+end;
 
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
@@ -289,8 +303,10 @@ Plots.plot!(p,an,1.0e-4 ./an, xaxis=:log, yaxis=:log, label="1/nx")
 # ╠═3f56ffca-8ab8-4c32-b2b1-f2ec28ccf8b7
 # ╟─184f70a9-f049-4017-ad28-027ae606d0ca
 # ╠═bb2ef3c0-96fc-4a90-a714-a0cfa08ac178
+# ╠═a5e9ffdb-083a-4192-bd8e-6f0ccb79598e
 # ╠═abedcbf9-c99c-4969-b97a-3bc0295061bb
 # ╠═3ffbe1ba-d5aa-4bf0-a5c4-92cec7e0c199
 # ╟─7dd363bf-d6e0-4dfb-b29f-85aa1fb62429
 # ╠═c5190db5-ed3d-4084-ba16-496cc825fa9d
-# ╠═868a72a1-48f7-4727-baaa-645968298ef5
+# ╠═e3fdf239-d3f9-4244-9e78-f917584bda55
+# ╠═6f02c9cf-7670-4224-9239-b825d8331174

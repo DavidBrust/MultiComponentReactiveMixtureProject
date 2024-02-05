@@ -161,10 +161,10 @@ function ThermalDemo(dim; times=nothing, mfluxin = nothing, verbose="aen")
 	data=ReactorData(
 		is_reactive = false,
 		#G_lamp = 70.0*ufac"kW/m^2",
-		G_lamp = 0.0*ufac"kW/m^2",
+		nom_flux = 70.0*ufac"kW/m^2",
 		dt_hf_irrad = (30.0,31.0),
-		T_gas_in = 273.15 +300,
-		X0 = [0,0,0,0,0,1.0], # N2
+		T_gas_in = 273.15 + 300,
+		X0 = [0,0.5,0,0,0.5,0.0], # H2 / CO2 = 1/1
 		k_nat_conv = 0.0,
 		inlet_boundaries=inb,
 		irradiated_boundaries=irrb,
@@ -230,7 +230,7 @@ function ThermalDemo(dim; times=nothing, mfluxin = nothing, verbose="aen")
    		)
 	end
 		control.handle_exceptions=true
-		control.Δu_opt=10_000.0
+		control.Δu_opt=1000
 		
 	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="nae")
 	
@@ -260,47 +260,6 @@ The mass flow boundary condition into the reactor domain is "ramped up" starting
 """
   ╠═╡ =#
 
-# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-#=╠═╡
-@bind t Slider(solt.t,show_value=true,default=solt.t[end])
-  ╠═╡ =#
-
-# ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
-# ╠═╡ skip_as_script = true
-#=╠═╡
-sol = solt(t);
-  ╠═╡ =#
-
-# ╔═╡ d6a073e4-f4f6-4589-918f-20b61a780dad
-#=╠═╡
-let
-	(;inlet_boundaries,outlet_boundaries)=data
-	tfact=TestFunctionFactory(sys)
-	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
-	#tf_out=testfunction(tfact,[1,3,4,5,6,7],[2])
-	out=integrate(sys,tf_out,sol)
-	#scalarplot(grid,tf_out)
-end
-  ╠═╡ =#
-
-# ╔═╡ 0e86c197-32ae-4cff-8ab2-fe7847e5514a
-#=╠═╡
-let
-	HeatFluxes_EB_I(t,solt,grid,sys,data)
-end
-  ╠═╡ =#
-
-# ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
-#=╠═╡
-FixedBed.DMS_print_summary(sol,grid,sys,data)
-  ╠═╡ =#
-
-# ╔═╡ 3207839f-48a9-49b6-9861-e5e74bc593a4
-# ╠═╡ skip_as_script = true
-#=╠═╡
-FixedBed.DMS_print_summary_ext(sol,sys,data)
-  ╠═╡ =#
-
 # ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╠═╡ skip_as_script = true
 #=╠═╡
@@ -314,7 +273,6 @@ let
 	tf_in=testfunction(tfact,outlet_boundaries,inlet_boundaries)
 		
 	inflow_rate=Float64[]
-	inflow_rate_manual=Float64[]
 	outflow_rate=Float64[]
 	reaction_rate=Float64[]
 	stored_amount=Float64[]
@@ -332,9 +290,7 @@ let
 		elseif k == iT
 			ifr=integrate(sys,tf_in,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])[iT]
 			
-			#ifr_manual=nflowin*(enthalpy_mix(data, T_gas_in, X0)-enthalpy_mix(data, Tamb, X0)) * ramp(solt.t[i]; du=(0.0,1), dt=dt_hf_enth)
-			ifr_manual=nflowin*enthalpy_mix(data, T_gas_in, X0) * ramp(solt.t[i]; du=(0.0,1), dt=dt_hf_enth)
-			push!(inflow_rate_manual,ifr_manual)		
+	
 		end
 		ofr=integrate(sys,tf_out,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])
 		push!(inflow_rate,ifr/m_)
@@ -367,7 +323,7 @@ let
 	@printf "%s In: %2.2e \t Out: %2.2e \t React: %2.2e \nIn - Out: %2.4e \nStorage tEnd -t0: %2.4e" name I_in I_out I_reac I_in+I_out-I_reac stored_amount[end]-stored_amount[1]
 
 	scalarplot!(vis, solt.t[2:end], inflow_rate, label="Inflow rate")
-	scalarplot!(vis, solt.t[2:end], inflow_rate_manual, label="Inflow MANUAL", color=:pink, clear=false)
+
 	scalarplot!(vis, solt.t[2:end], outflow_rate, label="Outflow rate", color=:red, clear=false)	
 	scalarplot!(vis, solt.t[2:end], -reaction_rate, label="Reaction rate",  color=:blue, clear=false)
 	#scalarplot!(vis, solt.t[2:end], stored_amount, label="Stored amount", color=:green, clear=false, )
@@ -384,6 +340,28 @@ md"""
 3) Bottom plate
 """
 
+# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
+#=╠═╡
+@bind t Slider(solt.t,show_value=true,default=solt.t[end])
+  ╠═╡ =#
+
+# ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
+# ╠═╡ skip_as_script = true
+#=╠═╡
+sol = solt(t);
+  ╠═╡ =#
+
+# ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
+#=╠═╡
+FixedBed.DMS_print_summary(sol,grid,sys,data)
+  ╠═╡ =#
+
+# ╔═╡ 3207839f-48a9-49b6-9861-e5e74bc593a4
+# ╠═╡ skip_as_script = true
+#=╠═╡
+FixedBed.DMS_print_summary_ext(sol,sys,data)
+  ╠═╡ =#
+
 # ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
 # ╠═╡ show_logs = false
 # ╠═╡ skip_as_script = true
@@ -393,6 +371,13 @@ let
 	#vis=GridVisualizer(layout=(3,1), resolution=(680,900))
 	vis=GridVisualizer(layout=(1,1), resolution=(680,300))
 	scalarplot!(vis[1,1],grid, sol[iT,:] .- 273.15, zoom = 2.8, aspect=4.0, show=true)
+end
+  ╠═╡ =#
+
+# ╔═╡ 0e86c197-32ae-4cff-8ab2-fe7847e5514a
+#=╠═╡
+let
+	HeatFluxes_EB_I(t,solt,grid,sys,data)
 end
   ╠═╡ =#
 
@@ -537,7 +522,6 @@ end
 # ╟─d3278ac7-db94-4119-8efd-4dd18107e248
 # ╟─b2791860-ae0f-412d-9082-bb2e27f990bc
 # ╟─a995f83c-6ff7-4b95-a798-ea636ccb1d88
-# ╠═d6a073e4-f4f6-4589-918f-20b61a780dad
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═bc811695-8394-4c35-8ad6-25856fa29183
 # ╟─a078e1e1-c9cd-4d34-86d9-df4a052b6b96
@@ -547,13 +531,13 @@ end
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
-# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═0e86c197-32ae-4cff-8ab2-fe7847e5514a
 # ╠═994d4a87-3f27-4a51-b061-6111c3346d60
 # ╠═3207839f-48a9-49b6-9861-e5e74bc593a4
-# ╟─5d5ac33c-f738-4f9e-bcd2-efc43b638109
+# ╠═5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
 # ╟─99b59260-7651-45d0-b364-4f86db9927f8
+# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╟─58c0b05d-bb0e-4a3f-af05-71782040c8b9
 # ╟─8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
