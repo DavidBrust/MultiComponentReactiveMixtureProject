@@ -110,8 +110,21 @@ function flux_convection_bottom(f,u,bnode,data)
    end
 end
 
+function flux_side(f,u,bnode,data)
+	(;iT,k_nat_conv,delta_gap,Tamb,side_boundaries)=data
+	ng=ngas(data)
+
+	if bnode.region in side_boundaries
+	    X=MVector{ng,eltype(u)}(undef)
+        @inline MoleFrac!(X,u,data)
+        @inline _,λf=dynvisc_thermcond_mix(data, u[iT], X)
+
+        f[iT] = (u[iT]-Tamb)/(delta_gap/λf+1/k_nat_conv) 
+    end
+end
+
 function TotalFlows(t,solt,grid,sys,data)
-    (;iT,Fluids,inlet_boundaries,outlet_boundaries,mfluxin,mmix0,nflowin, T_gas_in,X0)=data
+    (;iT,Fluids,inlet_boundaries,outlet_boundaries)=data
 
     tfact=TestFunctionFactory(sys)	
 	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
@@ -120,17 +133,22 @@ function TotalFlows(t,solt,grid,sys,data)
     inflow_rate=Float64[]
 	outflow_rate=Float64[]
     
-    for i=2:length(solt)
-		ifr=integrate(sys,tf_in,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])[iT]
-		ofr=integrate(sys,tf_out,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])[iT]
-		push!(inflow_rate,ifr)
-		push!(outflow_rate,ofr)        
-   	end
+    # for i=2:length(solt)
+	# 	ifr=integrate(sys,tf_in,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])[iT]
+	# 	ofr=integrate(sys,tf_out,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])[iT]
+	# 	push!(inflow_rate,ifr)
+	# 	push!(outflow_rate,ofr)        
+   	# end
 
-    ind = findfirst(x->x.== t, solt.t) -1 
-    inflow_rate[ind], outflow_rate[ind]
+    # ind = findfirst(x->x.== t, solt.t) -1
+    ind = findfirst(x->x.== t, solt.t)
 
 
+    ifr=integrate(sys,tf_in,solt[ind],solt[ind-1],solt.t[ind]-solt.t[ind-1])[iT]
+    ofr=integrate(sys,tf_out,solt[ind],solt[ind-1],solt.t[ind]-solt.t[ind-1])[iT]
+   
+    ifr, ofr
+    # inflow_rate[ind], outflow_rate[ind]
 end
 
 
@@ -138,8 +156,8 @@ function HeatFluxes_EB_I(t,solt,grid,sys,data)
 
     (;iT,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,dt_hf_irrad)=data
 
-    inf_t, outf_t = TotalFlows(t,solt,grid,sys,data)
-    dE_dt = inf_t + outf_t
+    inflow, outflow = TotalFlows(t,solt,grid,sys,data)
+    dE_dt = inflow + outflow
     # tend = solt.t[end]
     # sol = solt(tend)
     sol = solt(t)
@@ -166,15 +184,19 @@ function HeatFluxes_EB_I(t,solt,grid,sys,data)
     Qconv_34=integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,outlet_boundaries]
     Qconv_34 = calc_hf ? sum(Qconv_34) : 0.0
 
-    Qsides=integrate(sys,FixedBed.PCR_side,sol; boundary=true)[iT,side_boundaries]
-    Qsides = calc_hf ? sum(Qsides) : 0.0
+    # Qsides=integrate(sys,FixedBed.PCR_side,sol; boundary=true)[iT,side_boundaries]
+    Qsides=integrate(sys,flux_side,sol; boundary=true)[iT,side_boundaries]
+    Qsides = sum(Qsides)
 
-    dH_dot = dE_dt - (QG_01 - QG_10) - (QG_43 - QG_34) + Qconv_10 + Qconv_34 + Qsides
+    H_reaction = sum(integrate(sys,sys.physics.reaction,sol), dims=2)[iT]
+
+    H_thermal = dE_dt - (QG_01 - QG_10) - (QG_43 - QG_34) + Qconv_10 + Qconv_34 + Qsides
 
     (
         QG_01=QG_01,
         QG_10=-QG_10,
-        dH_dot=dH_dot,
+        H_thermal=H_thermal,
+        H_reaction=-H_reaction,
         Qconv_10=-Qconv_10,
         Qconv_34=-Qconv_34,
         QG_34=-QG_34,

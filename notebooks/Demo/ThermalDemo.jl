@@ -47,6 +47,8 @@ Demonstration notebook for the photo thermal catalytic reactor (PCR) model. Solv
 
 Select problem dimension: $(@bind dim Select([2, 3], default=2))
 
+Select grid refinement level: $(@bind nref Select([0,1,2,3], default=0))
+
 Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=true))
 """
 
@@ -59,7 +61,7 @@ end
   ╠═╡ =#
 
 # ╔═╡ bc811695-8394-4c35-8ad6-25856fa29183
-function grid_boundaries_regions(dim)
+function grid_boundaries_regions(dim;nref=0)
 	Ω_catalyst = 2
 	W=16
 	H=0.5
@@ -72,12 +74,11 @@ function grid_boundaries_regions(dim)
 		Γ_top_irradiated = 6
 
 		W=W/2 # axisymmetry, half domain is sufficient
-		R1=(0:1:(W-1))*ufac"cm"
-		R2=((W-1):(9/10):W-1/10)*ufac"cm"
-		R3=((W-1/10):(1/10):W).*ufac"cm"
-		R=glue(R1,R2)
-		R=glue(R,R3)
-		Z=(0:H/10:H)*ufac"cm"
+		nr=W*2^(nref)
+		R=(0:(W/nr):W)*ufac"cm"
+		#R=(0:1:W)*ufac"cm"
+		nz = 10*2^(nref)
+		Z=(0:(H/nz):H)*ufac"cm"
 		grid=simplexgrid(R,Z)
 		circular_symmetric!(grid)
 	
@@ -123,7 +124,7 @@ end;
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	grid, inb,irrb,outb,sb,catr =  grid_boundaries_regions(dim)
+	grid, inb,irrb,outb,sb,catr =  grid_boundaries_regions(dim, nref=nref)
 	if dim == 2
 		gridplot(grid, resolution=(660,300), aspect=4.0, zoom=2.8)
 	else
@@ -149,23 +150,26 @@ Also the thermal energy equation is solved, taking into account convective-diffu
 @doc FixedBed.DMS_Info_thermal()
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
-function ThermalDemo(dim; times=nothing, mfluxin = nothing, verbose="aen")
+function ThermalDemo(dim; nref=nref, times=nothing, mfluxin = nothing, verbose="aen")
 	if dim == 2
-		times = isnothing(times) ? [0,25.0] : times
+		times = isnothing(times) ? [0,50.0] : times
 	else
-		times = isnothing(times) ? [0,15.0] : times
+		times = isnothing(times) ? [0,5.0] : times
 	end
 
-	grid, inb,irrb,outb,sb,catr =  grid_boundaries_regions(dim)
-	
+	grid, inb,irrb,outb,sb,catr =  grid_boundaries_regions(dim,nref=nref)
+
 	data=ReactorData(
-		is_reactive = false,
-		#G_lamp = 70.0*ufac"kW/m^2",
-		nom_flux = 70.0*ufac"kW/m^2",
-		dt_hf_irrad = (30.0,31.0),
-		T_gas_in = 273.15 + 300,
+		dim=dim,
+		nflowin = 7.4*ufac"mol/hr",
+		nom_flux = 100.0*ufac"kW/m^2",		
+		#nom_flux = 0.0*ufac"kW/m^2",
+		dt_hf_irrad = (2.0, 10.0),
+		dt_hf_enth = (2.0, 3.0),
+		T_gas_in = 273.15 + 25,
+		#T_gas_in = 273.15 + 600,
+		Nu = 0.0,
 		X0 = [0,0.5,0,0,0.5,0.0], # H2 / CO2 = 1/1
-		k_nat_conv = 0.0,
 		inlet_boundaries=inb,
 		irradiated_boundaries=irrb,
 		outlet_boundaries=outb,
@@ -189,6 +193,7 @@ function ThermalDemo(dim; times=nothing, mfluxin = nothing, verbose="aen")
 							assembly=:edgewise
 							)
 
+	#enable_species!(sys; species=collect(1:(ng+1))) # gas phase species xi, ptotal & T
 	enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
 	enable_boundary_species!(sys, iTw, irrb) # window temperature as boundary species in upper chamber
 	enable_boundary_species!(sys, iTp, outb) # plate temperature as boundary species in lower chamber
@@ -220,19 +225,16 @@ function ThermalDemo(dim; times=nothing, mfluxin = nothing, verbose="aen")
 		control = SolverControl(nothing, sys;)
 	else
 		control = SolverControl(;
-        method_linear = KrylovJL_GMRES(
-            gmres_restart = 10,
-            restart = true,
-            itmax = 100,
-        ),
+        method_linear = KrylovJL_GMRES(),
         precon_linear = VoronoiFVM.factorizationstrategy(
 			MKLPardisoLU(), NoBlock(), sys),
    		)
 	end
 		control.handle_exceptions=true
-		control.Δu_opt=1000
+		control.Δt_min=1.0e-6
+		control.Δu_opt=100
 		
-	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="nae")
+	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="nae",log=true)
 	
 	return solt,grid,sys,data
 end
@@ -260,6 +262,11 @@ The mass flow boundary condition into the reactor domain is "ramped up" starting
 """
   ╠═╡ =#
 
+# ╔═╡ 1cc9d6c4-e2d6-4501-ae4d-d7568dee1e8f
+#=╠═╡
+plothistory(solt)
+  ╠═╡ =#
+
 # ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╠═╡ skip_as_script = true
 #=╠═╡
@@ -277,12 +284,11 @@ let
 	reaction_rate=Float64[]
 	stored_amount=Float64[]
 
-	#k=gni[:N2]
+	#k=gni[:CO2]
 	k=iT
 	for i=2:length(solt)
 		m_ = 1
 		W_ = 1
-		#fac = k in 1:ng ? ufac"mol/hr" : ufac"kg/hr"
 		if k in 1:ng
 			m_ = m[k]
 			W_ = W0[k]
@@ -296,7 +302,8 @@ let
 		push!(inflow_rate,ifr/m_)
 		
 		push!(outflow_rate,ofr[k]/m_)		
-		rr = integrate(sys,sys.physics.reaction,solt[i])[k,2]
+		#rr = integrate(sys,sys.physics.reaction,solt[i])[k,2]
+		rr = sum(integrate(sys,sys.physics.reaction,solt[i]), dims=2)[k]
 		amount = sum(integrate(sys,sys.physics.storage,solt[i]), dims=2)[k]
 		push!(reaction_rate, rr/m_)
 		push!(stored_amount, amount/m_)
@@ -362,6 +369,13 @@ FixedBed.DMS_print_summary(sol,grid,sys,data)
 FixedBed.DMS_print_summary_ext(sol,sys,data)
   ╠═╡ =#
 
+# ╔═╡ 0e86c197-32ae-4cff-8ab2-fe7847e5514a
+#=╠═╡
+let
+	HeatFluxes_EB_I(t,solt,grid,sys,data)
+end
+  ╠═╡ =#
+
 # ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
 # ╠═╡ show_logs = false
 # ╠═╡ skip_as_script = true
@@ -371,13 +385,6 @@ let
 	#vis=GridVisualizer(layout=(3,1), resolution=(680,900))
 	vis=GridVisualizer(layout=(1,1), resolution=(680,300))
 	scalarplot!(vis[1,1],grid, sol[iT,:] .- 273.15, zoom = 2.8, aspect=4.0, show=true)
-end
-  ╠═╡ =#
-
-# ╔═╡ 0e86c197-32ae-4cff-8ab2-fe7847e5514a
-#=╠═╡
-let
-	HeatFluxes_EB_I(t,solt,grid,sys,data)
 end
   ╠═╡ =#
 
@@ -401,9 +408,10 @@ let
 		function _2to1(a,b)
 			a[1]=b[2]
 		end
-		_grid,_,_,_,_,_ = grid_boundaries_regions(dim)
-		bfacemask!(_grid, [0.0,0.0].*ufac"cm",[0.0,0.5].*ufac"cm",8)
-		grid1D = subgrid(_grid, [8]; boundary = true, transform = _2to1)
+		_grid,_,_,_,_,_ = grid_boundaries_regions(dim,nref=nref)
+		newreg = num_bfaceregions(grid) + 1
+		bfacemask!(_grid, [0.0,0.0].*ufac"cm",[0.0,0.5].*ufac"cm",newreg)
+		grid1D = subgrid(_grid, [newreg]; boundary = true, transform = _2to1)
 		sol1D=view(sol[iT, :], grid1D)
 		scalarplot!(vis[1,1],grid1D, sol1D .-273.15, label="Temperature along Y-axis", clear=false)
 	
@@ -441,9 +449,10 @@ let
 	(;ip,p,gn,gni) = data
 	ng=ngas(data)
 	if dim == 2
-		vis=GridVisualizer(layout=(3,1), resolution=(680,900))
+		vis=GridVisualizer(layout=(4,1), resolution=(680,900))
 		scalarplot!(vis[1,1], grid, sol[gni[:CO],:], aspect = 4.0,zoom = 2.8) # CO
 		scalarplot!(vis[2,1], grid, sol[gni[:CO2],:], aspect = 4.0,zoom = 2.8) # CO2
+		scalarplot!(vis[3,1], grid, sol[gni[:N2],:], aspect = 4.0,zoom = 2.8) # N2
 
 		cols = distinguishable_colors(ng)
 		# plot species molar fractions along frit thickness (along y axis)
@@ -455,7 +464,7 @@ let
 	    grid1D = subgrid(_grid, [5]; boundary = true, transform = _2to1)
 		for i=1:ng
 			sol1D=view(sol[i, :], grid1D)
-			scalarplot!(vis[3,1],grid1D, sol1D, label=gn[i], color=cols[i],clear=false)
+			scalarplot!(vis[4,1],grid1D, sol1D, label=gn[i], color=cols[i],clear=false)
 		end
 		reveal(vis)
 	
@@ -531,13 +540,14 @@ end
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
-# ╠═0e86c197-32ae-4cff-8ab2-fe7847e5514a
+# ╠═1cc9d6c4-e2d6-4501-ae4d-d7568dee1e8f
 # ╠═994d4a87-3f27-4a51-b061-6111c3346d60
 # ╠═3207839f-48a9-49b6-9861-e5e74bc593a4
-# ╠═5d5ac33c-f738-4f9e-bcd2-efc43b638109
+# ╟─5d5ac33c-f738-4f9e-bcd2-efc43b638109
+# ╠═0e86c197-32ae-4cff-8ab2-fe7847e5514a
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
-# ╟─99b59260-7651-45d0-b364-4f86db9927f8
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
+# ╟─99b59260-7651-45d0-b364-4f86db9927f8
 # ╟─58c0b05d-bb0e-4a3f-af05-71782040c8b9
 # ╟─8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12

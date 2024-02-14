@@ -18,8 +18,10 @@ abstract type AbstractFluidProps end
 Base.@kwdef struct FluidProps
 	name::String="Air"
 	MW::Float64=28.96*ufac"g/mol"
-    # standard enthalpy of formation taken from Aspen Plus V10, for ideal gas at 25 °C and 1 atm pressure (1.01325 bar) 
+    # Standard enthalpy of formation taken from Aspen Plus V10, for ideal gas at 25 °C and 1 atm pressure (1.01325 bar) 
     ΔHform::Float64=0.0*ufac"kJ/mol"
+	# Reference temperature for (25 °C) for calcualtion of species enthalpies
+	Tref::Float64=298.15*ufac"K"
     # Group contributions for the diffusion volumes in the Fuller method from VDI heat atlas 2010, D1 Table 9 (p.150)
     ΔvF::Float64=19.7 
 	HeatCap::PropsCoeffs=PropsCoeffs(
@@ -488,24 +490,19 @@ end
 # set enthalpy at reference state to standard enthalpy of formation
 function enthalpy_gas(Fluid::FluidProps, T)
 	hgas = zero(eltype(T))
-    (;ΔHform)=Fluid
-    Tref = 298.15*ufac"K"
+    (;ΔHform, Tref)=Fluid
+    # Tref = 298.15*ufac"K"
     hgas += ΔHform + 0.5*(heatcap_gas(Fluid, T)+heatcap_gas(Fluid, Tref))*(T-Tref)
 	# hgas += 0.5*(heatcap_gas(Fluid, T)+heatcap_gas(Fluid, Tref))*(T-Tref)
 	return hgas
 	# return 0.5*(heatcap_gas(Fluid, T)+heatcap_gas(Fluid, Tref))*(T-Tref)
 end
 
-# ideal gas mixture enthalpy
-# calculation according to VDI heat atlas 2010 D1.6 Equation (67), p. 140
-# function enthalpy_mix(Fluids::AbstractVector, T, x)
-#     hmix = zero(eltype(x))
-#     ng=length(x)
-#     for i=1:ng
-#         hmix += x[i] * enthalpy_gas(Fluids[i], T)
-#     end
-#     hmix
-# end
+# gas species enthalpy neglecting enthalpy of formation
+function enthalpy_gas_thermal(Fluid::FluidProps, T)
+    (;Tref)=Fluid
+    return 0.5*(heatcap_gas(Fluid, T)+heatcap_gas(Fluid, Tref))*(T-Tref)	
+end
 
 function enthalpy_mix(data, T, x)
     (;Fluids,constant_properties) = data
@@ -513,13 +510,13 @@ function enthalpy_mix(data, T, x)
 	
     if constant_properties
 		# !!! DEBUG !!!
-        # hmix += 10.0*ufac"kJ/mol"
-		@inbounds for i=1:ngas(data)
-            # @inline hmix += x[i] * heatcap_mix(data, T, x) *(T-298.15)
-			@inline hmix += x[i] * (heatcap_gas(Fluids[i], T) *(T-298.15) )
-			# @inline hmix += x[i] * (Fluids[i].ΔHform + heatcap_gas(Fluids[i], T) *(T-298.15) ) # bad convergence
+       	hmix += 10.0*ufac"kJ/mol"
+		# @inbounds for i=1:ngas(data)
+        #     # @inline hmix += x[i] * heatcap_mix(data, T, x) *(T-298.15)
+		# 	@inline hmix += x[i] * (heatcap_gas(Fluids[i], T) *(T-298.15) )
+		# 	# @inline hmix += x[i] * (Fluids[i].ΔHform + heatcap_gas(Fluids[i], T) *(T-298.15) ) # bad convergence
 			
-        end
+        # end
     else
         ng=ngas(data)    
         @inbounds for i=1:ng

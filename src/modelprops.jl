@@ -165,7 +165,6 @@ function DMS_flux(f,u,edge,data)
 
 	pm = 0.5*(u[ip,1]+u[ip,2])
     Tm = solve_T_equation ? 0.5*(u[iT,1]+u[iT,2]) : one(eltype(u))*Tamb
-	#Tm = 0.5*(u[iT,1]+u[iT,2])
 	c = pm/(ph"R"*Tm)
 	
 	δp = u[ip,1]-u[ip,2]
@@ -197,17 +196,30 @@ function DMS_flux(f,u,edge,data)
 		f[i] = -(F[i] + c*X[i]*m[i]*v)
 		if solve_T_equation
 			mass_flux += f[i]
-			enthalpy_flux += f[i] * enthalpy_gas(Fluids[i], Tm) / m[i]
+			# !!! DEBUG !!!
+			# enthalpy_flux += f[i] * enthalpy_gas(Fluids[i], Tm) / m[i]
+			# enthalpy_flux += f[i] * heatcap_gas(Fluids[i], Tm) / m[i] * (Tm - Tref)
+			enthalpy_flux += f[i] * enthalpy_gas_thermal(Fluids[i], Tm) / m[i]
+			# !!! DEBUG !!!
 		end
 	end	
 	
     if solve_T_equation
-		enthalpy_flux += (f[ip] - mass_flux) * enthalpy_gas(Fluids[ng], Tm) / m[ng]# species n
+		# !!! DEBUG !!!
+		# enthalpy_flux += (f[ip] - mass_flux) * enthalpy_gas(Fluids[ng], Tm) / m[ng]# species n
+		# enthalpy_flux += (f[ip] - mass_flux) * heatcap_gas(Fluids[ng], Tm) / m[ng] * (Tm - Tref)# species n
+		enthalpy_flux += (f[ip] - mass_flux) * enthalpy_gas_thermal(Fluids[ng], Tm) / m[ng] # species n
+		# !!! DEBUG !!!
         lambda_bed=kbed(data,lambdamix)*lambdamix
         # @inline hf_conv = f[ip] * enthalpy_mix(data, Tm, X) / mmix * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth) 
         # Bp,Bm = fbernoulli_pm(hf_conv/lambda_bed/Tm)
         # f[iT] = lambda_bed*(Bm*u[iT,1]-Bp*u[iT,2])
+
+		# !!! DEBUG !!!
 		f[iT] = lambda_bed*(u[iT,1]-u[iT,2]) + enthalpy_flux * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth) 
+		# f[iT] = lambda_bed*(u[iT,1]-u[iT,2]) + enthalpy_flux
+		# f[iT] = lambda_bed*(u[iT,1]-u[iT,2])
+		# !!! DEBUG !!!
     end
 end
 
@@ -236,6 +248,7 @@ function DMS_reaction(f,u,node,data)
 			f[i] = zero(eltype(u))
 			for j=1:nreac(kinpar)
 				f[i] += nuij[(j-1)*ng+i] * RR[j] * m[i]
+				f[iT] -= nuij[(j-1)*ng+i] * RR[j] * enthalpy_gas(kinpar.Fluids[i], T)
 			end			
 		end
 	end
@@ -255,7 +268,6 @@ function DMS_storage(f,u,node,data)
 	ng=ngas(data)
 
     T = solve_T_equation ? u[iT] : one(eltype(u))*Tamb
-	#c = u[ip]/(ph"R"*u[iT])
     c = u[ip]/(ph"R"*T)
     mmix = zero(eltype(u))
 	for i=1:ng
@@ -270,7 +282,10 @@ function DMS_storage(f,u,node,data)
         X=MVector{ng,eltype(u)}(undef)
         @inline MoleFrac!(X,u,data)
         @inline cpmix = heatcap_mix(data, T, X)
-        f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros)
+		# !!! DEBUG !!!
+		f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros)
+		# f[iT] = (u[iT]-Tref) * (rhos*cs*(1-poros) + cpmix*c*poros)
+		# !!! DEBUG !!!
     end
 	
 end
@@ -302,8 +317,20 @@ function DMS_boutflow(f,u,edge,data)
 	end
 
     if solve_T_equation
-        @inline r_hf_enth = v *cout * enthalpy_mix(data, Tout, X) * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth) # enthalpy heat flux
-        f[iT] = r_hf_enth
+        # @inline r_hf_enth = v *cout * enthalpy_mix(data, Tout, X) * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth) # enthalpy heat flux
+		# !!! DEBUG !!!
+		
+		hout = zero(eltype(u))
+        @inbounds for i=1:ng
+            hout += X[i] * enthalpy_gas_thermal(Fluids[i], Tout)
+        end
+
+		#@inline hout = heatcap_mix(data, Tout, X) * (Tout - Tref)
+		r_hf_enth = v * cout * hout
+        # f[iT] = r_hf_enth
+		f[iT] = r_hf_enth * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth)
+		# f[iT] = zero(eltype(u))
+		# !!! DEBUG !!!
     end
 end
 
@@ -439,7 +466,7 @@ end
 
 function flux_interpol(flux)
 	flux /= ufac"kW/m^2"
-	nom_flux = 0.0
+	nom_flux = 80.0
 	if flux >= 30.0 && flux < 50.0
 		nom_flux = 40.0
 	elseif flux >= 50.0 && flux < 70.0
@@ -459,78 +486,78 @@ function flux_interpol(flux)
 	# return_intp(M)
 end
 
-function flux_inner_outer(flux)
-	flux /= ufac"kW/m^2"
-	nom_flux = 0.0
-	if flux >= 30.0 && flux < 50.0
-		nom_flux = 40.0
-	elseif flux >= 50.0 && flux < 70.0
-		nom_flux = 60.0
-	elseif flux >= 70.0 && flux < 90.0
-		nom_flux = 80.0
-	elseif flux >= 90.0 && flux <= 100.0
-		nom_flux = 100.0
-	end
-	M, coords = readFlux(nom_flux);
-	M .*= flux/nom_flux*ufac"kW/m^2"
-	sc, ec, sr, er = 32, 32, 33, 31
-	width10 =  coords.X[end-ec] - coords.X[sc]
-	height10 =  coords.Y[end-er] - coords.X[sr]
-	M10 = M[sc:end-ec,sr:end-er]
-	pwr_10 = sum(M10)*width10*height10*ufac"cm"^2/length(M10)
-	flux_inner = sum(M10)/length(M10)
+# function flux_inner_outer(flux)
+# 	flux /= ufac"kW/m^2"
+# 	nom_flux = 0.0
+# 	if flux >= 30.0 && flux < 50.0
+# 		nom_flux = 40.0
+# 	elseif flux >= 50.0 && flux < 70.0
+# 		nom_flux = 60.0
+# 	elseif flux >= 70.0 && flux < 90.0
+# 		nom_flux = 80.0
+# 	elseif flux >= 90.0 && flux <= 100.0
+# 		nom_flux = 100.0
+# 	end
+# 	M, coords = readFlux(nom_flux);
+# 	M .*= flux/nom_flux*ufac"kW/m^2"
+# 	sc, ec, sr, er = 32, 32, 33, 31
+# 	width10 =  coords.X[end-ec] - coords.X[sc]
+# 	height10 =  coords.Y[end-er] - coords.X[sr]
+# 	M10 = M[sc:end-ec,sr:end-er]
+# 	pwr_10 = sum(M10)*width10*height10*ufac"cm"^2/length(M10)
+# 	flux_inner = sum(M10)/length(M10)
 
-	width12 =  coords.X[end] - coords.X[1]
-	height12 =  coords.Y[end] - coords.X[1]
-	pwr_12 =  sum(M)*width12*height12*ufac"cm"^2/length(M)
+# 	width12 =  coords.X[end] - coords.X[1]
+# 	height12 =  coords.Y[end] - coords.X[1]
+# 	pwr_12 =  sum(M)*width12*height12*ufac"cm"^2/length(M)
 
-	area_12 = (width12*height12-width10*height10)*ufac"cm"^2
-	flux_outer = (pwr_12-pwr_10)/area_12
+# 	area_12 = (width12*height12-width10*height10)*ufac"cm"^2
+# 	flux_outer = (pwr_12-pwr_10)/area_12
 
-	#extrapolate(Interpolations.interpolate((coords.X*ufac"cm",coords.Y*ufac"cm"), M, Gridded(Linear()) ), Line())
-	#Interpolations.linear_interpolation((coords.X*ufac"cm",coords.Y*ufac"cm"), M,extrapolation_bc=Flat())	
-	#return_intp(M)
-	return (flux_inner, flux_outer)
-end
+# 	#extrapolate(Interpolations.interpolate((coords.X*ufac"cm",coords.Y*ufac"cm"), M, Gridded(Linear()) ), Line())
+# 	#Interpolations.linear_interpolation((coords.X*ufac"cm",coords.Y*ufac"cm"), M,extrapolation_bc=Flat())	
+# 	#return_intp(M)
+# 	return (flux_inner, flux_outer)
+# end
 
-function return_intp(M;wi=16.0*ufac"cm",wi_apt=12.0*ufac"cm")
+# function return_intp(M;wi=16.0*ufac"cm",wi_apt=12.0*ufac"cm")
 		
-	# starting coordinates for optimum 10 cm x 10 cm selection
-	sr=33
-	sc=33
+# 	# starting coordinates for optimum 10 cm x 10 cm selection
+# 	sr=33
+# 	sc=33
 
-	# (inverse) resolution of flux measurements, distance between data points
-	Dx = 0.031497*ufac"cm"
-	Dy = 0.031497*ufac"cm"
+# 	# (inverse) resolution of flux measurements, distance between data points
+# 	Dx = 0.031497*ufac"cm"
+# 	Dy = 0.031497*ufac"cm"
 	
 	
-	# calculate coordinate offsets, when deviating (expanding/shrinking from the center) from 10cm x 10cm selection 	
-	Dsr=Integer(round((wi_apt-10.0*ufac"cm")/(2*Dy)))
-	Dsc=Integer(round((wi_apt-10.0*ufac"cm")/(2*Dx)))
+# 	# calculate coordinate offsets, when deviating (expanding/shrinking from the center) from 10cm x 10cm selection 	
+# 	Dsr=Integer(round((wi_apt-10.0*ufac"cm")/(2*Dy)))
+# 	Dsc=Integer(round((wi_apt-10.0*ufac"cm")/(2*Dx)))
 
-	sr-=Dsr
-	sc-=Dsc
+# 	sr-=Dsr
+# 	sc-=Dsc
 
-	nx=Integer(round(wi_apt/Dx))
-	ny=Integer(round(wi_apt/Dy))
+# 	nx=Integer(round(wi_apt/Dx))
+# 	ny=Integer(round(wi_apt/Dy))
 	
-	@views M_ = M[sr:(sr+ny-1),sc:(sc+nx-1)]
+# 	@views M_ = M[sr:(sr+ny-1),sc:(sc+nx-1)]
 
-	# pad Flux Map with zeros outside of aperture area
-	nx_dom = Integer(round(wi/Dx))
-	ny_dom = Integer(round(wi/Dy))
-	M__ = zeros(nx_dom,ny_dom)
+# 	# pad Flux Map with zeros outside of aperture area
+# 	nx_dom = Integer(round(wi/Dx))
+# 	ny_dom = Integer(round(wi/Dy))
+# 	M__ = zeros(nx_dom,ny_dom)
 		
-	Dsr_dom_apt=Integer(round((wi - wi_apt)/(2*Dy)))
-	Dsc_dom_apt=Integer(round((wi - wi_apt)/(2*Dx)))
+# 	Dsr_dom_apt=Integer(round((wi - wi_apt)/(2*Dy)))
+# 	Dsc_dom_apt=Integer(round((wi - wi_apt)/(2*Dx)))
 
-	M__[(Dsr_dom_apt+1):(Dsr_dom_apt+ny), (Dsc_dom_apt+1):(Dsc_dom_apt+nx)] = M[sr:(sr+ny-1),sc:(sc+nx-1)]
+# 	M__[(Dsr_dom_apt+1):(Dsr_dom_apt+ny), (Dsc_dom_apt+1):(Dsc_dom_apt+nx)] = M[sr:(sr+ny-1),sc:(sc+nx-1)]
 
-	x = range(0.0,wi,length=nx_dom)
-	y = range(0.0,wi,length=nx_dom)
+# 	x = range(0.0,wi,length=nx_dom)
+# 	y = range(0.0,wi,length=nx_dom)
 	
-	Interpolations.interpolate((x,y), M__, Gridded(Linear()))
-end
+# 	Interpolations.interpolate((x,y), M__, Gridded(Linear()))
+# end
 
 const itp12 = flux_interpol(70.0*ufac"kW/m^2")
 
@@ -575,9 +602,7 @@ const itp12 = flux_interpol(70.0*ufac"kW/m^2")
 	Fluids::Vector{FluidProps} = kinpar.Fluids # fluids and respective properties in system
 	
 	m::Vector{Float64} = let
-		#m=zeros(Float64, NG)
         m=zeros(Float64, ng)
-		#for i=1:NG
         for i=1:ng
 			m[i] = Fluids[i].MW
 		end
@@ -585,7 +610,6 @@ const itp12 = flux_interpol(70.0*ufac"kW/m^2")
 	end
 	
 	X0::Vector{Float64} = let
-		#x=zeros(Float64, NG)
         x=zeros(Float64, ng)
 		x[gni[:H2]] = 1.0
 		x[gni[:CO2]] = 1.0
@@ -623,10 +647,7 @@ const itp12 = flux_interpol(70.0*ufac"kW/m^2")
 	delta_wall::Float64=15*ufac"mm" # reactor wall thickness
 	shell_h::Float64=20*ufac"mm" # height of heat transfer area adjancent to domain boundary 
 	k_nat_conv::Float64=20.0*ufac"W/(m^2*K)" #17.5*ufac"W/(m^2*K)" # natural+forced convection heat transfer coeff.
-    flux_inner::Float64=70.0*ufac"kW/m^2"
-	flux_outer::Float64=50.0*ufac"kW/m^2"
-	# G_lamp::Float64 = 70.0*ufac"kW/m^2"
-	nom_flux::Float64 = 70.0*ufac"kW/m^2"
+	nom_flux::Float64 = 70.0*ufac"kW/m^2" # nominal irradiation flux density / kW/m^2
 	FluxIntp::typeof(itp12)=itp12
 	# VitraPor data
 	dp::Float64=200.0*ufac"μm" # average pore size, por class 0
@@ -643,11 +664,11 @@ const itp12 = flux_interpol(70.0*ufac"kW/m^2")
 	lambda_window::Float64=1.38*ufac"W/(m*K)"
 	lambda_Al::Float64=235.0*ufac"W/(m*K)"
 
-    function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,flux_inner,flux_outer,nom_flux,FluxIntp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+    function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,FluxIntp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
         KP = FixedBed.KinData{nreac(kinpar)}
 		FluxIntp = flux_interpol(nom_flux)
-		flux_inner, flux_outer = flux_inner_outer(nom_flux)
-        new{ng,KP}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,flux_inner,flux_outer,nom_flux,FluxIntp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+		# flux_inner, flux_outer = flux_inner_outer(nom_flux)
+        new{ng,KP}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,FluxIntp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
 
     end
 end
@@ -767,7 +788,7 @@ Helper function to calculate radiation emitted from the window towards the surfa
 """
 function radiosity_window(f,u,bnode,data)
     # (;dim,iTw,G_lamp,nom_flux,FluxIntp,Tamb,uc_window,irradiated_boundaries)=data
-	(;dim,iTw,ibf,nom_flux,flux_inner,flux_outer,FluxIntp,Tamb,uc_window,irradiated_boundaries)=data
+	(;dim,iTw,ibf,nom_flux,Tamb,uc_window,irradiated_boundaries)=data
 	
     # irrad. exchange between quartz window (1), cat surface (2), masked sruface (3) 
     tau1_vis=uc_window.tau_vis
@@ -777,25 +798,17 @@ function radiosity_window(f,u,bnode,data)
     eps1=uc_window.eps
 	
 	# G_lamp = u[ibf]
-	# G_lamp = zero(eltype(u))
-	# if dim == 2
-	# 	G_lamp += nom_flux
-	# elseif dim == 3
-	# 	# obtain local irradiation flux value from interpolation
-	# 	# @views y,x,_ = bnode.coord[:,bnode.index]
-
-	# 	# if x >= 0.03 && x <= 0.13 && y >= 0.03 && y <= 0.13
-	# 	# 	G_lamp += flux_inner
-	# 	# else
-	# 	# 	G_lamp += flux_outer
-	# 	# end
-
-	# 	# G_lamp += FluxIntp(x,y)
-	# 	#G_lamp = FluxIntp([x,y])
-	# 	#G_lamp = nom_flux
-	# 	G_lamp += u[ibf]
-	# end
-	G_lamp = nom_flux
+	G_lamp = zero(eltype(u))
+	if dim == 2
+		G_lamp += nom_flux
+	elseif dim == 3
+		# obtain local irradiation flux value from boundary species
+		# !!! DEBUG !!!
+		G_lamp += nom_flux
+		# G_lamp += u[ibf]
+		# !!! DEBUG !!!
+	end
+	
 
     Tglass = u[iTw] # local tempererature of quartz window
     G1_bot_IR = eps1*ph"σ"*(Tglass^4-Tamb^4)+ph"σ"*Tamb^4
@@ -812,7 +825,7 @@ Function defining the top/inlet boundary condition in the photo thermal catalyti
     reactor (PCR) model.
 """
 function PCR_top(f,u,bnode,data)
-	(;ip,iT,iTw,Tamb,T_gas_in,mfluxin,X0,W0,mmix0,uc_window,uc_cat,uc_h,Nu,k_nat_conv,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,solve_T_equation)=data
+	(;ip,iT,iTw,Tamb,T_gas_in,mfluxin,X0,W0,mmix0,uc_window,uc_cat,uc_h,Nu,k_nat_conv,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,solve_T_equation,Fluids)=data
 	ng=ngas(data)
 
 	# irrad. exchange between quartz window (1), cat surface (2), masked surface (3)
@@ -840,8 +853,18 @@ function PCR_top(f,u,bnode,data)
 	if solve_T_equation
 		if bnode.region in inlet_boundaries
 			# heatflux from enthalpy inflow
-            @inline r_hf_enth = mfluxin/mmix0 * enthalpy_mix(data, T_gas_in, X0) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
-			f[iT] = -r_hf_enth
+			# !!! DEBUG !!!
+            # @inline r_hf_enth = mfluxin/mmix0 * enthalpy_mix(data, T_gas_in, X0) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
+			# Tfilm = (T_gas_in+u[iT])
+			# @inline hin = heatcap_mix(data, Tfilm, X0) * (Tfilm - 298.15)
+			hin = zero(eltype(u))
+			@inbounds for i=1:ng
+				hin += enthalpy_gas_thermal(Fluids[i],T_gas_in)
+			end
+			# @inline hin = heatcap_mix(data, T_gas_in, X0) * (T_gas_in - Tref)
+			r_hf_enth = mfluxin/mmix0 * hin
+			f[iT] = -r_hf_enth * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
+			# !!! DEBUG !!!
 			
 			if bnode.region in irradiated_boundaries
 				@inline G1_vis, G1_IR = radiosity_window(f,u,bnode,data)
@@ -855,9 +878,16 @@ function PCR_top(f,u,bnode,data)
 				kconv=Nu*λf/dh*ufac"W/(m^2*K)"
 				hflux_conv = kconv*(u[iT]-Tm) # convection heatflux through top chamber
 				
-				f[iT] += (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
-                # f[iT] += zero(eltype(u))
+				# !!! DEBUG !!!
+				# f[iT] += (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+				f[iT] -= hflux_irrad * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+				# f[iT] -= hflux_irrad 
+				# !!! DEBUG !!!
+				
+				# f[iT] += zero(eltype(u))
 				# f[iT] += (-hflux_irrad) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+
+				
 				
 				# calculate local window temperature from (local) flux balance
 				hflux_conv_top_w = k_nat_conv*(u[iTw]-Tamb)
@@ -865,11 +895,17 @@ function PCR_top(f,u,bnode,data)
 				G2_IR = eps2*ph"σ"*u[iT]^4 + rho2_IR*G1_IR
 				hflux_abs_w = alpha1_vis*G2_vis + alpha1_IR*G2_IR + alpha1_IR*ph"σ"*Tamb^4
 				hflux_emit_w = uc_window.eps*ph"σ"*u[iTw]^4
-				f[iTw] = -hflux_conv -hflux_abs_w +hflux_conv_top_w +2*hflux_emit_w
-				f[iTw] *= ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+				# !!! DEBUG !!!
+				# f[iTw] = -hflux_conv -hflux_abs_w +hflux_conv_top_w +2*hflux_emit_w
+				# f[iTw] *= ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+				f[iTw] = -hflux_abs_w +hflux_conv_top_w +2*hflux_emit_w
                 # f[iTw] = zero(eltype(u))
+				# !!! DEBUG !!!
 			end
 		end
+		# !!! DEBUG !!!
+		# f[iT] = u[iT] - (273.15 + 650.0)
+		# !!! DEBUG !!!
 	end
 	
 end
@@ -879,7 +915,7 @@ Function defining the side boundary condition in the photo thermal catalytic
     reactor (PCR) model.
 """
 function PCR_side(f,u,bnode,data)
-	(;iT,k_nat_conv,delta_gap,Tamb,side_boundaries,solve_T_equation)=data
+	(;iT,k_nat_conv,delta_gap,Tamb,side_boundaries,solve_T_equation,dt_hf_enth)=data
 	ng=ngas(data)
 
 	if solve_T_equation && bnode.region in side_boundaries
@@ -887,9 +923,11 @@ function PCR_side(f,u,bnode,data)
         @inline MoleFrac!(X,u,data)
         @inline _,λf=dynvisc_thermcond_mix(data, u[iT], X)
 
+		# !!! DEBUG !!!
         # w/o shell height
-        f[iT] = (u[iT]-Tamb)/(delta_gap/λf+1/k_nat_conv)
+        f[iT] = (u[iT]-Tamb)/(delta_gap/λf+1/k_nat_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
         # f[iT] = zero(eltype(u))		
+		# !!! DEBUG !!!
     end
 end
 
@@ -927,8 +965,14 @@ function PCR_bottom(f,u,bnode,data)
 		hflux_conv = kconv*(u[iT]-Tm) # positive flux in negative z coord. (towards plate)
 
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
-		
-        f[iT] = (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+
+		# !!! DEBUG
+        # f[iT] = (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+		f[iT] = -hflux_irrad * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+		# f[iT] = -hflux_irrad
+		# f[iT] = zero(eltype(u))
+		# !!! DEBUG
+
 		# f[iT] = (-hflux_irrad) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
 		# f[iT] = zero(eltype(u))
 
@@ -937,9 +981,14 @@ function PCR_bottom(f,u,bnode,data)
 		hflux_emit_p = lc_plate.eps*ph"σ"*u[iTp]^4
 		G1_IR = (eps1*ph"σ"*u[iT]^4 + rho1_IR*eps2*ph"σ"*u[iTp]^4)/(1-rho1_IR*rho2_IR)
 		hflux_abs_p = alpha2_IR*G1_IR + alpha2_IR*ph"σ"*Tamb^4
-		f[iTp] = -hflux_conv -hflux_abs_p +2*hflux_emit_p +hflux_conv_bot_p
-		f[iTp] *= ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+
+		# !!! DEBUG
+		# f[iTp] = -hflux_conv -hflux_abs_p +2*hflux_emit_p +hflux_conv_bot_p
+		# f[iTp] *= ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+		f[iTp] = -hflux_abs_p + 2*hflux_emit_p +hflux_conv_bot_p
         # f[iTp] = zero(eltype(u))
+		# !!! DEBUG
+
 	end
 end
 
@@ -949,7 +998,6 @@ Wrapper function defining the boundary conditions in the photo thermal catalytic
 """
 function PCR_bcond(f,u,bnode,data)
 	(;p,ip,outlet_boundaries)=data
-	ng=ngas(data)		
 	
     FixedBed.PCR_top(f,u,bnode,data)
     FixedBed.PCR_side(f,u,bnode,data)
