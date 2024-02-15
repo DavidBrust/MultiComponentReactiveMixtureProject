@@ -759,7 +759,7 @@ Helper function to export to VTK format for visualization 3D solutions of the
     species molar fractions and temperature fields in the 3D domain.
 """
 function PCR_writeSol3D(sol,grid,data;desc="")
-    (;ip,iT,gn,nflowin,solve_T_equation) = data
+    (;dim,ip,iT,ibf,gn,nflowin,solve_T_equation) = data
     ng=ngas(data)
     _t = now()
     tm = "$(hour(_t))_$(minute(_t))_$(second(_t))"
@@ -772,13 +772,16 @@ function PCR_writeSol3D(sol,grid,data;desc="")
     end
     #mkdir(string(Date(_t)))
     
-    VoronoiFVM.writeVTK("$(path)/$(tm)_3D_ptot_$(data.G_lamp/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[ip,:])
+    VoronoiFVM.writeVTK("$(path)/$(tm)_3D_ptot_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[ip,:])
 	if solve_T_equation
-        VoronoiFVM.writeVTK("$(path)/$(tm)_3D_T_$(data.G_lamp/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[iT,:] .-273.15)
+        VoronoiFVM.writeVTK("$(path)/$(tm)_3D_T_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[iT,:] .-273.15)
     end
     for i=1:ng
-        VoronoiFVM.writeVTK("$(path)/$(tm)_3D_x$(gn[i])_$(data.G_lamp/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[i,:])
+        VoronoiFVM.writeVTK("$(path)/$(tm)_3D_x$(gn[i])_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[i,:])
     end
+	if dim == 3
+		VoronoiFVM.writeVTK("$(path)/$(tm)_3D_irradiation_flux_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[ibf,:])
+	end
 end
 
 @doc raw"""
@@ -1040,6 +1043,139 @@ function PCR_bstorage(f,u,bnode,data)
 		f[iTp] = u[iTp]
 	end
 end
+
+
+function grid_boundaries_regions(dim;nref=0)
+	Ω_catalyst = 2
+	W=16
+	H=0.5
+
+	nz = 10*2^(nref)
+	Z=(0:(H/nz):H)*ufac"cm"
+
+	if dim == 2
+		Γ_bottom = 1
+		#Γ_bottom_insulating = 7
+		Γ_side = 2
+		Γ_sym = 4		
+		Γ_top_permeable = 5
+		Γ_top_irradiated = 6
+
+		W=W/2 # axisymmetry, half domain is sufficient
+		nr=W*2^(nref)
+		R=(0:(W/nr):W)*ufac"cm"
+		
+		grid=simplexgrid(R,Z)
+		circular_symmetric!(grid)
+	
+		cellmask!(grid,[0,9/10*H].*ufac"cm",[W,H].*ufac"cm",Ω_catalyst) # catalyst layer	
+		bfacemask!(grid, [0,H].*ufac"cm",[W-1,H].*ufac"cm",Γ_top_permeable)
+		bfacemask!(grid, [0,H].*ufac"cm",[W-2,0.5].*ufac"cm",Γ_top_irradiated) 
+				
+		inb = [Γ_top_permeable,Γ_top_irradiated]
+		irrb = [Γ_top_irradiated]
+		outb = [Γ_bottom]
+		sb = [Γ_side]
+	else
+		Γ_side_1 = 1 
+		Γ_side_2 = 2
+		Γ_side_3 = 3
+		Γ_side_4 = 4		
+		Γ_bottom = 5
+		Γ_top_permeable = 7
+		Γ_top_irradiated = 8
+		
+		nxy=W*2^(nref)
+		X=(0:(W/nxy):W)*ufac"cm"
+		Y=X
+		# X=(0:1:W)*ufac"cm"
+		# Y=(0:1:W)*ufac"cm"
+		# Z=(0:H/10:H)*ufac"cm"	
+		grid=simplexgrid(X,Y,Z)
+	
+		# catalyst region
+		cellmask!(grid,[0,0,9/10*H].*ufac"cm",[W,W,H].*ufac"cm",Ω_catalyst) # catalyst layer	
+		bfacemask!(grid, [1,1,H].*ufac"cm",[W-1,W-1,H].*ufac"cm",Γ_top_permeable)
+		bfacemask!(grid, [2,2,H].*ufac"cm",[W-2,W-2,H].*ufac"cm",Γ_top_irradiated)
+
+		inb = [Γ_top_permeable,Γ_top_irradiated]
+		irrb = [Γ_top_irradiated]
+		outb = [Γ_bottom]
+		sb = [Γ_side_1,Γ_side_2,Γ_side_3,Γ_side_4]
+	end
+
+	return grid, inb, irrb, outb, sb, [Ω_catalyst]
+end;
+
+function init_system(dim, grid, data::ReactorData)
+
+	(;p,ip,Tamb,iT,iTw,iTp,ibf,inlet_boundaries,irradiated_boundaries,outlet_boundaries,catalyst_regions,FluxIntp,ng,X0)=data
+	ng=ngas(data)
+
+	sys=VoronoiFVM.System( 	grid;
+							data=data,
+							flux=FixedBed.DMS_flux,
+							reaction=FixedBed.DMS_reaction,
+							storage=FixedBed.DMS_storage,
+							bcondition=FixedBed.PCR_bcond,
+							bflux=FixedBed.PCR_bflux,
+							bstorage=FixedBed.PCR_bstorage,
+							boutflow=FixedBed.DMS_boutflow,
+							outflowboundaries=outlet_boundaries,
+							assembly=:edgewise,
+							)
+
+	enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
+	enable_boundary_species!(sys, iTw, irradiated_boundaries) # window temperature as boundary species in upper chamber
+
+	# for 3 dimensional domain, apply measured irradiation flux density as boundary condition
+	if dim == 3
+		# boundary flux species, workaround to implement spatially varying irradiation
+		enable_boundary_species!(sys, ibf, irradiated_boundaries)
+	end
+	enable_boundary_species!(sys, iTp, outlet_boundaries) # plate temperature as boundary species in lower chamber
+	
+	inival=unknowns(sys)
+
+	inival[ip,:].=p
+	inival[[iT,iTw,iTp],:] .= Tamb
+
+	for i=1:ng
+		inival[i,:] .= X0[i]
+	end
+
+	if dim == 3
+		function d3tod2(a,b)
+			a[1]=b[1]
+			a[2]=b[2]
+		end
+		inival[ibf,:] .= 0.0
+		sub=ExtendableGrids.subgrid(grid,irradiated_boundaries,boundary=true, transform=d3tod2 )
+			
+		for inode in sub[CellNodes]
+			c = sub[Coordinates][:,inode]
+			inodeip = sub[ExtendableGrids.NodeInParent][inode]
+			inival[ibf,inodeip] = FluxIntp(c[1]-0.02, c[2]-0.02)
+		end
+	end
+
+	catalyst_nodes = []
+	for reg in catalyst_regions
+		catalyst_nodes = vcat(catalyst_nodes, unique(grid[CellNodes][:,grid[CellRegions] .== reg]) )
+	end
+		
+	cat_vol = sum(nodevolumes(sys)[unique(catalyst_nodes)])
+
+	data.lcat = data.mcat/cat_vol
+	local Ain = 0.0
+	for boundary in inlet_boundaries
+		Ain += bareas(boundary,sys,grid)
+	end
+	data.mfluxin = data.mflowin / Ain
+	
+	return inival,sys
+end
+
 #"""
 #When working with a heterogeneous phase model (separate energy balances for both fluid and porous solid material), the exchange of energe between the phases can be described by an interfacial heat transfer coefficient. It can be calculated according to:
 #

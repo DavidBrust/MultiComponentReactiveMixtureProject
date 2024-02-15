@@ -33,7 +33,7 @@ function run(nom_fluxs, nflowins; SensPar=SensPar)
     function probe_Temps(par;dim=2)
         # solt,grid,sys,data=PCR_base(dim,par;times=[0.0,5.0]);
         # return solt,grid,sys,data
-        return PCR_base(dim,par;times=[0.0,15.0]);
+        return PCR_base(dim,par);
         
 
         sol = solt(solt.t[end])

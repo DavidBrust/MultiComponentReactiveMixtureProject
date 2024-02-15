@@ -69,63 +69,67 @@ end
   ╠═╡ =#
 
 # ╔═╡ bc811695-8394-4c35-8ad6-25856fa29183
-function grid_boundaries_regions(dim)
-	Ω_catalyst = 2
-	W=16
-	H=0.5
-	if dim == 2
-		Γ_bottom = 1
-		#Γ_bottom_insulating = 7
-		Γ_side = 2
-		Γ_sym = 4		
-		Γ_top_permeable = 5
-		Γ_top_irradiated = 6
+# function grid_boundaries_regions(dim;nref=0)
+# 	Ω_catalyst = 2
+# 	W=16
+# 	H=0.5
 
-		W=W/2 # axisymmetry, half domain is sufficient
+# 	nz = 10*2^(nref)
+# 	Z=(0:(H/nz):H)*ufac"cm"
+
+# 	if dim == 2
+# 		Γ_bottom = 1
+# 		#Γ_bottom_insulating = 7
+# 		Γ_side = 2
+# 		Γ_sym = 4		
+# 		Γ_top_permeable = 5
+# 		Γ_top_irradiated = 6
+
+# 		W=W/2 # axisymmetry, half domain is sufficient
+# 		nr=W*2^(nref)
+# 		R=(0:(W/nr):W)*ufac"cm"
 		
-		R=(0:1:W)*ufac"cm"		
-		#Z1=(0:H/10:9/10*H)*ufac"cm"
-		#Z2=(9/10*H:H/100:H)*ufac"cm"
-		#Z=glue(Z1,Z2)
-		Z=(0:H/10:H)*ufac"cm"
-		grid=simplexgrid(R,Z)
-		circular_symmetric!(grid)
+# 		grid=simplexgrid(R,Z)
+# 		circular_symmetric!(grid)
 	
-		cellmask!(grid,[0,9/10*H].*ufac"cm",[W,H].*ufac"cm",Ω_catalyst) # catalyst layer	
-		bfacemask!(grid, [0,H].*ufac"cm",[W-1,H].*ufac"cm",Γ_top_permeable)
-		bfacemask!(grid, [0,H].*ufac"cm",[W-2,0.5].*ufac"cm",Γ_top_irradiated)
+# 		cellmask!(grid,[0,9/10*H].*ufac"cm",[W,H].*ufac"cm",Ω_catalyst) # catalyst layer	
+# 		bfacemask!(grid, [0,H].*ufac"cm",[W-1,H].*ufac"cm",Γ_top_permeable)
+# 		bfacemask!(grid, [0,H].*ufac"cm",[W-2,0.5].*ufac"cm",Γ_top_irradiated) 
+				
+# 		inb = [Γ_top_permeable,Γ_top_irradiated]
+# 		irrb = [Γ_top_irradiated]
+# 		outb = [Γ_bottom]
+# 		sb = [Γ_side]
+# 	else
+# 		Γ_side_1 = 1 
+# 		Γ_side_2 = 2
+# 		Γ_side_3 = 3
+# 		Γ_side_4 = 4		
+# 		Γ_bottom = 5
+# 		Γ_top_permeable = 7
+# 		Γ_top_irradiated = 8
+		
+# 		nxy=W*2^(nref)
+# 		X=(0:(W/nxy):W)*ufac"cm"
+# 		Y=X
+# 		# X=(0:1:W)*ufac"cm"
+# 		# Y=(0:1:W)*ufac"cm"
+# 		# Z=(0:H/10:H)*ufac"cm"	
+# 		grid=simplexgrid(X,Y,Z)
 	
-		inb = [Γ_top_permeable,Γ_top_irradiated]
-		irrb = [Γ_top_irradiated]
-		outb = [Γ_bottom]
-		sb = [Γ_side]
-	else
-		Γ_side_1 = 1 
-		Γ_side_2 = 2
-		Γ_side_3 = 3
-		Γ_side_4 = 4		
-		Γ_bottom = 5
-		Γ_top_permeable = 7
-		Γ_top_irradiated = 8
+# 		# catalyst region
+# 		cellmask!(grid,[0,0,9/10*H].*ufac"cm",[W,W,H].*ufac"cm",Ω_catalyst) # catalyst layer	
+# 		bfacemask!(grid, [1,1,H].*ufac"cm",[W-1,W-1,H].*ufac"cm",Γ_top_permeable)
+# 		bfacemask!(grid, [2,2,H].*ufac"cm",[W-2,W-2,H].*ufac"cm",Γ_top_irradiated)
 
-		X=(0:1:W)*ufac"cm"
-		Y=(0:1:W)*ufac"cm"
-		Z=(0:H/10:H)*ufac"cm"	
-		grid=simplexgrid(X,Y,Z)
-	
-		# catalyst region
-		cellmask!(grid,[0,0,9/10*H].*ufac"cm",[W,W,H].*ufac"cm",Ω_catalyst) # catalyst layer	
-		bfacemask!(grid, [1,1,H].*ufac"cm",[W-1,W-1,H].*ufac"cm",Γ_top_permeable)
-		bfacemask!(grid, [2,2,H].*ufac"cm",[W-2,W-2,H].*ufac"cm",Γ_top_irradiated)
+# 		inb = [Γ_top_permeable,Γ_top_irradiated]
+# 		irrb = [Γ_top_irradiated]
+# 		outb = [Γ_bottom]
+# 		sb = [Γ_side_1,Γ_side_2,Γ_side_3,Γ_side_4]
+# 	end
 
-		inb = [Γ_top_permeable,Γ_top_irradiated]
-		irrb = [Γ_top_irradiated]
-		outb = [Γ_bottom]
-		sb = [Γ_side_1,Γ_side_2,Γ_side_3,Γ_side_4]
-	end
-
-	return grid, inb, irrb, outb, sb, [Ω_catalyst]
-end;
+# 	return grid, inb, irrb, outb, sb, [Ω_catalyst]
+# end;
 
 # ╔═╡ 289753d9-08a7-4447-94ac-efabdee99fea
 md"""
@@ -252,7 +256,7 @@ end
   ╠═╡ =#
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
-function PCR_base(dim, par; times=nothing, verbose="aen")	
+function PCR_base(dim, par; times=nothing)	
 	times = isnothing(times) ? [0,20.0] : times
 	
 	G_lamp, nflowin, T_gas_in, abs1_vis, abs1_IR, abs2_vis, abs2_IR, abs3_IR, abs4_IR, mcat, poros, dp, perm, lambdas, delta_uc, delta_lc, delta_gap, Nu, k_conv= par
@@ -285,12 +289,11 @@ function PCR_base(dim, par; times=nothing, verbose="aen")
 		tau_vis=0.0 
 	)
 
-	grid, inb,irrb,outb,sb,catr =  grid_boundaries_regions(dim)
+	# grid, inb,irrb,outb,sb,catr =  grid_boundaries_regions(dim)
+	grid, inb,irrb,outb,sb,catr =  FixedBed.grid_boundaries_regions(dim)
 	
 	data=ReactorData(
 		dim=dim,
-		constant_properties=true,
-		#G_lamp=G_lamp,
 		nom_flux=G_lamp,
 		nflowin=nflowin,
 		T_gas_in=T_gas_in,
@@ -315,64 +318,76 @@ function PCR_base(dim, par; times=nothing, verbose="aen")
 		catalyst_regions=catr,
 		rhos=5.0*ufac"kg/m^3" # set solid density to low value to reduce thermal inertia of system
 		)
-	(;p,ip,Tamb,iT,iTw,iTp,ibf,irradiated_boundaries,FluxIntp,ng,X0)=data
-	ng=ngas(data)
 
-	sys=VoronoiFVM.System( 	grid;
-							data=data,
-							flux=FixedBed.DMS_flux,
-							reaction=FixedBed.DMS_reaction,
-							storage=FixedBed.DMS_storage,
-							bcondition=FixedBed.PCR_bcond,
-							bflux=FixedBed.PCR_bflux,
-							bstorage=FixedBed.PCR_bstorage,
-							boutflow=FixedBed.DMS_boutflow,
-							outflowboundaries=outb,
-							assembly=:edgewise,
-							)
+	# ##########################################################################
+	# # BEGIN SYS INIT
+	# (;p,ip,Tamb,iT,iTw,iTp,ibf,irradiated_boundaries,FluxIntp,ng,X0)=data
+	# ng=ngas(data)
 
-	enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
-	enable_boundary_species!(sys, iTw, irrb) # window temperature as boundary species in upper chamber
-	enable_boundary_species!(sys, ibf, irrb) # boundary flux species, workaround to implement spatially varying irradiation
-	enable_boundary_species!(sys, iTp, outb) # plate temperature as boundary species in lower chamber
+	# sys=VoronoiFVM.System( 	grid;
+	# 						data=data,
+	# 						flux=FixedBed.DMS_flux,
+	# 						reaction=FixedBed.DMS_reaction,
+	# 						storage=FixedBed.DMS_storage,
+	# 						bcondition=FixedBed.PCR_bcond,
+	# 						bflux=FixedBed.PCR_bflux,
+	# 						bstorage=FixedBed.PCR_bstorage,
+	# 						boutflow=FixedBed.DMS_boutflow,
+	# 						outflowboundaries=outb,
+	# 						assembly=:edgewise,
+	# 						)
 
-	inival=unknowns(sys)
+	# enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
+	# enable_boundary_species!(sys, iTw, irrb) # window temperature as boundary species in upper chamber
+	# enable_boundary_species!(sys, ibf, irrb) # boundary flux species, workaround to implement spatially varying irradiation
+	# enable_boundary_species!(sys, iTp, outb) # plate temperature as boundary species in lower chamber
 
-	inival[ip,:].=p
-	inival[[iT,iTw,iTp],:] .= Tamb
-
-	function d3tod2(a,b)
-		a[1]=b[1]
-		a[2]=b[2]
-	end
-	inival[ibf,:] .= 0.0
-	sub=subgrid(grid,irradiated_boundaries,boundary=true, transform=d3tod2 )
-		
-	for inode in sub[CellNodes]
-		c = sub[Coordinates][:,inode]
-		inodeip = sub[ExtendableGrids.NodeInParent][inode]
-		inival[ibf,inodeip] = FluxIntp(c[1]-0.02, c[2]-0.02)
-	end
-		
-	for i=1:ng
-		inival[i,:] .= X0[i]
-	end
+	# # END SYS INIT
+	# ##########################################################################
+	# # BEGIN INIVAL
 	
-	#nd_ids = unique(grid[CellNodes][:,grid[CellRegions] .== Ω_catalyst])
-	catalyst_nodes = []
-	for reg in catr
-		catalyst_nodes = vcat(catalyst_nodes, unique(grid[CellNodes][:,grid[CellRegions] .== reg]) )
-	end
+	# inival=unknowns(sys)
+
+	# inival[ip,:].=p
+	# inival[[iT,iTw,iTp],:] .= Tamb
+
+	# for i=1:ng
+	# 	inival[i,:] .= X0[i]
+	# end
+
+	# # Only for variable irradiation flux density bc
+	# function d3tod2(a,b)
+	# 	a[1]=b[1]
+	# 	a[2]=b[2]
+	# end
+	# inival[ibf,:] .= 0.0
+	# sub=subgrid(grid,irradiated_boundaries,boundary=true, transform=d3tod2 )
 		
-	cat_vol = sum(nodevolumes(sys)[unique(catalyst_nodes)])
+	# for inode in sub[CellNodes]
+	# 	c = sub[Coordinates][:,inode]
+	# 	inodeip = sub[ExtendableGrids.NodeInParent][inode]
+	# 	inival[ibf,inodeip] = FluxIntp(c[1]-0.02, c[2]-0.02)
+	# end		
 
-	data.lcat = data.mcat/cat_vol
-	local Ain = 0.0
-	for boundary in inb
-		Ain += bareas(boundary,sys,grid)
-	end
-	data.mfluxin = data.mflowin / Ain
+	# # END INIVAL
+	# ##########################################################################
+	# # BEGIN DATA INIT
+	# catalyst_nodes = []
+	# for reg in catr
+	# 	catalyst_nodes = vcat(catalyst_nodes, unique(grid[CellNodes][:,grid[CellRegions] .== reg]) )
+	# end
+		
+	# cat_vol = sum(nodevolumes(sys)[unique(catalyst_nodes)])
 
+	# data.lcat = data.mcat/cat_vol
+	# local Ain = 0.0
+	# for boundary in inb
+	# 	Ain += bareas(boundary,sys,grid)
+	# end
+	# data.mfluxin = data.mflowin / Ain
+	# # END DATA INIT
+	# ##########################################################################
+	# BEGIN Solver control
 	if dim == 2
 		control = SolverControl(nothing, sys;)
 	else
@@ -384,22 +399,14 @@ function PCR_base(dim, par; times=nothing, verbose="aen")
    		)
 	end
 	control.handle_exceptions=true
-	control.Δu_opt=1000
-	# control.num_final_steps=1
-	# control.damp_initial=0.5
-	#control.Δu_opt=1.0
+	control.Δu_opt=100
+	# END Solver control
+	##########################################################################
+		
+	inival,sys = FixedBed.init_system!(dim, grid, data)
 
-	
-	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose= dim==3 ? "nae" : "")
+	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="nae",log=true)
 
-	# control.damp_initial=0.5
-	#control.Δu_opt=1.0
-	#control.Δt=1.0
-	
-	# solt2=VoronoiFVM.solve(sys;inival=solt(solt.t[end]),times=times.+[5.0,8.0],control,verbose= dim==3 ? "nae" : "")
-
-	#solt=VoronoiFVM.solve(sys;inival=inival,times,control)
-	
 	return solt,grid,sys,data
 end
 

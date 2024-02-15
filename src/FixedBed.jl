@@ -1,6 +1,6 @@
 module FixedBed
 
-using VoronoiFVM
+using VoronoiFVM, ExtendableGrids
 using LessUnitful, Printf, Dates, CSV, DataFrames, Interpolations
 using StaticArrays
 using Documenter
