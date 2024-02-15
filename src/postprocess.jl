@@ -166,43 +166,93 @@ function HeatFluxes_EB_I(t,solt,grid,sys,data)
     # calc_hf = tend >= dt_hf_irrad[1]
     calc_hf = t >= dt_hf_irrad[1]
 
-    Qconv_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,irradiated_boundaries]
-    Qconv_10 = calc_hf ? sum(Qconv_10) : 0.0
+    Q_conve_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,irradiated_boundaries]
+    Q_conve_10 = calc_hf ? sum(Q_conve_10) : 0.0
     
-    QG_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,irradiated_boundaries]
-    QG_01 = calc_hf ? sum(QG_01) : 0.0
+    Q_irrad_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,irradiated_boundaries]
+    Q_irrad_01 = calc_hf ? sum(Q_irrad_01) : 0.0
 
-    QG_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,irradiated_boundaries]
-    QG_10 = calc_hf ? sum(QG_10) : 0.0
+    Q_irrad_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,irradiated_boundaries]
+    Q_irrad_10 = calc_hf ? sum(Q_irrad_10) : 0.0
 
-    QG_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,outlet_boundaries]
-    QG_34 = calc_hf ? sum(QG_34) : 0.0
+    Q_irrad_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,outlet_boundaries]
+    Q_irrad_34 = calc_hf ? sum(Q_irrad_34) : 0.0
     
-    QG_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,outlet_boundaries]
-    QG_43 = calc_hf ? sum(QG_43) : 0.0
+    Q_irrad_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,outlet_boundaries]
+    Q_irrad_43 = calc_hf ? sum(Q_irrad_43) : 0.0
 
-    Qconv_34=integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,outlet_boundaries]
-    Qconv_34 = calc_hf ? sum(Qconv_34) : 0.0
+    Q_conve_34=integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,outlet_boundaries]
+    Q_conve_34 = calc_hf ? sum(Q_conve_34) : 0.0
 
     # Qsides=integrate(sys,FixedBed.PCR_side,sol; boundary=true)[iT,side_boundaries]
-    Qsides=integrate(sys,flux_side,sol; boundary=true)[iT,side_boundaries]
-    Qsides = sum(Qsides)
+    Q_sides=integrate(sys,flux_side,sol; boundary=true)[iT,side_boundaries]
+    Q_sides = sum(Q_sides)
 
     H_reaction = sum(integrate(sys,sys.physics.reaction,sol), dims=2)[iT]
 
-    H_thermal = dE_dt - (QG_01 - QG_10) - (QG_43 - QG_34) + Qconv_10 + Qconv_34 + Qsides
+    H_thermal = dE_dt - (Q_irrad_01 - Q_irrad_10) - (Q_irrad_43 - Q_irrad_34) + Q_conve_10 + Q_conve_34 + Q_sides
 
     (
-        QG_01=QG_01,
-        QG_10=-QG_10,
+        Q_irrad_01=Q_irrad_01,
+        Q_irrad_10=-Q_irrad_10,
         H_thermal=H_thermal,
         H_reaction=-H_reaction,
-        Qconv_10=-Qconv_10,
-        Qconv_34=-Qconv_34,
-        QG_34=-QG_34,
-        QG_43=QG_43,
-        Qsides=-Qsides
+        Q_conve_10=-Q_conve_10,
+        Q_conve_34=-Q_conve_34,
+        Q_irrad_34=-Q_irrad_34,
+        Q_irrad_43=Q_irrad_43,
+        Q_sides=-Q_sides
     )
     
+
+end
+
+function BoundaryFlows_Integrals(solt, sys, data)
+	(;outlet_boundaries,inlet_boundaries)=data
+	
+	tfact=TestFunctionFactory(sys)	
+	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
+	tf_in=testfunction(tfact,outlet_boundaries,inlet_boundaries)
+		
+	inflow_rate=Vector{Float64}[]
+	outflow_rate=Vector{Float64}[]
+	reaction_rate=Vector{Float64}[]
+	stored_amount=Vector{Float64}[]
+
+	for i=2:length(solt)
+		
+		ifr=integrate(sys,tf_in,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])
+		ofr=integrate(sys,tf_out,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])
+
+		push!(inflow_rate,ifr)
+		push!(outflow_rate,ofr)
+
+		rr = vec(sum(integrate(sys,sys.physics.reaction,solt[i]), dims=2))
+		amount = vec(sum(integrate(sys,sys.physics.storage,solt[i]), dims=2))
+
+		push!(reaction_rate, rr)
+		push!(stored_amount, amount)
+
+   	end
+
+	# integrals
+	I_in=zeros(num_species(sys))
+	I_out=zeros(num_species(sys))
+	I_reac=zeros(num_species(sys))
+	for i=1:length(solt)-1
+		I_in .+= inflow_rate[i]*(solt.t[i+1]-solt.t[i])
+		I_out .+= outflow_rate[i]*(solt.t[i+1]-solt.t[i])
+		I_reac .+= reaction_rate[i]*(solt.t[i+1]-solt.t[i])
+	end
+
+	return (
+		inflow_rate=inflow_rate,
+		outflow_rate=outflow_rate,
+		reaction_rate=reaction_rate, 
+		stored_amount=stored_amount,
+		I_in=I_in,
+		I_out=I_out,
+		I_reac=I_reac
+	)
 
 end

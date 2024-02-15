@@ -92,58 +92,25 @@ In the interior of the domain a reaction leading to increase in total species nu
 $X_2 \rightarrow 3 X_1$
 """
 
-# ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
-function runSimRef(data,nref=0)
-
-	mygrid=grid1D(nref)
-	strategy = nothing
-	times=[0,20]
-
-
+# ╔═╡ 3f56ffca-8ab8-4c32-b2b1-f2ec28ccf8b7
+function calce(data,nref=0)
 	
-	(;p,ip,X0)=data
-	ng=ngas(data)
+	grid = grid1D(nref)
+	inival,sys = init_system(1, grid, data)
 	
-	sys=VoronoiFVM.System( 	mygrid;
-							data=data,
-							flux=FixedBed.DMS_flux,
-							reaction=FixedBed.DMS_reaction,
-							storage=FixedBed.DMS_storage,
-							bcondition=FixedBed.PCR_bcond,
-							bflux=FixedBed.PCR_bflux,
-							bstorage=FixedBed.PCR_bstorage,
-							boutflow=FixedBed.DMS_boutflow,
-							outflowboundaries=data.outlet_boundaries,
-							assembly=:edgewise
-							)
-	
-	enable_species!(sys; species=collect(1:(ng+1))) # gas phase species pi & ptotal	
-	
-	inival=unknowns(sys)
-
-	inival[ip,:].=p
-	for i=1:ng
-		inival[i,:] .= 1.0/ng
-		#inival[i,:] .= X0[i]
-	end
-
-	control = SolverControl(strategy, sys;)
+	control = SolverControl(nothing, sys;)
 		control.handle_exceptions=true
-		control.Δu_opt=1
-		control.damp_initial=0.5
+		control.Δu_opt=100
 
+	times=[0,20]
 	tsol=solve(sys;inival=inival,times,control)
 	sol = tsol(tsol.t[end]);
-
-	sol,mygrid,sys
-end
-
-# ╔═╡ 3f56ffca-8ab8-4c32-b2b1-f2ec28ccf8b7
-function calce(data,nref=0)	
-	sol,grid,sys = runSimRef(data,nref)
+	
 	abse = maximum(abs.(sol[3,:]))
 	nx = length(grid[Coordinates])
+	
 	sol,grid,sys,abse,nx
+	
 end
 
 # ╔═╡ 184f70a9-f049-4017-ad28-027ae606d0ca
@@ -180,14 +147,14 @@ function make_data()
 	)
 	
 	data = ReactorData(;
-		inlet_boundaries=[Γ_left],
-		outlet_boundaries=[Γ_right],
-		irradiated_boundaries=[],
-		side_boundaries=[],
-		solve_T_equation=false,
+		inlet_boundaries = [Γ_left],
+		outlet_boundaries = [Γ_right],
+		irradiated_boundaries = [],
+		side_boundaries = [],
+		solve_T_equation = false,
 		constant_properties = true,
 		is_reactive = true,
-		kinpar=MinKin,
+		kinpar = MinKin,
 		lcat = 1.0,
 		ng = 3,
 		Tamb = 273.15,
@@ -211,7 +178,6 @@ begin
 
 	data_res = make_data()
 
-	sol,grid,sys = runSimRef(data_res,0)
 	for nref=0:refmax
 		sol,grid,sys,e,n = calce(data_res,nref)
 		push!(ae, e)
@@ -239,31 +205,6 @@ let
 end
   ╠═╡ =#
 
-# ╔═╡ 3ffbe1ba-d5aa-4bf0-a5c4-92cec7e0c199
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let	
-	(;ip,gn,gni,m,mfluxin,mmix0,X0,ng) = data_res
-	sol=asol[end]
-	sys=asys[end]
-	grid=agrid[end]
-	
-	in_,out_=FixedBed.DMS_checkinout(sol,sys,data_res)
-
-	nout(i) = out_[i]/m[i]
-	nin(i) = mfluxin/mmix0 *bareas(Γ_left,sys,grid)*X0[i]
-	RI=sum(integrate(sys,FixedBed.DMS_reaction,sol),dims=2) # reaction integral
-
-	println("Total mass inflows and outflows:")
-	@printf "IN: %2.6e \t OUT: %2.6e \t REACT: %2.6e kg/hr \nSUM: %2.6e kg/hr\n\n" in_[ip]/ufac"kg/hr" out_[ip]/ufac"kg/hr" RI[ip]/ufac"kg/hr" (in_[ip]+out_[ip]+RI[ip])/ufac"kg/hr"
-	
-	println("Molar species inflows, outflows and reaction integrals:")
-	for i = 1:ng
-		@printf "%i\tIN: %2.6e \t OUT: %2.6e \t REACT: %2.6e mol/hr \n\tSUM: %2.6e mol/hr\n" i nin(i)/ufac"mol/hr" nout(i)/ufac"mol/hr" -RI[i]/m[i]/ufac"mol/hr" (nin(i)+nout(i)-RI[i]/m[i])/ufac"mol/hr"
-	end	
-end
-  ╠═╡ =#
-
 # ╔═╡ 7dd363bf-d6e0-4dfb-b29f-85aa1fb62429
 md"""
 ## Grid Refinement
@@ -274,20 +215,15 @@ md"""
 #=╠═╡
 let
 	p=Plots.plot(xlabel="Number of gridpoints (1D)",ylabel="Abs. error")
-	Plots.plot!(p,an,ae, xaxis=:log, yaxis=:log,m=:circle,label="max(abs(x$(data_res.ng))",)
+	Plots.plot!(p,an,ae, xaxis=:log, yaxis=:log,m=:circle,label="max(abs(x$(data_res.ng)))",)
 	Plots.plot!(p,an,1.0e-4 ./an, xaxis=:log, yaxis=:log, label="1/nx")
 end
   ╠═╡ =#
 
-# ╔═╡ e3fdf239-d3f9-4244-9e78-f917584bda55
-function err(nref)
-	sol,grid,sys,e,n = calce(make_data(),nref)
-	return e
-end
-
 # ╔═╡ 6f02c9cf-7670-4224-9239-b825d8331174
-function runtests()                   
-    @test isapprox(err(6), 1.715081073444846e-7)	
+function runtests()
+	sol,grid,sys,err,n = calce(make_data(),6)
+    @test isapprox(err, 1.715081074957735e-7)	
 end;
 
 # ╔═╡ Cell order:
@@ -299,14 +235,11 @@ end;
 # ╠═832f3c15-b75a-4afe-8cc5-75ff3b4704d6
 # ╟─94b0c012-b92c-41b7-9fa2-63e966dabd77
 # ╟─3440d4d8-3e03-4ff3-93f1-9afd7aaf9c41
-# ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═3f56ffca-8ab8-4c32-b2b1-f2ec28ccf8b7
 # ╟─184f70a9-f049-4017-ad28-027ae606d0ca
 # ╠═bb2ef3c0-96fc-4a90-a714-a0cfa08ac178
 # ╠═a5e9ffdb-083a-4192-bd8e-6f0ccb79598e
 # ╠═abedcbf9-c99c-4969-b97a-3bc0295061bb
-# ╠═3ffbe1ba-d5aa-4bf0-a5c4-92cec7e0c199
 # ╟─7dd363bf-d6e0-4dfb-b29f-85aa1fb62429
 # ╠═c5190db5-ed3d-4084-ba16-496cc825fa9d
-# ╠═e3fdf239-d3f9-4244-9e78-f917584bda55
 # ╠═6f02c9cf-7670-4224-9239-b825d8331174

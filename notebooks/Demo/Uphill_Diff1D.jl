@@ -88,49 +88,6 @@ md"""
 Select flowrate: $(@bind flowrate Select([:high, :low]))
 """
 
-# ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
-function runSimRef(data,nref=0)
-	(;p,ip,X0,ng,nflowin)=data
-	
-	mygrid=grid1D(nref)
-
-	
-	times=flowrate == :high ? [0,20.0] : [0,100.0]
-
-	sys=VoronoiFVM.System( 	mygrid;
-							data=data,
-							flux=FixedBed.DMS_flux,
-							reaction=FixedBed.DMS_reaction,
-							storage=FixedBed.DMS_storage,
-							bcondition=FixedBed.PCR_bcond,
-							bflux=FixedBed.PCR_bflux,
-							bstorage=FixedBed.PCR_bstorage,
-							boutflow=FixedBed.DMS_boutflow,
-							outflowboundaries=data.outlet_boundaries,
-							assembly=:edgewise
-							)
-	
-	enable_species!(sys; species=collect(1:(ng+1))) # gas phase species pi & ptotal	
-	
-	inival=unknowns(sys)
-
-	inival[ip,:].=p
-	for i=1:ng
-		#inival[i,:] .= 1.0/ng
-		inival[i,:] .= X0[i]
-	end
-	
-	control = SolverControl(nothing, sys;)
-		control.handle_exceptions=true
-		control.Δu_opt=1_000.0
-		control.maxiters=250
-
-	tsol=solve(sys;inival=inival,times,control,verbose="nae")
-	sol = tsol(tsol.t[end]);
-
-	sol,mygrid,sys
-end
-
 # ╔═╡ 05e5e167-7c1c-43f4-8a8d-e173f2fb7029
 md"""
 ## Grid Refinement
@@ -139,13 +96,42 @@ md"""
 # ╔═╡ 3f56ffca-8ab8-4c32-b2b1-f2ec28ccf8b7
 function calc(data,nref=0)
 	(;gni) = data
-	sol,grid,sys = runSimRef(data,nref)
+	
+	grid = grid1D(nref)
+	inival, sys = init_system(1, grid, data)
+
+	
+	control = SolverControl(nothing, sys;)
+		control.handle_exceptions=true
+		control.Δu_opt=100.0
+
+	times=flowrate == :high ? [0,100.0] : [0,100.0]
+	tsol=solve(sys;inival=inival,times,control,verbose="a")
+	sol = tsol(tsol.t[end])
 	
 	MaxCO2 = maximum(sol[gni[:CO2],:])
 	DeltaCO2 = MaxCO2 - sol[gni[:CO2],1]
 	nx = length(grid[Coordinates])
-	sol,grid,sys,DeltaCO2,nx
+	
+	return sol,grid,sys,DeltaCO2,nx
 end
+
+# ╔═╡ feb5ee07-ef47-4bac-9a53-7c802978d8f8
+function runtests()
+	nflowin = flowrate == :high ? 0.005 : 0.0001
+	data_uh = ReactorData(
+		inlet_boundaries=[Γ_left],
+		outlet_boundaries=[Γ_right],
+		irradiated_boundaries=[],
+		side_boundaries=[],
+		solve_T_equation=false,
+		nflowin=nflowin,
+		Treac = 273.15+650
+	)
+
+	sol,grid,sys,DeltaCO2,n = calc(data_uh,6)
+    @test isapprox(DeltaCO2, 0.01702152459555617)	
+end;
 
 # ╔═╡ bb2ef3c0-96fc-4a90-a714-a0cfa08ac178
 begin
@@ -226,18 +212,14 @@ let
 end
   ╠═╡ =#
 
-# ╔═╡ 7a798fbc-472a-44fc-a058-f1db25b09459
-@test aDeltaCO2[end] ≈ 0.01702152459546069
-
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
-# ╠═2c4b16ab-8f60-467b-b608-2fea9fbc741c
+# ╟─2c4b16ab-8f60-467b-b608-2fea9fbc741c
 # ╠═d3278ac7-db94-4119-8efd-4dd18107e248
 # ╠═83fa22fa-451d-4c30-a4b7-834974245996
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
 # ╠═832f3c15-b75a-4afe-8cc5-75ff3b4704d6
 # ╠═e17a383e-4e57-4c4d-9e08-0a24ae53af4f
-# ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╟─9d0f4f0f-2a09-4f6c-a102-e45c8d39bd3e
 # ╟─04acab16-0848-40a7-8d70-9c2ae6c1ca9b
 # ╟─98cee333-4702-4974-bbd1-5ef8eed9a672
@@ -245,6 +227,6 @@ end
 # ╟─aee47c66-97ba-43fa-a8ec-dad7c0d4f20c
 # ╟─05e5e167-7c1c-43f4-8a8d-e173f2fb7029
 # ╠═c5190db5-ed3d-4084-ba16-496cc825fa9d
-# ╠═7a798fbc-472a-44fc-a058-f1db25b09459
+# ╠═feb5ee07-ef47-4bac-9a53-7c802978d8f8
 # ╠═bb2ef3c0-96fc-4a90-a714-a0cfa08ac178
 # ╠═3f56ffca-8ab8-4c32-b2b1-f2ec28ccf8b7

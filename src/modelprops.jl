@@ -248,7 +248,9 @@ function DMS_reaction(f,u,node,data)
 			f[i] = zero(eltype(u))
 			for j=1:nreac(kinpar)
 				f[i] += nuij[(j-1)*ng+i] * RR[j] * m[i]
-				f[iT] -= nuij[(j-1)*ng+i] * RR[j] * enthalpy_gas(kinpar.Fluids[i], T)
+				if solve_T_equation
+					f[iT] -= nuij[(j-1)*ng+i] * RR[j] * enthalpy_gas(kinpar.Fluids[i], T)
+				end
 			end			
 		end
 	end
@@ -718,7 +720,11 @@ end
 Helper function to print an extended summary based on calculated flux integrals over in- 
     and outflow boundaries in the Darcy-Maxwell-Stefan (DMS) model.
 """
-function DMS_print_summary_ext(sol,sys,data)
+function DMS_print_summary_ext(solt,grid,sys,data)
+
+	t = solt.t[end]
+	sol = solt(t)
+
 	(;gn,gni,m,nflowin,X0) = data
 	ng=ngas(data)
 	in_,out_=FixedBed.DMS_checkinout(sol,sys,data)
@@ -751,6 +757,17 @@ function DMS_print_summary_ext(sol,sys,data)
 	for i in(gni[:CO],gni[:CH4])
 		@printf "Y%4s: %2.2f \tS%4s: %2.2f\n" gn[i] nout(i)/nin(gni[:CO2]) gn[i] nout(i)/(nin(gni[:CO2])-nout(gni[:CO2]))
 	end
+
+	fluxes = HeatFluxes_EB_I(t,solt,grid,sys,data)
+	ns = keys(fluxes)
+	vs = values(fluxes)
+	#QG_01,	QG_10, H_thermal, H_reaction, Qconv_10,	Qconv_34, QG_34, QG_43,	Qsides = fluxes
+	println("\nEnergy Balancing [W]:")
+	for i=1:length(fluxes)
+		@printf "%s:\t%.2f \n" String(ns[i]) vs[i]
+	end
+	@printf "Sum:\t\t%.6f \n" sum(fluxes)
+
 end
 
 @doc raw"""
@@ -1109,8 +1126,7 @@ end;
 
 function init_system(dim, grid, data::ReactorData)
 
-	(;p,ip,Tamb,iT,iTw,iTp,ibf,inlet_boundaries,irradiated_boundaries,outlet_boundaries,catalyst_regions,FluxIntp,ng,X0)=data
-	ng=ngas(data)
+	(;p,ip,Tamb,iT,iTw,iTp,ibf,inlet_boundaries,irradiated_boundaries,outlet_boundaries,catalyst_regions,FluxIntp,ng,X0,solve_T_equation)=data
 
 	sys=VoronoiFVM.System( 	grid;
 							data=data,
@@ -1125,53 +1141,60 @@ function init_system(dim, grid, data::ReactorData)
 							assembly=:edgewise,
 							)
 
-	enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
-	enable_boundary_species!(sys, iTw, irradiated_boundaries) # window temperature as boundary species in upper chamber
+	if solve_T_equation
+		enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
+		enable_boundary_species!(sys, iTw, irradiated_boundaries) # window temperature as boundary species in upper chamber
 
-	# for 3 dimensional domain, apply measured irradiation flux density as boundary condition
-	if dim == 3
-		# boundary flux species, workaround to implement spatially varying irradiation
-		enable_boundary_species!(sys, ibf, irradiated_boundaries)
+		# for 3 dimensional domain, apply measured irradiation flux density as boundary condition
+		if dim == 3
+			# boundary flux species, workaround to implement spatially varying irradiation
+			enable_boundary_species!(sys, ibf, irradiated_boundaries)
+		end
+		enable_boundary_species!(sys, iTp, outlet_boundaries) # plate temperature as boundary species in lower chamber
+	else
+		enable_species!(sys; species=collect(1:(ng+1))) # gas phase species xi, ptotal
 	end
-	enable_boundary_species!(sys, iTp, outlet_boundaries) # plate temperature as boundary species in lower chamber
-	
-	inival=unknowns(sys)
 
+	inival=unknowns(sys)
 	inival[ip,:].=p
-	inival[[iT,iTw,iTp],:] .= Tamb
 
 	for i=1:ng
 		inival[i,:] .= X0[i]
 	end
 
-	if dim == 3
-		function d3tod2(a,b)
-			a[1]=b[1]
-			a[2]=b[2]
+	if solve_T_equation
+		inival[[iT,iTw,iTp],:] .= Tamb
+		if dim == 3
+			function d3tod2(a,b)
+				a[1]=b[1]
+				a[2]=b[2]
+			end
+			inival[ibf,:] .= 0.0
+			sub=ExtendableGrids.subgrid(grid,irradiated_boundaries,boundary=true, transform=d3tod2 )
+				
+			for inode in sub[CellNodes]
+				c = sub[Coordinates][:,inode]
+				inodeip = sub[ExtendableGrids.NodeInParent][inode]
+				inival[ibf,inodeip] = FluxIntp(c[1]-0.02, c[2]-0.02)
+			end
 		end
-		inival[ibf,:] .= 0.0
-		sub=ExtendableGrids.subgrid(grid,irradiated_boundaries,boundary=true, transform=d3tod2 )
+	end
+
+	if dim > 1
+		catalyst_nodes = []
+		for reg in catalyst_regions
+			catalyst_nodes = vcat(catalyst_nodes, unique(grid[CellNodes][:,grid[CellRegions] .== reg]) )
+		end
 			
-		for inode in sub[CellNodes]
-			c = sub[Coordinates][:,inode]
-			inodeip = sub[ExtendableGrids.NodeInParent][inode]
-			inival[ibf,inodeip] = FluxIntp(c[1]-0.02, c[2]-0.02)
+		cat_vol = sum(nodevolumes(sys)[unique(catalyst_nodes)])
+
+		data.lcat = data.mcat/cat_vol
+		local Ain = 0.0
+		for boundary in inlet_boundaries
+			Ain += bareas(boundary,sys,grid)
 		end
+		data.mfluxin = data.mflowin / Ain
 	end
-
-	catalyst_nodes = []
-	for reg in catalyst_regions
-		catalyst_nodes = vcat(catalyst_nodes, unique(grid[CellNodes][:,grid[CellRegions] .== reg]) )
-	end
-		
-	cat_vol = sum(nodevolumes(sys)[unique(catalyst_nodes)])
-
-	data.lcat = data.mcat/cat_vol
-	local Ain = 0.0
-	for boundary in inlet_boundaries
-		Ain += bareas(boundary,sys,grid)
-	end
-	data.mfluxin = data.mflowin / Ain
 	
 	return inival,sys
 end

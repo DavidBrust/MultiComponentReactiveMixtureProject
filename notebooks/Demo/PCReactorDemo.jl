@@ -91,24 +91,17 @@ Also the thermal energy equation is solved, taking into account convective-diffu
 @doc FixedBed.DMS_Info_thermal()
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
-function ThermalDemo(dim; nref=nref, times=nothing, mfluxin = nothing, verbose="aen")
-	if dim == 2
-		times = isnothing(times) ? [0,50.0] : times
-	else
-		times = isnothing(times) ? [0,5.0] : times
-	end
+function ThermalDemo(dim; nref=nref)
 
-	grid, inb,irrb,outb,sb,catr =  grid_boundaries_regions(dim,nref=nref)
+	grid, inb, irrb, outb, sb, catr =  grid_boundaries_regions(dim, nref=nref)
 
-	data=ReactorData(
+	data = ReactorData(
 		dim=dim,
 		nflowin = 7.4*ufac"mol/hr",
 		nom_flux = 100.0*ufac"kW/m^2",		
-		#nom_flux = 0.0*ufac"kW/m^2",
 		dt_hf_irrad = (2.0, 10.0),
 		dt_hf_enth = (2.0, 3.0),
 		T_gas_in = 273.15 + 25,
-		#T_gas_in = 273.15 + 600,
 		Nu = 0.0,
 		X0 = [0,0.5,0,0,0.5,0.0], # H2 / CO2 = 1/1
 		inlet_boundaries=inb,
@@ -116,24 +109,23 @@ function ThermalDemo(dim; nref=nref, times=nothing, mfluxin = nothing, verbose="
 		outlet_boundaries=outb,
 		side_boundaries=sb,
 		catalyst_regions=catr,
-		rhos=5.0*ufac"kg/m^3" # set solid density to low value to reduce thermal inertia of system
-		)
-	(;p,ip,Tamb,iT,iTw,iTp,ng,gni,X0)=data
-
+		rhos=5.0*ufac"kg/m^3" # low value for solid density -> low thermal inertia
+	)
+	
 	inival,sys = init_system(dim, grid, data)
 
 	if dim == 2
+		times = [0,50.0]
 		control = SolverControl(nothing, sys;)
-	else
-		control = SolverControl(;
-        method_linear = KrylovJL_GMRES(),
-        precon_linear = VoronoiFVM.factorizationstrategy(
-			MKLPardisoLU(), NoBlock(), sys),
-   		)
+	elseif dim == 3
+		times = [0,2.0]
+		control = SolverControl(
+			GMRESIteration(MKLPardisoLU(), EquationBlock()),
+			sys
+		)
 	end
-		control.handle_exceptions=true
-		control.Δt_min=1.0e-6
-		control.Δu_opt=100
+	control.handle_exceptions=true
+	control.Δu_opt=100
 		
 	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="a",log=true)
 	
@@ -181,7 +173,7 @@ let
 	inflow_rate, outflow_rate, reaction_rate, stored_amount, I_in, I_out, I_reac = BoundaryFlows_Integrals(solt, sys, data)
 	(;ng, gn, gni, iT, ip) = data
 
-	k=gni[:CO]
+	k=gni[:N2]
 	#k=iT
 
 	if k in 1:ng
@@ -206,16 +198,30 @@ end
   ╠═╡ =#
 
 # ╔═╡ d5b816c3-f5c6-4762-a610-5a2efb77d4ff
-#=╠═╡
 function runtests()
-	inflow_rate, outflow_rate, reaction_rate, stored_amount, I_in, I_out, I_reac = BoundaryFlows_Integrals(solt, sys, data)
-	(;ng, gn, gni, iT, ip, m) = data
 
-	RR = stack(-reaction_rate, dims=1)[end, gni[:CO]] / m[gni[:CO]] / ufac"mol/hr"
+	# 2D
+	function Test2D()
+		solt,grid,sys,data=ThermalDemo(2);
+		
+		inflow_rate, outflow_rate, reaction_rate, stored_amount, I_in, I_out, I_reac = BoundaryFlows_Integrals(solt, sys, data)
+		(;gni, m) = data
 	
-    @test isapprox(RR, 1.0439224917035148)	
+		RR = stack(-reaction_rate, dims=1)[end, gni[:CO]] / m[gni[:CO]] / ufac"mol/hr"
+		return RR
+	end
+    @test isapprox(Test2D(), 1.0439224917035148)
+
+	# 3D
+	function Test3D()
+		solt,grid,sys,data=ThermalDemo(3);
+		sol = solt(solt.t[end])
+		
+		(;iT) = data
+		return minimum(sol[iT,:])
+	end
+	@test isapprox(Test3D(), 436.8582985759645)
 end;
-  ╠═╡ =#
 
 # ╔═╡ 98468f9e-6dee-4b0b-8421-d77ac33012cc
 md"""

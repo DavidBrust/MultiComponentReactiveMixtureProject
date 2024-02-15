@@ -7,7 +7,7 @@ ExampleJuggler.verbose!(true)
 example_dir = joinpath(@__DIR__, "..", "notebooks/Demo")
 
 # modules = ["ExampleModule.jl"]
-notebooks = ["Residual_MoleFrac1D.jl"]
+notebooks = ["Residual_MoleFrac1D.jl","Uphill_Diff1D.jl","PCReactorDemo.jl"]
 # scripts = ["testscript.jl", "PlutoTemplate.jl", "ExamplePluto.jl"]
 
 @testset "pluto notebooks" begin

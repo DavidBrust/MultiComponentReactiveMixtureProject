@@ -21,7 +21,8 @@ export nreac
 include("modelprops.jl")
 export AbstractModelData, RePrPe, kbed, kbed_VDI_flattening, lambda_eff_AC, hsf, DK_eff
 export M_matrix!, D_matrix!, DarcyVelo, MoleFrac!, MassFrac!, sel12by12, SurfaceOpticalProps, ReactorData, ngas, bareas
+export grid_boundaries_regions, init_system
 
 include("postprocess.jl")
-export HeatFluxes_EB_I
+export HeatFluxes_EB_I, BoundaryFlows_Integrals
 end
