@@ -21,7 +21,7 @@ begin
 	using PlutoUI
 	using Interpolations
 
-	using FixedBed
+	using MultiComponentReactiveMixtureProject
 
 	GridVisualize.default_plotter!(PlutoVista)
 end;

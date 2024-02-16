@@ -17,7 +17,7 @@ begin
 	using PlutoUI
 
 	using Revise
-	using FixedBed
+	using MultiComponentReactiveMixtureProject
 	
 end;
 

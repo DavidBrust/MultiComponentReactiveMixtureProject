@@ -449,7 +449,7 @@ const lc_plate = SurfaceOpticalProps(
 
 function readFlux(flux)
 
-	path = pkgdir(FixedBed)*"/data/IrradiationFluxProfiles/"
+	path = pkgdir(MultiComponentReactiveMixtureProject)*"/data/IrradiationFluxProfiles/"
 	fluxes = [40.0,60.0,80.0,100.0]
 	@assert flux in fluxes
 	d_flux_n = Dict(
@@ -667,7 +667,7 @@ const itp12 = flux_interpol(70.0*ufac"kW/m^2")
 	lambda_Al::Float64=235.0*ufac"W/(m*K)"
 
     function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,FluxIntp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
-        KP = FixedBed.KinData{nreac(kinpar)}
+        KP = MultiComponentReactiveMixtureProject.KinData{nreac(kinpar)}
 		FluxIntp = flux_interpol(nom_flux)
 		# flux_inner, flux_outer = flux_inner_outer(nom_flux)
         new{ng,KP}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,FluxIntp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
@@ -727,7 +727,7 @@ function DMS_print_summary_ext(solt,grid,sys,data)
 
 	(;gn,gni,m,nflowin,X0) = data
 	ng=ngas(data)
-	in_,out_=FixedBed.DMS_checkinout(sol,sys,data)
+	in_,out_=MultiComponentReactiveMixtureProject.DMS_checkinout(sol,sys,data)
 
 	nout(i) = -out_[i]/m[i]
 	nin(i) = nflowin*X0[i]
@@ -1019,9 +1019,9 @@ Wrapper function defining the boundary conditions in the photo thermal catalytic
 function PCR_bcond(f,u,bnode,data)
 	(;p,ip,outlet_boundaries)=data
 	
-    FixedBed.PCR_top(f,u,bnode,data)
-    FixedBed.PCR_side(f,u,bnode,data)
-    FixedBed.PCR_bottom(f,u,bnode,data)
+    MultiComponentReactiveMixtureProject.PCR_top(f,u,bnode,data)
+    MultiComponentReactiveMixtureProject.PCR_side(f,u,bnode,data)
+    MultiComponentReactiveMixtureProject.PCR_bottom(f,u,bnode,data)
     for boundary in outlet_boundaries
         boundary_dirichlet!(f,u,bnode, species=ip,region=boundary,value=p)
     end	
@@ -1133,13 +1133,13 @@ function init_system(dim, grid, data::ReactorData)
 
 	sys=VoronoiFVM.System( 	grid;
 							data=data,
-							flux=FixedBed.DMS_flux,
-							reaction=FixedBed.DMS_reaction,
-							storage=FixedBed.DMS_storage,
-							bcondition=FixedBed.PCR_bcond,
-							bflux=FixedBed.PCR_bflux,
-							bstorage=FixedBed.PCR_bstorage,
-							boutflow=FixedBed.DMS_boutflow,
+							flux=MultiComponentReactiveMixtureProject.DMS_flux,
+							reaction=MultiComponentReactiveMixtureProject.DMS_reaction,
+							storage=MultiComponentReactiveMixtureProject.DMS_storage,
+							bcondition=MultiComponentReactiveMixtureProject.PCR_bcond,
+							bflux=MultiComponentReactiveMixtureProject.PCR_bflux,
+							bstorage=MultiComponentReactiveMixtureProject.PCR_bstorage,
+							boutflow=MultiComponentReactiveMixtureProject.DMS_boutflow,
 							outflowboundaries=outlet_boundaries,
 							assembly=:edgewise,
 							)

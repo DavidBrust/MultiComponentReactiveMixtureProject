@@ -18,7 +18,7 @@ begin
 	using DataFrames
 	using PlutoVista, Plots
 	using PlutoUI, Colors
-	using FixedBed
+	using MultiComponentReactiveMixtureProject
 	using Printf
 	
 	GridVisualize.default_plotter!(PlutoVista)
@@ -367,7 +367,7 @@ Base.@kwdef mutable struct ModelData{NG}
 	dt_hf_enth::Tuple{Float64, Float64}=(2.0,10.0)
 	dt_hf_irrad::Tuple{Float64, Float64}=(3.0,10.0)
 		
-	kinpar::FixedBed.KinData{nreac(XuFroment)} = XuFroment
+	kinpar::MultiComponentReactiveMixtureProject.KinData{nreac(XuFroment)} = XuFroment
 	mcat::Float64=500.0*ufac"mg"
 	Vcat::Float64=1.0*ufac"m^2"*0.02*ufac"cm"
 	lcat::Float64=mcat/Vcat
@@ -449,7 +449,7 @@ end
 
 ModelData(;ng=XuFroment.ng, kwargs...) = ModelData{ng}(;kwargs...)
 
-FixedBed.ngas(::ModelData{NG}) where NG = NG
+MultiComponentReactiveMixtureProject.ngas(::ModelData{NG}) where NG = NG
 end;
 
 # ╔═╡ 3bb2deff-7816-4749-9f1e-c1e451372b1e

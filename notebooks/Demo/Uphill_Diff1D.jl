@@ -24,7 +24,7 @@ begin
 
 	using LessUnitful	
 	using PlutoUI, PlutoVista, Plots
-	using FixedBed
+	using MultiComponentReactiveMixtureProject
 	
 	GridVisualize.default_plotter!(PlutoVista)
 end;
@@ -61,7 +61,7 @@ begin
 end;
 
 # ╔═╡ e17a383e-4e57-4c4d-9e08-0a24ae53af4f
-@doc FixedBed.DMS_Info_isothermal()
+@doc MultiComponentReactiveMixtureProject.DMS_Info_isothermal()
 
 # ╔═╡ 9d0f4f0f-2a09-4f6c-a102-e45c8d39bd3e
 md"""

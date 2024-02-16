@@ -28,7 +28,7 @@ begin
 	using DataFrames
 	using PlutoVista, Plots
 	using PlutoUI, Colors
-	using FixedBed
+	using MultiComponentReactiveMixtureProject
 	using Printf
 	
 	GridVisualize.default_plotter!(PlutoVista)
@@ -143,10 +143,10 @@ Also the thermal energy equation is solved, taking into account convective-diffu
 """
 
 # ╔═╡ 1b38a2bb-20b2-4d98-a28b-d4cd1a8242c4
-@doc FixedBed.DMS_Info_isothermal()
+@doc MultiComponentReactiveMixtureProject.DMS_Info_isothermal()
 
 # ╔═╡ ac8d1e2e-a049-44ef-ba85-0fb78c46b1ff
-@doc FixedBed.DMS_Info_thermal()
+@doc MultiComponentReactiveMixtureProject.DMS_Info_thermal()
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
 function PCR_base(dim; times=nothing, verbose="aen")
@@ -169,13 +169,13 @@ function PCR_base(dim; times=nothing, verbose="aen")
 
 	sys=VoronoiFVM.System( 	grid;
 							data=data,
-							flux=FixedBed.DMS_flux,
-							reaction=FixedBed.DMS_reaction,
-							storage=FixedBed.DMS_storage,
-							bcondition=FixedBed.PCR_bcond,
-							bflux=FixedBed.PCR_bflux,
-							bstorage=FixedBed.PCR_bstorage,
-							boutflow=FixedBed.DMS_boutflow,
+							flux=MultiComponentReactiveMixtureProject.DMS_flux,
+							reaction=MultiComponentReactiveMixtureProject.DMS_reaction,
+							storage=MultiComponentReactiveMixtureProject.DMS_storage,
+							bcondition=MultiComponentReactiveMixtureProject.PCR_bcond,
+							bflux=MultiComponentReactiveMixtureProject.PCR_bflux,
+							bstorage=MultiComponentReactiveMixtureProject.PCR_bstorage,
+							boutflow=MultiComponentReactiveMixtureProject.DMS_boutflow,
 							outflowboundaries=outb,
 							assembly=:edgewise
 							)
@@ -360,13 +360,13 @@ end
 
 # ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
 #=╠═╡
-FixedBed.DMS_print_summary(sol,grid,sys,data)
+MultiComponentReactiveMixtureProject.DMS_print_summary(sol,grid,sys,data)
   ╠═╡ =#
 
 # ╔═╡ 3207839f-48a9-49b6-9861-e5e74bc593a4
 # ╠═╡ skip_as_script = true
 #=╠═╡
-FixedBed.DMS_print_summary_ext(sol,sys,data)
+MultiComponentReactiveMixtureProject.DMS_print_summary_ext(sol,sys,data)
   ╠═╡ =#
 
 # ╔═╡ 589feab3-f94d-4f32-9526-a41cf9a5e439

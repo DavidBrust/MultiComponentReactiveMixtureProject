@@ -1,4 +1,4 @@
-module FixedBed
+module MultiComponentReactiveMixtureProject
 
 using VoronoiFVM, ExtendableGrids
 using LessUnitful, Printf, Dates, CSV, DataFrames, Interpolations
@@ -25,4 +25,5 @@ export grid_boundaries_regions, init_system
 
 include("postprocess.jl")
 export HeatFluxes_EB_I, BoundaryFlows_Integrals
+
 end

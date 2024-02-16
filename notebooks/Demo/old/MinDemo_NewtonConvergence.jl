@@ -29,7 +29,7 @@ begin
 	using PlutoVista, Plots, Printf
 	using PlutoUI, Colors
 
-	using FixedBed
+	using MultiComponentReactiveMixtureProject
 	
 	GridVisualize.default_plotter!(PlutoVista)
 end;

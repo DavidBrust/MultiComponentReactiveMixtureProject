@@ -29,7 +29,7 @@ begin
 	using PlutoVista, Plots, Printf
 	using PlutoUI, Colors
 
-	using FixedBed
+	using MultiComponentReactiveMixtureProject
 	
 	GridVisualize.default_plotter!(PlutoVista)
 end;
@@ -223,11 +223,11 @@ function MinDemo(dim; times=nothing, mfluxin = nothing)
 	
 	sys=VoronoiFVM.System( 	mygrid;
 							data=mydata,
-							flux=FixedBed.DMS_flux,
-							reaction=FixedBed.DMS_reaction,
-							storage=FixedBed.DMS_storage,
-							bcondition=FixedBed.PCR_bcond,
-							boutflow=FixedBed.DMS_boutflow,
+							flux=MultiComponentReactiveMixtureProjectponentReactiveMixtureProject.DMS_flux,
+							reaction=MultiComponentReactiveMixtureProject.DMS_reaction,
+							storage=MultiComponentReactiveMixtureProject.DMS_storage,
+							bcondition=MultiComponentReactiveMixtureProject.PCR_bcond,
+							boutflow=MultiComponentReactiveMixtureProject.DMS_boutflow,
 							outflowboundaries=outb,
 							assembly=:edgewise
 							)
@@ -291,18 +291,18 @@ sol = solt(t);
 # ╔═╡ e29848dd-d787-438e-9c32-e9c2136aec4f
 # ╠═╡ skip_as_script = true
 #=╠═╡
-FixedBed.DMS_checkinout(sol,sys,data)
+MultiComponentReactiveMixtureProject.DMS_checkinout(sol,sys,data)
   ╠═╡ =#
 
 # ╔═╡ 862bf54f-8700-4956-9024-07fdf809c922
 #=╠═╡
-FixedBed.DMS_print_summary(sol,grid,sys,data)
+MultiComponentReactiveMixtureProject.DMS_print_summary(sol,grid,sys,data)
   ╠═╡ =#
 
 # ╔═╡ 06ec3b97-5532-4a86-9abb-61b91e94b4e7
 #=╠═╡
 if dim==3
-	FixedBed.PCR_writeSol3D(sol,grid,data;desc="MinDemo")
+	MultiComponentReactiveMixtureProject.PCR_writeSol3D(sol,grid,data;desc="MinDemo")
 end
   ╠═╡ =#
 

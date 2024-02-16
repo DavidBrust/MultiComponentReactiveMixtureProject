@@ -29,7 +29,7 @@ begin
 	using Plots, Colors, PlutoUI, LaTeXStrings
 	using Roots
 	using ForwardDiff, DiffResults
-	using FixedBed
+	using MultiComponentReactiveMixtureProject
 
 end;
 

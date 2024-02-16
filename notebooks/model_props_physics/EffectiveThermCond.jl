@@ -27,7 +27,7 @@ begin
 	using Statistics
 	using CSV, DataFrames
 	
-	using FixedBed
+	using MultiComponentReactiveMixtureProject
 end;
 
 # ╔═╡ 0fa3775d-4957-4644-8c9f-039a27b895b1

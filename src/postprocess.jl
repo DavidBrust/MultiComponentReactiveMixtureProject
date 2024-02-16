@@ -184,7 +184,7 @@ function HeatFluxes_EB_I(t,solt,grid,sys,data)
     Q_conve_34=integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,outlet_boundaries]
     Q_conve_34 = calc_hf ? sum(Q_conve_34) : 0.0
 
-    # Qsides=integrate(sys,FixedBed.PCR_side,sol; boundary=true)[iT,side_boundaries]
+    # Qsides=integrate(sys,MultiComponentReactiveMixtureProject.PCR_side,sol; boundary=true)[iT,side_boundaries]
     Q_sides=integrate(sys,flux_side,sol; boundary=true)[iT,side_boundaries]
     Q_sides = sum(Q_sides)
 

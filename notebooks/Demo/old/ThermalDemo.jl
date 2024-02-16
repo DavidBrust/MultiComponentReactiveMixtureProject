@@ -28,7 +28,7 @@ begin
 	using DataFrames
 	using PlutoVista, Plots
 	using PlutoUI, Colors
-	using FixedBed
+	using MultiComponentReactiveMixtureProject
 	using Printf
 	
 	GridVisualize.default_plotter!(PlutoVista)
@@ -85,10 +85,10 @@ Also the thermal energy equation is solved, taking into account convective-diffu
 """
 
 # ╔═╡ a1ea393e-f123-4ad0-affa-885db325cfd5
-@doc FixedBed.DMS_Info_isothermal()
+@doc MultiComponentReactiveMixtureProject.DMS_Info_isothermal()
 
 # ╔═╡ 415f6fa7-d5b5-40a2-806e-3d8a61541c2e
-@doc FixedBed.DMS_Info_thermal()
+@doc MultiComponentReactiveMixtureProject.DMS_Info_thermal()
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
 function ThermalDemo(dim; nref=nref, times=nothing, mfluxin = nothing, verbose="aen")
@@ -171,7 +171,7 @@ plothistory(solt)
 # ╔═╡ 3207839f-48a9-49b6-9861-e5e74bc593a4
 # ╠═╡ skip_as_script = true
 #=╠═╡
-FixedBed.DMS_print_summary_ext(solt,grid,sys,data)
+MultiComponentReactiveMixtureProject.DMS_print_summary_ext(solt,grid,sys,data)
   ╠═╡ =#
 
 # ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
@@ -238,7 +238,7 @@ sol = solt(t);
 
 # ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
 #=╠═╡
-FixedBed.DMS_print_summary(sol,grid,sys,data)
+MultiComponentReactiveMixtureProject.DMS_print_summary(sol,grid,sys,data)
   ╠═╡ =#
 
 # ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8

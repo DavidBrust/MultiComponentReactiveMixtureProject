@@ -18,7 +18,7 @@ begin
 	using DataFrames
 	using PlutoVista, Plots
 	using PlutoUI, Colors
-	using FixedBed
+	using MultiComponentReactiveMixtureProject
 	using Printf
 	
 	GridVisualize.default_plotter!(PlutoVista)

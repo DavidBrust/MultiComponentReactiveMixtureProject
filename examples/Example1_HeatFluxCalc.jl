@@ -1,6 +1,6 @@
 module Example1_HeatFluxCalc
 
-using FixedBed
+using MultiComponentReactiveMixtureProject
 using VoronoiFVM
 using ExtendableGrids, GridVisualize
 using LessUnitful

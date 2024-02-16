@@ -24,7 +24,7 @@ begin
 	using CSV,DataFrames
 	using Interpolations
 
-	using FixedBed
+	using MultiComponentReactiveMixtureProject
 	
 	#GridVisualize.default_plotter!(PlutoVista)
 end;
@@ -250,10 +250,10 @@ begin
 	# catalyst / chemistry data
 	# kinetic parameters, S3P="simple 3 parameter" kinetics fit to UPV lab scale experimental data
 
-	#kinpar::FixedBed.KinData{nreac(S3P)} = S3P
-	#kinpar::FixedBed.KinData{nreac(XuFroment)} = XuFroment
-	kinpar::FixedBed.KinData{T} where {T}= Riedel_rWGS
-	#kinpar::FixedBed.KinData{nreac(Wolf_rWGS)} = Wolf_rWGS
+	#kinpar::MultiComponentReactiveMixtureProject.KinData{nreac(S3P)} = S3P
+	#kinpar::MultiComponentReactiveMixtureProject.KinData{nreac(XuFroment)} = XuFroment
+	kinpar::MultiComponentReactiveMixtureProject.KinData{T} where {T}= Riedel_rWGS
+	#kinpar::MultiComponentReactiveMixtureProject.KinData{nreac(Wolf_rWGS)} = Wolf_rWGS
 	
     
 	
@@ -318,7 +318,7 @@ begin
 end;
 	
 	# !!!ALLOC Method to be called instead of data.ng
-	FixedBed.ngas(::ModelData{NG}) where NG = NG
+	MultiComponentReactiveMixtureProject.ngas(::ModelData{NG}) where NG = NG
 	
 	# !!!ALLOC Additional constructo taking ng as parameter	
 	ModelData(;ng=S3P.ng, kwargs...) = ModelData{ng}(;kwargs...)

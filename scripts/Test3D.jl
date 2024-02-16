@@ -1,6 +1,6 @@
 module Test3D
 
-using FixedBed, VoronoiFVM, LessUnitful, Pardiso, ExtendableSparse, Test, ExampleJuggler
+using MultiComponentReactiveMixtureProject, VoronoiFVM, LessUnitful, Pardiso, ExtendableSparse, Test, ExampleJuggler
 
 function run(;dim=3, times=[0,20.0], nref=0)
 
@@ -23,7 +23,7 @@ function run(;dim=3, times=[0,20.0], nref=0)
         rhos=5.0*ufac"kg/m^3" # set solid density to low value to reduce thermal inertia of system
     )
 
-    inival,sys = FixedBed.init_system(dim, grid, data)
+    inival,sys = MultiComponentReactiveMixtureProject.init_system(dim, grid, data)
 
     if dim == 2
         control = SolverControl(nothing, sys)
@@ -32,8 +32,6 @@ function run(;dim=3, times=[0,20.0], nref=0)
     end
     control.handle_exceptions=true
     control.Δu_opt = 100
-    control.reltol = 1.0e-12
-    control.abstol = 1.0e-12
     solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="nae",log=true)
 
     return solt,grid,sys,data

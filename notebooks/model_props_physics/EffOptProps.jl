@@ -14,7 +14,7 @@ begin
 	using PlutoVista, Plots
 	using PlutoUI
 
-	using FixedBed
+	using MultiComponentReactiveMixtureProject
 end;
 
 # ╔═╡ Cell order:

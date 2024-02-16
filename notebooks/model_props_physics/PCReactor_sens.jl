@@ -29,7 +29,7 @@ begin
 	using DataFrames, CSV
 	using PlutoVista, Plots
 	using PlutoUI, Colors
-	using FixedBed
+	using MultiComponentReactiveMixtureProject
 	using Printf
 	
 	GridVisualize.default_plotter!(PlutoVista)
@@ -55,10 +55,10 @@ Check the box to __start the sensitivity calculation__: $(@bind RunSens PlutoUI.
   ╠═╡ =#
 
 # ╔═╡ 6e82c62c-4d3b-46ec-9d91-bdcbeb8693e2
-@doc FixedBed.DMS_Info_isothermal
+@doc MultiComponentReactiveMixtureProject.DMS_Info_isothermal
 
 # ╔═╡ 670ea109-33be-42c0-a1fc-8959bbda5990
-@doc FixedBed.DMS_Info_thermal()
+@doc MultiComponentReactiveMixtureProject.DMS_Info_thermal()
 
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═╡ skip_as_script = true
@@ -290,7 +290,7 @@ function PCR_base(dim, par; times=nothing)
 	)
 
 	# grid, inb,irrb,outb,sb,catr =  grid_boundaries_regions(dim)
-	grid, inb,irrb,outb,sb,catr =  FixedBed.grid_boundaries_regions(dim)
+	grid, inb,irrb,outb,sb,catr =  MultiComponentReactiveMixtureProject.grid_boundaries_regions(dim)
 	
 	data=ReactorData(
 		dim=dim,
@@ -326,13 +326,13 @@ function PCR_base(dim, par; times=nothing)
 
 	# sys=VoronoiFVM.System( 	grid;
 	# 						data=data,
-	# 						flux=FixedBed.DMS_flux,
-	# 						reaction=FixedBed.DMS_reaction,
-	# 						storage=FixedBed.DMS_storage,
-	# 						bcondition=FixedBed.PCR_bcond,
-	# 						bflux=FixedBed.PCR_bflux,
-	# 						bstorage=FixedBed.PCR_bstorage,
-	# 						boutflow=FixedBed.DMS_boutflow,
+	# 						flux=MultiComponentReactiveMixtureProject.DMS_flux,
+	# 						reaction=MultiComponentReactiveMixtureProject.DMS_reaction,
+	# 						storage=MultiComponentReactiveMixtureProject.DMS_storage,
+	# 						bcondition=MultiComponentReactiveMixtureProject.PCR_bcond,
+	# 						bflux=MultiComponentReactiveMixtureProject.PCR_bflux,
+	# 						bstorage=MultiComponentReactiveMixtureProject.PCR_bstorage,
+	# 						boutflow=MultiComponentReactiveMixtureProject.DMS_boutflow,
 	# 						outflowboundaries=outb,
 	# 						assembly=:edgewise,
 	# 						)
@@ -403,7 +403,7 @@ function PCR_base(dim, par; times=nothing)
 	# END Solver control
 	##########################################################################
 		
-	inival,sys = FixedBed.init_system!(dim, grid, data)
+	inival,sys = MultiComponentReactiveMixtureProject.init_system!(dim, grid, data)
 
 	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="nae",log=true)
 
@@ -591,13 +591,13 @@ sol = solt(t);
 # ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
 # ╠═╡ skip_as_script = true
 #=╠═╡
-FixedBed.DMS_print_summary(sol,grid,sys,data)
+MultiComponentReactiveMixtureProject.DMS_print_summary(sol,grid,sys,data)
   ╠═╡ =#
 
 # ╔═╡ 3207839f-48a9-49b6-9861-e5e74bc593a4
 # ╠═╡ skip_as_script = true
 #=╠═╡
-FixedBed.DMS_print_summary_ext(sol,sys,data)
+MultiComponentReactiveMixtureProject.DMS_print_summary_ext(sol,sys,data)
   ╠═╡ =#
 
 # ╔═╡ ec21bd68-27f5-4595-9f2c-ed99b06f503e

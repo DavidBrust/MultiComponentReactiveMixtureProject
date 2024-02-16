@@ -1,4 +1,4 @@
-name = "FixedBed"
+name = "MultiComponentReactiveMixtureProject"
 uuid = "73aa9ad5-5511-44de-a8c6-10c835891529"
 authors = ["Brust", "David <david.brust@dlr.de> and contributors"]
 version = "0.1.0"

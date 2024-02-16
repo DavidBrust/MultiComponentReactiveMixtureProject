@@ -29,7 +29,7 @@ begin
 	using PlutoVista, Plots, Printf
 	using PlutoUI, Colors
 	using Test
-	using FixedBed
+	using MultiComponentReactiveMixtureProject
 	
 	GridVisualize.default_plotter!(PlutoVista)
 end;
@@ -77,7 +77,7 @@ begin
 end;
 
 # ╔═╡ 94b0c012-b92c-41b7-9fa2-63e966dabd77
-@doc FixedBed.DMS_Info_isothermal()
+@doc MultiComponentReactiveMixtureProject.DMS_Info_isothermal()
 
 # ╔═╡ 3440d4d8-3e03-4ff3-93f1-9afd7aaf9c41
 md"""

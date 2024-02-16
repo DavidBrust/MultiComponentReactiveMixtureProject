@@ -1,5 +1,5 @@
 using Test
-using FixedBed
+using MultiComponentReactiveMixtureProject
 using ExampleJuggler
 
 ExampleJuggler.verbose!(true)
