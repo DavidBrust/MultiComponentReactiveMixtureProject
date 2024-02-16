@@ -31,7 +31,8 @@
 abstract type AbstractKineticsData end
 
 
-Base.@kwdef struct KinData{NR} <:AbstractKineticsData
+#Base.@kwdef struct KinData{NR} <:AbstractKineticsData
+Base.@kwdef struct KinData{NR}
     ng::Int64=6 # number of gas phase species
     gnames::Vector{Symbol} = [:CO, :H2, :CH4, :H2O, :CO2, :N2]
     Fluids::Vector{FluidProps} = [CO,H2,CH4,H2O,CO2,N2]
@@ -294,6 +295,21 @@ function ri(data,T,p_)
         p ./= ufac"MPa"
         unitc *=ufac"mol/(s*g)"
         pexp[1] = @inbounds @inline (p[n[:CO2]]*p[n[:H2]] - p[n[:CO]]*p[n[:H2O]]*Kequil_WGS_Zimmermann(T)) / (p[n[:CO]] + 65.0*p[n[:H2O]] + 7.4*p[n[:CO2]])
+    else # ad-hoc defined kinetics, apply mass action law
+        (;nuij) = kinpar
+        c=MVector{ngas(data),eltype(p)}(undef)
+        c .= p ./ (ph"R"*T)
+
+        @inbounds for i=1:nreac(kinpar)
+            pexp[i] = zero(eltype(pexp))
+            for j=1:ngas(data) 
+                if nuij[j,i] > 0 # product, contrib of backward reaction
+                    pexp[i] -= c[j]^nuij[j,i]/Ki_[j]
+                elseif nuij[j,i] < 0 # reactant, contrib of forward reaction
+                    pexp[i] += c[j]^(-nuij[j,i])
+                end
+            end
+        end        
     end
     
     ri_ = @inline ki(data,T) .* pexp * unitc

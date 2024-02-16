@@ -1,20 +1,26 @@
 module EnergyBalances
 
-using DataFrames, CSV, Plots.PlotMeasures
+using DataFrames, CSV, Plots.PlotMeasures, Revise
 
 
-include("../notebooks/PorousCatalystHot3DTopFlowIrrExchange_NonAlloc.jl")
+include("../notebooks/PTReactor3D_DGM.jl")
 
 
 
 function flux_in_profile(f,u,bnode,data)
-    if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
-        (;iT,FluxIntp)=data
+    if bnode.region==Γ_top_cat
+        (;iT,uc_window,uc_cat,FluxIntp,FluxEmbed)=data
         
         # @views x,y,z = bnode.coord[:,bnode.index]
         # different ordering of axes in VoronoiFVM than in interpolated data
         @views y,x,_ = bnode.coord[:,bnode.index] 
-        f[iT] = FluxIntp(x,y)
+        #f[iT] = FluxEmbed*FluxIntp(x,y)
+
+        tau1_vis=uc_window.tau_vis
+        rho1_vis=uc_window.rho_vis
+        rho2_vis=uc_cat.rho_vis
+
+        f[iT] = (1-rho1_vis*rho2_vis)/tau1_vis*FluxEmbed*FluxIntp(x,y)
     end
 end
 
@@ -52,14 +58,14 @@ end
 # end
 
 function PTR_radiosity_window(f,u,bnode,data)
-    (;iTw,FluxIntp,FluxEmbed,uc_window,uc_cat,uc_frit)=data
-    # irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
+    (;iT,iTw,FluxIntp,FluxEmbed,uc_window,uc_cat,uc_frit)=data
+    # irradiation exchange between quartz window (1), cat surface (2) 
     # window properties (1)
     tau1_vis=uc_window.tau_vis
     rho1_vis=uc_window.rho_vis
-    tau1_IR=uc_window.tau_IR
-    rho1_IR=uc_window.rho_IR
     eps1=uc_window.eps
+
+    rho2_vis=uc_cat.rho_vis
 
     # obtain local irradiation flux value from interpolation + embedding	
     @views y,x,_ = bnode.coord[:,bnode.index] 
@@ -69,25 +75,18 @@ function PTR_radiosity_window(f,u,bnode,data)
     Tglass = u[iTw]
     G1_bot_IR = eps1*ph"σ"*Tglass^4
     if bnode.region==Γ_top_cat
-        # catalyst layer (2)
-        rho2_vis=uc_cat.rho_vis
-		
-        # vis radiosity of quartz window inwards / towards catalyst 
-        G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*rho2_vis)
 
-    elseif bnode.region==Γ_top_frit
-        # uncoated frit (3)
-        rho3_vis=uc_frit.rho_vis
+		# flux profile measured behind quarz in plane of cat layer
+		G1_bot_vis = Glamp
+        #G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*rho2_vis) 
 
-		# vis radiosity of quartz window inwards / towards catalyst
-        G1_bot_vis = tau1_vis*Glamp/(1-rho1_vis*rho3_vis)
     end
     return G1_bot_vis,G1_bot_IR
 end
 
 # G0_bot, IR/vis : surface radiosities of glass underside
 function flux_window_underside(f,u,bnode,data)
-    if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
+    if bnode.region==Γ_top_cat
         (;iT)=data
 
         G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
@@ -98,7 +97,7 @@ end
 
 # G0_bot, IR only
 function flux_window_underside_IR(f,u,bnode,data)
-    if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
+    if bnode.region==Γ_top_cat
         (;iT)=data
 
         _, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
@@ -109,7 +108,7 @@ end
 
 # G0_bot, vis only
 function flux_window_underside_vis(f,u,bnode,data)
-    if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
+    if bnode.region==Γ_top_cat
         (;iT)=data
 
         G1_bot_vis, _ = PTR_radiosity_window(f,u,bnode,data)
@@ -278,7 +277,7 @@ end
 
 # convective heat flux through top chamber
 function flux_convection_top(f,u,bnode,data)
-    if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
+    if bnode.region==Γ_top_cat
         (;iT,iTw,X0,uc_h,Nu)=data
         # mean temperature
         Tglass = u[iTw]
@@ -298,7 +297,7 @@ end
 
 # convective heat flux exiting upper window surface
 function flux_convection_window_top(f,u,bnode,data)
-    if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
+    if bnode.region==Γ_top_cat
         (;iT,iTw,Tamb,k_nat_conv)=data
         # local quartz window temperature
         Tglass = u[iTw]
@@ -309,7 +308,7 @@ end
 
 # emission heat flux exiting upper window surface
 function flux_radiation_window_top(f,u,bnode,data)
-    if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
+    if bnode.region==Γ_top_cat
         (;iT,uc_window,iTw)=data
         # local quartz window temperature
         Tglass = u[iTw]
@@ -493,7 +492,7 @@ function flux_abs_bottom(f,u,bnode,data)
 end
 
 function flux_enthalpy_top(f,u,bnode,data)
-    if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
+    if bnode.region==Γ_top_cat
         
 		(;iT,Fluids,u0,X0,pn,Tn,Tamb) = data
 		ng=ngas(data)
@@ -532,13 +531,15 @@ function flux_enthalpy_bottom(f,u,bnode,data)
 end
 
 function flux_enthalpy_reaction(f,u,node,data)
+
+
     
     if node.region == 2 && data.isreactive # catalyst layer
 		(;iT,Fluids,kinpar,lcats) = data
 		(;nuij,rni) = kinpar
         ng=ngas(data)
 		
-		pi = u[1:ng]./ufac"bar"
+		pi = u[1:ng]
 		# negative sign: sign convention of VoronoiFVM: source term < 0 
 		# unit conversion factor needs to be applied to Xu&Froment 1989 (mol/(hr*g))
 		# RR = -lcats*ri(kinpar,u[iT],pi)
@@ -555,12 +556,15 @@ function flux_enthalpy_reaction(f,u,node,data)
 		
         DHi = 0.0
         RR_ = 0.0
-        if kinpar == XuFroment1989
+        if kinpar == XuFroment
             DHi = -kinpar.ΔHi[:R2] # reaction is written in the reverse direction
 			# unit conversion factor, needs to be applied to Xu&Froment 1989
-            RR_ = RR[rni[:R2]]*ufac"mol/(hr*g)" 
+            RR_ = RR[rni[:R2]]
         elseif kinpar == S3P
             DHi = -kinpar.ΔHi[:R1] # reaction is written in the reverse direction
+            RR_ = RR[rni[:R1]]
+        elseif kinpar == Wolf_rWGS
+            DHi = kinpar.ΔHi[:R1] # reaction is written in the reverse direction
             RR_ = RR[rni[:R1]]
         end
 
@@ -626,24 +630,22 @@ function HeatFluxes_EB_I(sol,grid,sys,data)
     (;iT)=data
 
 
-    Hin=integrate(sys,flux_enthalpy_top,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
-    Hin=sum(Hin)
-
+    Hin=integrate(sys,flux_enthalpy_top,sol; boundary=true)[iT,Γ_top_cat]
+    
     # Qcond_10=integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
     Qconv_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
     # Qcond_20=integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
-    Qconv_20=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
+    #Qconv_20=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
 
     QG_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_cat]
-    QG_02=integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_frit]
+    #QG_02=integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_frit]
 
     QG_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
-    QG_20=integrate(sys,flux_frit,sol; boundary=true)[iT,Γ_top_frit]
+    #QG_20=integrate(sys,flux_frit,sol; boundary=true)[iT,Γ_top_frit]
 
     # EB_top= Hin +QG_01 +QG_02 -QG_10 -QG_20 -Qcond_10 -Qcond_20
-    EB_top= Hin +QG_01 +QG_02 -QG_10 -QG_20 -Qconv_10 -Qconv_20
+    #EB_top= Hin +QG_01 +QG_02 -QG_10 -QG_20 -Qconv_10 -Qconv_20
       
-
     Hout=integrate(sys,flux_enthalpy_bottom,sol; boundary=true)[iT,Γ_bottom]
 
     # Qcond_34=integrate(sys,flux_conduction_bottom,sol; boundary=true)[iT,Γ_bottom]
@@ -655,23 +657,26 @@ function HeatFluxes_EB_I(sol,grid,sys,data)
     Qsides=integrate(sys,side,sol; boundary=true)[iT,[Γ_side_right,Γ_side_back,Γ_side_front,Γ_side_left]]      
     Qsides=sum(Qsides)
 
+    Qbottomrim=integrate(sys,bottom_rim,sol; boundary=true)[iT,Γ_bottom_rim]      
+
     # EB_bot= -Hout -Qcond_34 -QG_34 +QG_43    
 
     # EB = EB_top +EB_bot -Qsides    
     (
         Hin=Hin,
         QG_01=QG_01,
-        QG_02=QG_02,
+        #QG_02=QG_02,
         QG_10=-QG_10,
-        QG_20=-QG_20,
+        #QG_20=-QG_20,
         Qconv_10=-Qconv_10,
-        Qconv_20=-Qconv_20,
+        #Qconv_20=-Qconv_20,
         Hout=-Hout,
         # Qcond_34=-Qcond_34,
         Qconv_34=-Qconv_34,
         QG_34=-QG_34,
         QG_43=QG_43,
-        Qsides=-Qsides
+        Qsides=-Qsides,
+        Qbottomrim=-Qbottomrim
     )
     
 
@@ -687,48 +692,33 @@ function HeatFluxes_EB_II(sol,grid,sys,data)
     # Qemit0 = Atop*uc_window.eps*ph"σ"*Tglass^4
 
     (;iT,uc_window)=data
-    Qconv0=integrate(sys,flux_convection_window_top,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
-    Qconv0=sum(Qconv0)
-    Qemit0=integrate(sys,flux_radiation_window_top,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
-    Qemit0=sum(Qemit0)
-
-    Qin=integrate(sys,flux_in_profile,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
-    Qin=sum(Qin)
+    Qconv0=integrate(sys,flux_convection_window_top,sol; boundary=true)[iT,Γ_top_cat]
+    
+    Qemit0=integrate(sys,flux_radiation_window_top,sol; boundary=true)[iT,Γ_top_cat]
+    
+    Qin=integrate(sys,flux_in_profile,sol; boundary=true)[iT,Γ_top_cat]
+    
     Qrefl0 = uc_window.rho_vis*Qin
 
     Qtrans_10=integrate(sys,flux_transmission_top_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
-    Qtrans_20=integrate(sys,flux_transmission_top_frit,sol; boundary=true)[iT,Γ_top_frit]
-
+    
     # Qcond_10=integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
     Qconv_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
-    # Qcond_20=integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
-    Qconv_20=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
-
+    
     QG_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_cat]
-    QG_02=integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_frit]
-
+    
     QG_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
-    QG_20=integrate(sys,flux_frit,sol; boundary=true)[iT,Γ_top_frit]
-
-
-    # EB_bot = -QG_01 +Qcond_10 +QG_10 -QG_02 +Qcond_20 +QG_20
-    # EB_bot = -QG_01 +Qconv_10 +QG_10 -QG_02 +Qconv_20 +QG_20
-    # EB_top = -Qconv0 -Qemit0 +Qin -Qrefl0 -Qtrans_10 -Qtrans_20
-    # EB = EB_bot + EB_top
+    
 
     (
         QG_01=-QG_01,
         Qconv_10=Qconv_10,
         QG_10=QG_10,
-        QG_02=-QG_02,
-        Qconv_20=Qconv_20,
-        QG_20=QG_20,
         Qconv0=-Qconv0,
         Qemit0=-Qemit0,
         Qin=Qin,
         Qrefl0=-Qrefl0,
         Qtrans_10=-Qtrans_10,
-        Qtrans_20=-Qtrans_20
     )
 
 
@@ -770,56 +760,41 @@ end
 # outer energy balance: also consider transmitted and reflected irradiation, that
 # will not change the inner energy of the system
 function HeatFluxes_EB_IV_outer(sol,grid,sys,data)
-    # (;iT,k_nat_conv,Tglass,Tamb,uc_window)=data
-
+    
     # balance of upper side of window
-    # Atop = sum(areas(sol,sys,grid,data)[[Γ_top_cat,Γ_top_frit]])
-    # Qconv0 = Atop*k_nat_conv*(Tglass-Tamb)
-    # Qemit0 = Atop*uc_window.eps*ph"σ"*Tglass^4
     (;iT,uc_window)=data
 
-    Qconv0=integrate(sys,flux_convection_window_top,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
-    Qconv0=sum(Qconv0)
-    Qemit0=integrate(sys,flux_radiation_window_top,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
-    Qemit0=sum(Qemit0)
-    Qin=integrate(sys,flux_in_profile,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
-    Qin=sum(Qin)
+    Qconv0=integrate(sys,flux_convection_window_top,sol; boundary=true)[iT,Γ_top_cat]
+    
+    Qemit0=integrate(sys,flux_radiation_window_top,sol; boundary=true)[iT,Γ_top_cat]
+    
+    Qin=integrate(sys,flux_in_profile,sol; boundary=true)[iT,Γ_top_cat]
+    
     Qrefl0 = uc_window.rho_vis*Qin
 
     Qtrans_10=integrate(sys,flux_transmission_top_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
-    Qtrans_20=integrate(sys,flux_transmission_top_frit,sol; boundary=true)[iT,Γ_top_frit]
-    # EB_top = -Qconv0 -Qemit0 +Qin -Qrefl0 -Qtrans_10 -Qtrans_20
+    
 
     # balance of lower side of window        
-    # Qcond_10=integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
-    Qconv_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
-    # Qcond_20=integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
-    Qconv_20=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
-
-    QG_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
-    QG_20=integrate(sys,flux_frit,sol; boundary=true)[iT,Γ_top_frit]
-
-    QG_0=integrate(sys,flux_window_underside,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
-    QG_0=sum(QG_0)
-
-    QG_0_IR=integrate(sys,flux_window_underside_IR,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
-    QG_0_IR=sum(QG_0_IR)
-
-    QG_0_vis=integrate(sys,flux_window_underside_vis,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
-    QG_0_vis=sum(QG_0_vis)
-
     
+    Qconv_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
+    
+    QG_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
+    
+    QG_0=integrate(sys,flux_window_underside,sol; boundary=true)[iT,Γ_top_cat]
+    
+    QG_0_IR=integrate(sys,flux_window_underside_IR,sol; boundary=true)[iT,Γ_top_cat]
+    
+    QG_0_vis=integrate(sys,flux_window_underside_vis,sol; boundary=true)[iT,Γ_top_cat]
+        
     (
         Qconv0=-Qconv0,
         Qemit0=-Qemit0,
         Qin=Qin,
         Qrefl0=-Qrefl0,
         Qtrans_10=-Qtrans_10,
-        Qtrans_20=-Qtrans_20,
         Qconv_10=Qconv_10,
-        Qconv_20=Qconv_20,
         QG_10=QG_10,
-        QG_20=QG_20,
         QG_0=-QG_0
     )
 
@@ -832,30 +807,24 @@ function HeatFluxes_EB_IV_inner(sol,grid,sys,data)
 
         
     Qabs_10 = integrate(sys,flux_abs_top_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
-    Qabs_20 = integrate(sys,flux_abs_top_frit,sol; boundary=true)[iT,Γ_top_frit]
-
-    # Qcond_10=integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_cat]
-    Qconv_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
-    # Qcond_20=integrate(sys,flux_conduction_top,sol; boundary=true)[iT,Γ_top_frit]
-    Qconv_20=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_frit]
+    
+        Qconv_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,Γ_top_cat]
+        
 
     # Atop = sum(areas(sol,sys,grid,data)[[Γ_top_cat,Γ_top_frit]])
 
     # Qconv0 = Atop*k_nat_conv*(Tglass-Tamb)
     # Qemit0 = Atop*uc_window.eps*ph"σ"*Tglass^4		
 
-    Qconv0=integrate(sys,flux_convection_window_top,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
-    Qconv0=sum(Qconv0)
-    Qemit0=integrate(sys,flux_radiation_window_top,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
-    Qemit0=sum(Qemit0)
-
+    Qconv0=integrate(sys,flux_convection_window_top,sol; boundary=true)[iT,Γ_top_cat]
+    
+    Qemit0=integrate(sys,flux_radiation_window_top,sol; boundary=true)[iT,Γ_top_cat]
+    
     (
         Qconv0=-Qconv0,
         Qconv_10=Qconv_10,
-        Qconv_20=Qconv_20,
         Qemit0=-2*Qemit0,
         Qabs_10=Qabs_10,
-        Qabs_20=Qabs_20
     )
 
 end
@@ -898,24 +867,26 @@ function HeatFluxes_EB_VI(sol,grid,sys,data)
 
     # Qconv0 = Atop*k_nat_conv*(Tglass-Tamb)
     # Qemit0 = Atop*uc_window.eps*ph"σ"*Tglass^4
-    Qconv0=integrate(sys,flux_convection_window_top,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
-    Qconv0=sum(Qconv0)
-    Qemit0=integrate(sys,flux_radiation_window_top,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
-    Qemit0=sum(Qemit0)
-
-    Qin=integrate(sys,flux_in_profile,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
-    Qin=sum(Qin)
+    Qconv0=integrate(sys,flux_convection_window_top,sol; boundary=true)[iT,Γ_top_cat]
+    
+    Qemit0=integrate(sys,flux_radiation_window_top,sol; boundary=true)[iT,Γ_top_cat]
+    
+    Qin=integrate(sys,flux_in_profile,sol; boundary=true)[iT,Γ_top_cat]
+    
     Qrefl0 = uc_window.rho_vis*Qin
     Qtrans_10=integrate(sys,flux_transmission_top_catalyst_layer,sol; boundary=true)[iT,Γ_top_cat]
-    Qtrans_20=integrate(sys,flux_transmission_top_frit,sol; boundary=true)[iT,Γ_top_frit]
+    
 
     #### side boundary (including enthalpy fluxes) ####
-    Hin=integrate(sys,flux_enthalpy_top,sol; boundary=true)[iT,[Γ_top_cat,Γ_top_frit]]
-    Hin=sum(Hin)
+    Hin=integrate(sys,flux_enthalpy_top,sol; boundary=true)[iT,Γ_top_cat]
+    
     Hout=integrate(sys,flux_enthalpy_bottom,sol; boundary=true)[iT,Γ_bottom]
 
     Qsides=integrate(sys,side,sol; boundary=true)[iT,[Γ_side_right,Γ_side_back,Γ_side_front,Γ_side_left]]
     Qsides=sum(Qsides)
+
+    #### bottom rim boundary ####
+    Qbottomrim=integrate(sys,bottom_rim,sol; boundary=true)[iT,Γ_bottom_rim]      
 
     #### bottom boundarty ####
     # Abot = areas(sol,sys,grid,data)[Γ_bottom]
@@ -941,19 +912,19 @@ function HeatFluxes_EB_VI(sol,grid,sys,data)
         Qemit0=Qemit0,
         Qrefl0=Qrefl0,
         Qtrans_10=Qtrans_10,
-        Qtrans_20=Qtrans_20,
         Qsides=Qsides,
         DH=DH,
         DH_reaction=DH_reaction,
         Qconv4=Qconv4,
-        Qemit4=Qemit4
+        Qemit4=Qemit4,
+        Qbottomrim=Qbottomrim
     )
 end
 
 
 
 function HeatFluxes_EB_VI_plot(heatflows)
-    (;Qin,Qconv0,Qemit0,Qrefl0,Qtrans_10,Qtrans_20,Qsides,DH,DH_reaction,Qconv4,Qemit4) = heatflows
+    (;Qin,Qconv0,Qemit0,Qrefl0,Qtrans_10,Qsides,DH,DH_reaction,Qconv4,Qemit4,Qbottomrim) = heatflows
 
     DH_sens = DH-DH_reaction
 
@@ -963,19 +934,20 @@ function HeatFluxes_EB_VI_plot(heatflows)
 
     labelsx = [x*": "* l for (l,x) in zip(labels,x)]
 
-    flows=[(Qtrans_10+Qtrans_20),Qrefl0,Qconv0,Qemit0,Qsides,Qconv4,Qemit4,DH_sens,DH_reaction]
+    flows=[Qtrans_10,Qrefl0,Qconv0,Qemit0,Qsides,(Qconv4+Qbottomrim),Qemit4,DH_sens,DH_reaction]
 
     y = flows / Qin * 100.0
         
     p=Plots.plot(size=(400,300), yguide="Heat flow contribution / %", grid=false, 
-    top_margin=5mm)
+    top_margin=5mm, background=nothing)
     Plots.plot!(p, permutedims(x), permutedims(y); st=:bar, label=permutedims(labelsx))    
     Plots.annotate!(p, x, y, round.(y, digits=1), :bottom)
     Plots.annotate!(p, 12.0, 22.5,
         "Σ flows = "*string(round(sum(flows)/Qin*100.0,digits=2))*" %", :right
         )
     # Plots.savefig(p,"img/out/HeatFlowDistr.svg")
-    Plots.savefig(p,"img/out/HeatFlows_baseCase230607.pdf")
+    #Plots.savefig(p,"img/out/HeatFlows_baseCase230607.pdf")
+    Plots.savefig(p,"img/out/230904_poster/HeatFlows_230905.svg")
 
 end
 

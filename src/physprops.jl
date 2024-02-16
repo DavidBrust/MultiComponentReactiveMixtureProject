@@ -18,8 +18,10 @@ abstract type AbstractFluidProps end
 Base.@kwdef struct FluidProps
 	name::String="Air"
 	MW::Float64=28.96*ufac"g/mol"
-    # standard enthalpy of formation taken from Aspen Plus V10, for ideal gas at 25 °C and 1 atm pressure (1.01325 bar) 
+    # Standard enthalpy of formation taken from Aspen Plus V10, for ideal gas at 25 °C and 1 atm pressure (1.01325 bar) 
     ΔHform::Float64=0.0*ufac"kJ/mol"
+	# Reference temperature for (25 °C) for calcualtion of species enthalpies
+	Tref::Float64=298.15*ufac"K"
     # Group contributions for the diffusion volumes in the Fuller method from VDI heat atlas 2010, D1 Table 9 (p.150)
     ΔvF::Float64=19.7 
 	HeatCap::PropsCoeffs=PropsCoeffs(
@@ -383,9 +385,9 @@ end
 #
 # By default, ngas(data) returns data.ng. For the ModelData type from FixAllocations
 # it uses the definition from the notebook
-function ngas(data::Any)
-    data.ng
-end
+# function ngas(data::Any)
+#     data.ng
+# end
 
 
 #combined function returning mixture dynamic viscosity as well as thermal conductivity
@@ -396,48 +398,43 @@ end
 # Poling BE, Prausnitz JM, O’Connell JP (2001) The properties of gases and liquids, 5th ed. McGraw-Hill, New York
 function dynvisc_thermcond_mix(data, T, x)
     ng = ngas(data)
-    Fluid = data.Fluids
+    # Fluid = data.Fluids
+    (;Fluids, constant_properties) = data
 
     #  !!!ALLOC for types stubility & correctness
     #  !!!ALLOC initialize with zero(eltype) instead of 0.0
     mumix=zero(eltype(x))
     lambdamix=zero(eltype(x))
-    # mu = zeros(Float64, ng)
-    # lambda = zeros(Float64, ng)
-    # M = zeros(Float64, ng)
-
     
-    # !!!ALLOC Use MVectors with static size information instef of Vector
-    mu=MVector{ngas(data),eltype(x)}(undef)
-    lambda=MVector{ngas(data),eltype(x)}(undef)
-    M=MVector{ngas(data),eltype(x)}(undef)
+    if constant_properties
+        mumix += 2.0e-5*ufac"Pa*s"
+        lambdamix += 2.0e-2*ufac"W/(m*K)"
+    else
+        # !!!ALLOC Use MVectors with static size information instead of Vector
+        mu=MVector{ngas(data),eltype(x)}(undef)
+        lambda=MVector{ngas(data),eltype(x)}(undef)
+        M=MVector{ngas(data),eltype(x)}(undef)
 
-    for i=1:ngas(data)
-        mu[i] = dynvisc_gas(Fluid[i], T)
-        lambda[i] = thermcond_gas(Fluid[i], T)
-        M[i] = data.Fluids[i].MW
-    end
-    for i=1:ng
-        sumyFij = zero(T)
-        for j=1:ng
-            Fij = (1+(mu[i]/mu[j])^0.5*(M[j]/M[i])^0.25)^2 / sqrt(8*(1+M[i]/M[j]))
-            sumyFij += x[j]*Fij
+        for i=1:ngas(data)
+            mu[i] = dynvisc_gas(Fluids[i], T)
+            lambda[i] = thermcond_gas(Fluids[i], T)
+            M[i] = Fluids[i].MW
         end
-        if x[i] > 0
-            mumix += x[i] * mu[i] / sumyFij
-            lambdamix += x[i] * lambda[i] / sumyFij
+        for i=1:ng
+            sumyFij = zero(T)
+            for j=1:ng
+                Fij = (1+(mu[i]/mu[j])^0.5*(M[j]/M[i])^0.25)^2 / sqrt(8*(1+M[i]/M[j]))
+                sumyFij += x[j]*Fij
+            end
+            if x[i] > 0
+                mumix += x[i] * mu[i] / sumyFij
+                lambdamix += x[i] * lambda[i] / sumyFij
+            end
         end
     end
-    mumix, lambdamix
+
+    return  mumix, lambdamix
 end
-
-
-# function dynvisc_gas!(muf, i, Fluid, T)
-# 	(;A,B,C,D,E) = Fluid.DynVisc
-# 	# VDI heat atlas 2010 D3.1 Equation (3)
-# 	muf[i] = A+B*T+C*T^2+D*T^3+E*T^4 * ufac"Pa*s"
-#     nothing
-# end
 
 
 
@@ -453,91 +450,113 @@ end
 
 
 #Molar heat capacity of ideal gases, J/(mol*K)
-function heatcap_gas(Fluid, T)
+function heatcap_gas(Fluid::FluidProps, T)
 	(;A,B,C,D,E,F,G) = Fluid.HeatCap
 	# VDI heat atlas 2010 D3.1 Equation (10)
-	T_ApT = (T/(A+T))
+    T_ApT = zero(eltype(T))
+	T_ApT += (T/(A+T))
 	(B+(C-B)*T_ApT^2*(1- (A/(A+T))*(D+E*T_ApT+F*T_ApT^2+G*T_ApT^3) ) ) * ph"R" * ufac"J/(mol*K)"
 end
 
 function heatcap_mix(Fluids::AbstractVector, T, x)
     cpmix = zero(eltype(x))
     ng=length(x)
-    for i=1:ng
+    @inbounds for i=1:ng
         cpmix += x[i] * heatcap_gas(Fluids[i], T)
     end
     cpmix
 end
 
-# function heatcap_gas!(cf, i, Fluid, T)
-# 	(;A,B,C,D,E,F,G) = Fluid.HeatCap
-# 	# VDI heat atlas 2010 D3.1 Equation (10)
-# 	T_ApT = (T/(A+T))
-# 	cf[i] = (B+(C-B)*T_ApT^2*(1- (A/(A+T))*(D+E*T_ApT+F*T_ApT^2+G*T_ApT^3) ) ) * ph"R" * ufac"J/(mol*K)"
-# 	nothing
-# end
+function heatcap_mix(data, T, x)
+    (;Fluids,constant_properties) = data
+    cpmix = zero(eltype(x))
+    
+    if constant_properties
+        cpmix += 30.0*ufac"J/(mol*K)"
+    else
+        ng=ngas(data)    
+        @inbounds for i=1:ng
+            cpmix += x[i] * heatcap_gas(Fluids[i], T)
+        end
+    end
+    return cpmix
+end
 
-# Molar enthalpy of ideal gases, J/(mol*K)
+
+
+# Molar enthalpy of ideal gases, J/mol
 # calculation according to VDI heat atlas 2010 D1.6 Equation (66), p. 140
 # use standard conditions (T=25°C, p=1 atm) as reference state
 # set enthalpy at reference state to standard enthalpy of formation
 function enthalpy_gas(Fluid::FluidProps, T)
-    # h = zero(eltype(T))
-    (;ΔHform)=Fluid
-    Tref = 298.15*ufac"K"
-    # cp_Tref = heatcap_gas(Fluid, Tref)
-    # cp_T = heatcap_gas(Fluid, T)
-    #cp(T) = heatcap_gas(Fluid, T)
-	
-    # h(T) = h_form(T_ref) + cp_bar*(T-T_ref)
-    ΔHform + 0.5*(heatcap_gas(Fluid, T)+heatcap_gas(Fluid, Tref))*(T-Tref)
+	hgas = zero(eltype(T))
+    (;ΔHform, Tref)=Fluid
+    # Tref = 298.15*ufac"K"
+    hgas += ΔHform + 0.5*(heatcap_gas(Fluid, T)+heatcap_gas(Fluid, Tref))*(T-Tref)
+	# hgas += 0.5*(heatcap_gas(Fluid, T)+heatcap_gas(Fluid, Tref))*(T-Tref)
+	return hgas
+	# return 0.5*(heatcap_gas(Fluid, T)+heatcap_gas(Fluid, Tref))*(T-Tref)
 end
 
-# ideal gas mixture enthalpy
-# calculation according to VDI heat atlas 2010 D1.6 Equation (67), p. 140
-# function enthalpy_mix(Fluids, T, x)
-#     hmix = zero(eltype(x))
-#     ng=length(x)
-#     for i=1:ng
-#         hmix += x[i] * enthalpy_gas(Fluids[i], T)
-#     end
-#     hmix
-# end
+# gas species enthalpy neglecting enthalpy of formation
+function enthalpy_gas_thermal(Fluid::FluidProps, T)
+    (;Tref)=Fluid
+    return 0.5*(heatcap_gas(Fluid, T)+heatcap_gas(Fluid, Tref))*(T-Tref)	
+end
 
-function enthalpy_mix(Fluids::AbstractVector, T, x)
+function enthalpy_mix(data, T, x)
+    (;Fluids,constant_properties) = data
     hmix = zero(eltype(x))
-    ng=length(x)
-    for i=1:ng
-        hmix += x[i] * enthalpy_gas(Fluids[i], T)
+	
+    if constant_properties
+		# !!! DEBUG !!!
+       	hmix += 10.0*ufac"kJ/mol"
+		# @inbounds for i=1:ngas(data)
+        #     # @inline hmix += x[i] * heatcap_mix(data, T, x) *(T-298.15)
+		# 	@inline hmix += x[i] * (heatcap_gas(Fluids[i], T) *(T-298.15) )
+		# 	# @inline hmix += x[i] * (Fluids[i].ΔHform + heatcap_gas(Fluids[i], T) *(T-298.15) ) # bad convergence
+			
+        # end
+    else
+        ng=ngas(data)    
+        @inbounds for i=1:ng
+            hmix += x[i] * enthalpy_gas(Fluids[i], T)
+        end
     end
-    hmix
+    return hmix
 end
 
 
 
-function heatcap_mix!(cmix, cf, Fluids, T, x)
-    cmix[1] = zero(eltype(cmix))
-    ng=length(x)
-    for i=1:ng
-        heatcap_gas!(cf, i, Fluids[i], T)
-        cmix[1] += x[i] * cf[i]
-    end
-    nothing
+
+function molarweight_mix(X,data)
+	mmix = zero(eltype(X))
+	@inbounds for i=1:ngas(data)
+		mmix += X[i]*data.m[i]
+	end
+	mmix
 end
 
-function molarweight_mix(Fluids, x)
-    # wmix =0
-    wmix=zero(eltype(x))
-    ng=length(x)
-    for i=1:ng
-        wmix += x[i] * Fluids[i].MW
-    end
-    wmix
+function molarweight_mix(u::VoronoiFVM.BNodeUnknowns,data)
+	mmix = zero(eltype(u))
+	@inbounds for i=1:ngas(data)
+		mmix += u[i]*data.m[i]
+	end
+	mmix
 end
 
-function density_idealgas(Fluids, T, p, x)
+function molarweight_mix(u::VoronoiFVM.NodeUnknowns,data)
+	mmix = zero(eltype(u))
+	@inbounds for i=1:ngas(data)
+		mmix += u[i]*data.m[i]
+	end
+	mmix
+end
+
+
+function density_idealgas(T, p, x, data)
 	#p/(ph"R"*T)*data.MW*ufac"kg/m^3"
-    p/(ph"R"*T)*molarweight_mix(Fluids, x)*ufac"kg/m^3"
+    p/(ph"R"*T)*molarweight_mix(x,data)*ufac"kg/m^3"
 end
 
 function binary_diff_coeff_gas(gas1, gas2, T, p)
