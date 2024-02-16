@@ -398,7 +398,7 @@ function flux_interpol(flux)
 end
 
 
-const itp12 = flux_interpol(70.0*ufac"kW/m^2")
+# const itp12 = flux_interpol(70.0*ufac"kW/m^2")
 
 @kwdef mutable struct ReactorData{NG, KP}
 	dim::Int64 = 2
@@ -487,7 +487,7 @@ const itp12 = flux_interpol(70.0*ufac"kW/m^2")
 	shell_h::Float64=20*ufac"mm" # height of heat transfer area adjancent to domain boundary 
 	k_nat_conv::Float64=20.0*ufac"W/(m^2*K)" #17.5*ufac"W/(m^2*K)" # natural+forced convection heat transfer coeff.
 	nom_flux::Float64 = 70.0*ufac"kW/m^2" # nominal irradiation flux density / kW/m^2
-	FluxIntp::typeof(itp12)=itp12
+	# FluxIntp::typeof(itp12)=itp12
 	# VitraPor data
 	dp::Float64=200.0*ufac"μm" # average pore size, por class 0
 	poros::Float64=0.33 # porosity, VitraPor sintetered filter class 0
@@ -503,11 +503,11 @@ const itp12 = flux_interpol(70.0*ufac"kW/m^2")
 	lambda_window::Float64=1.38*ufac"W/(m*K)"
 	lambda_Al::Float64=235.0*ufac"W/(m*K)"
 
-    function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,FluxIntp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+    function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
         KP = MultiComponentReactiveMixtureProject.KinData{nreac(kinpar)}
-		FluxIntp = flux_interpol(nom_flux)
+		# FluxIntp = flux_interpol(nom_flux)
 		# flux_inner, flux_outer = flux_inner_outer(nom_flux)
-        new{ng,KP}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,FluxIntp,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+        new{ng,KP}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
 
     end
 end
@@ -578,18 +578,18 @@ end
 
 function PTR_init_system(dim, grid, data::ReactorData)
 
-	(;p,ip,Tamb,iT,iTw,iTp,ibf,inlet_boundaries,irradiated_boundaries,outlet_boundaries,catalyst_regions,FluxIntp,X0,solve_T_equation)=data
+	(;p,ip,Tamb,iT,iTw,iTp,ibf,inlet_boundaries,irradiated_boundaries,outlet_boundaries,catalyst_regions,X0,solve_T_equation,nom_flux)=data
 	ng=ngas(data)
 
 	sys=VoronoiFVM.System( 	grid;
 							data=data,
-							flux=MultiComponentReactiveMixtureProject.DMS_flux,
-							reaction=MultiComponentReactiveMixtureProject.DMS_reaction,
-							storage=MultiComponentReactiveMixtureProject.DMS_storage,
-							bcondition=MultiComponentReactiveMixtureProject.PTR_bcond,
-							bflux=MultiComponentReactiveMixtureProject.PTR_bflux,
-							bstorage=MultiComponentReactiveMixtureProject.PTR_bstorage,
-							boutflow=MultiComponentReactiveMixtureProject.DMS_boutflow,
+							flux=DMS_flux,
+							reaction=DMS_reaction,
+							storage=DMS_storage,
+							bcondition=PTR_bcond,
+							bflux=PTR_bflux,
+							bstorage=PTR_bstorage,
+							boutflow=DMS_boutflow,
 							outflowboundaries=outlet_boundaries,
 							assembly=:edgewise,
 							)
@@ -618,6 +618,8 @@ function PTR_init_system(dim, grid, data::ReactorData)
 	if solve_T_equation
 		inival[[iT,iTw,iTp],:] .= Tamb
 		if dim == 3
+
+            FluxIntp = flux_interpol(nom_flux)
 			function d3tod2(a,b)
 				a[1]=b[1]
 				a[2]=b[2]

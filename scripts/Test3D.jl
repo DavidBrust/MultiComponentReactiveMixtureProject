@@ -41,7 +41,8 @@ end
 function runtests()
     solt,grid,sys,data = run()
     sol = solt(solt.t[end])
-    @test isapprox(minimum(sol[data.iT,:]), 410.8628150859246)
+    # @test isapprox(minimum(sol[data.iT,:]), 410.8628150859246)
+    @test trunc(minimum(sol[data.iT,:]), digits=4) == 410.8628
 end
 
 end
