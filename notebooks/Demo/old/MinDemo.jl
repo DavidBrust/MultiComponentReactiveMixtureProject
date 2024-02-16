@@ -291,18 +291,18 @@ sol = solt(t);
 # ╔═╡ e29848dd-d787-438e-9c32-e9c2136aec4f
 # ╠═╡ skip_as_script = true
 #=╠═╡
-MultiComponentReactiveMixtureProject.DMS_checkinout(sol,sys,data)
+MultiComponentReactiveMixtureProject._checkinout(sol,sys,data)
   ╠═╡ =#
 
 # ╔═╡ 862bf54f-8700-4956-9024-07fdf809c922
 #=╠═╡
-MultiComponentReactiveMixtureProject.DMS_print_summary(sol,grid,sys,data)
+MultiComponentReactiveMixtureProject.Print_summary(sol,grid,sys,data)
   ╠═╡ =#
 
 # ╔═╡ 06ec3b97-5532-4a86-9abb-61b91e94b4e7
 #=╠═╡
 if dim==3
-	MultiComponentReactiveMixtureProject.PTR_writeSol3D(sol,grid,data;desc="MinDemo")
+	MultiComponentReactiveMixtureProject.WriteSolution3D(sol,grid,data;desc="MinDemo")
 end
   ╠═╡ =#
 

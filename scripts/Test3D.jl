@@ -4,7 +4,7 @@ using MultiComponentReactiveMixtureProject, VoronoiFVM, LessUnitful, Pardiso, Ex
 
 function run(;dim=3, times=[0,20.0], nref=0)
 
-    grid, inlet_boundaries, irradiated_boundaries, outlet_boundaries, side_boundaries, catalyst_regions = grid_boundaries_regions(dim,nref=nref)
+    grid, inlet_boundaries, irradiated_boundaries, outlet_boundaries, side_boundaries, catalyst_regions = PTR_grid_boundaries_regions(dim,nref=nref)
 
     data=ReactorData(
         dim=dim,
@@ -23,7 +23,7 @@ function run(;dim=3, times=[0,20.0], nref=0)
         rhos=5.0*ufac"kg/m^3" # set solid density to low value to reduce thermal inertia of system
     )
 
-    inival,sys = init_system(dim, grid, data)
+    inival,sys = PTR_init_system(dim, grid, data)
 
     if dim == 2
         control = SolverControl(nothing, sys)

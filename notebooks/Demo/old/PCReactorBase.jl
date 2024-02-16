@@ -59,7 +59,7 @@ end
   ╠═╡ =#
 
 # ╔═╡ bc811695-8394-4c35-8ad6-25856fa29183
-function grid_boundaries_regions(dim)
+function PTR_grid_boundaries_regions(dim)
 	Ω_catalyst = 2
 	W=16
 	H=0.5
@@ -123,7 +123,7 @@ end;
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	grid, inb,irrb,outb,sb,catr =  grid_boundaries_regions(dim)
+	grid, inb,irrb,outb,sb,catr =  PTR_grid_boundaries_regions(dim)
 	if dim == 2
 		gridplot(grid, resolution=(660,300), aspect=4.0, zoom=2.8)
 	else
@@ -153,7 +153,7 @@ function PTR_base(dim; times=nothing, verbose="aen")
 	
 	times = isnothing(times) ? [0,15.0] : times
 
-	grid, inb,irrb,outb,sb,catr =  grid_boundaries_regions(dim)
+	grid, inb,irrb,outb,sb,catr =  PTR_grid_boundaries_regions(dim)
 	
 	data=ReactorData(
 		dim=dim,
@@ -360,13 +360,13 @@ end
 
 # ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
 #=╠═╡
-MultiComponentReactiveMixtureProject.DMS_print_summary(sol,grid,sys,data)
+MultiComponentReactiveMixtureProject.Print_summary(sol,grid,sys,data)
   ╠═╡ =#
 
 # ╔═╡ 3207839f-48a9-49b6-9861-e5e74bc593a4
 # ╠═╡ skip_as_script = true
 #=╠═╡
-MultiComponentReactiveMixtureProject.DMS_print_summary_ext(sol,sys,data)
+MultiComponentReactiveMixtureProject.Print_summary_ext(sol,sys,data)
   ╠═╡ =#
 
 # ╔═╡ 589feab3-f94d-4f32-9526-a41cf9a5e439
@@ -406,7 +406,7 @@ let
 		function _2to1(a,b)
 			a[1]=b[2]
 		end
-		_grid,_,_,_,_,_ = grid_boundaries_regions(dim)
+		_grid,_,_,_,_,_ = PTR_grid_boundaries_regions(dim)
 		bfacemask!(_grid, [0.0,0.0].*ufac"cm",[0.0,0.5].*ufac"cm",8)
 		grid1D = subgrid(_grid, [8]; boundary = true, transform = _2to1)
 		sol1D=view(sol[iT, :], grid1D)
@@ -455,7 +455,7 @@ let
 		function _2to1(a,b)
 			a[1]=b[2]
 		end
-		_grid,_,_,_,_,_ = grid_boundaries_regions(dim)
+		_grid,_,_,_,_,_ = PTR_grid_boundaries_regions(dim)
 		max_bfr = maximum(grid[BFaceRegions])
 		bfacemask!(_grid, [3.0,0.0].*ufac"cm",[3.0,0.5].*ufac"cm",max_bfr+1)
 	    grid1D = subgrid(_grid, [max_bfr+1]; boundary = true, transform = _2to1)
@@ -480,7 +480,7 @@ end
 let
 	(;ip,p,gn,gni) = data
 	ng=ngas(data)
-	grid,_,_,_,_,_ = grid_boundaries_regions(dim)
+	grid,_,_,_,_,_ = PTR_grid_boundaries_regions(dim)
 	max_bfr = maximum(grid[BFaceRegions])
 	bfacemask!(grid, [3.0,0.0].*ufac"cm",[3.0,0.5].*ufac"cm",max_bfr+1)
 	function _2to1(a,b)

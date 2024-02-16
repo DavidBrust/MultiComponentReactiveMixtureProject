@@ -96,7 +96,7 @@ $X_2 \rightarrow 3 X_1$
 function calce(data,nref=0)
 	
 	grid = grid1D(nref)
-	inival,sys = init_system(1, grid, data)
+	inival,sys = PTR_init_system(1, grid, data)
 	
 	control = SolverControl(nothing, sys;)
 		control.handle_exceptions=true

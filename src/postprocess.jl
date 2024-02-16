@@ -4,7 +4,7 @@ function flux_window_underside(f,u,bnode,data)
     # if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
     if bnode.region in irradiated_boundaries        
 
-        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+        G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
 
         f[iT] = G1_bot_vis + G1_bot_IR
     end
@@ -21,7 +21,7 @@ function flux_catalyst_layer(f,u,bnode,data)
         rho2_IR=uc_cat.rho_IR
         eps2=uc_cat.eps
 
-        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+        G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
 
         G2_vis = rho2_vis*G1_bot_vis
 
@@ -255,4 +255,128 @@ function BoundaryFlows_Integrals(solt, sys, data)
 		I_reac=I_reac
 	)
 
+end
+
+@doc raw"""
+Helper function to calculate flux integrals over in- and outflow boundaries in 
+    the Darcy-Maxwell-Stefan (DMS) model.
+"""
+function _checkinout(sol,sys,data)	
+	(;inlet_boundaries,outlet_boundaries)=data
+	tfact=TestFunctionFactory(sys)
+
+	tf_in=testfunction(tfact,outlet_boundaries,inlet_boundaries)
+	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
+	
+	(;in=integrate(sys,tf_in,sol),out=integrate(sys,tf_out,sol) )
+end
+
+@doc raw"""
+Helper function to print a summary based on calculated flux integrals over in- 
+    and outflow boundaries in the Darcy-Maxwell-Stefan (DMS) model.
+"""
+function Print_summary(sol,grid,sys,data)
+    (;ip,m,mfluxin,mmix0,X0,ng,inlet_boundaries) = data
+    in_,out_=_checkinout(sol,sys,data)
+
+    nout(i) = out_[i]/m[i]
+    local Ain = 0.0
+	for boundary in inlet_boundaries
+		Ain += bareas(boundary,sys,grid)
+	end
+    nin(i) = mfluxin/mmix0*Ain*X0[i]
+
+    RI=sum(integrate(sys,sys.physics.reaction,sol),dims=2) # reaction integral
+
+    println("Total mass inflows and outflows:")
+    @printf "IN: %2.6e \t OUT: %2.6e \t REACT: %2.6e kg/hr \nSUM: %2.6e kg/hr\n\n" in_[ip]/ufac"kg/hr" out_[ip]/ufac"kg/hr" RI[ip]/ufac"kg/hr" (in_[ip]+out_[ip]+RI[ip])/ufac"kg/hr"
+
+    println("Molar species inflows, outflows and reaction integrals:")
+    for i = 1:ng
+        @printf "%i\tIN: %2.6e \t OUT: %2.6e \t REACT: %2.6e mol/hr \n\tSUM: %2.6e mol/hr\n" i nin(i)/ufac"mol/hr" nout(i)/ufac"mol/hr" -RI[i]/m[i]/ufac"mol/hr" (nin(i)+nout(i)-RI[i]/m[i])/ufac"mol/hr"
+    end
+end
+@doc raw"""
+Helper function to print an extended summary based on calculated flux integrals over in- 
+    and outflow boundaries in the Darcy-Maxwell-Stefan (DMS) model.
+"""
+function Print_summary_ext(solt,grid,sys,data)
+
+	t = solt.t[end]
+	sol = solt(t)
+
+	(;gn,gni,m,nflowin,X0) = data
+	ng=ngas(data)
+	in_,out_ = _checkinout(sol,sys,data)
+
+	nout(i) = -out_[i]/m[i]
+	nin(i) = nflowin*X0[i]
+	nout_dry = 0.0
+	
+	println("Molar species in- & outflows:")
+	for i = 1:ng
+		@printf "%s\tIN: %2.2f\t OUT: %2.2f mol/hr\n" gn[i] nin(i)/ufac"mol/hr" nout(i)/ufac"mol/hr"
+		if i != gni[:H2O] 
+			nout_dry += nout(i)
+		end
+	end
+
+
+	println("\nDry Product Molar Fractions:")
+	for i=1:ng
+		if i != gni[:H2O] && i != gni[:N2] 
+		@printf "%3s: %2.1f%%\n" gn[i] nout(i)/nout_dry*100
+		end
+	end
+	
+	println("\nConversion:")
+	for i in(gni[:CO2],gni[:H2])
+		@printf "X%4s: %2.2f\n" gn[i] (nin(i)-nout(i))/nin(i)
+	end
+	println("\nYield & Selectivity (CO2 based):")
+	for i in(gni[:CO],gni[:CH4])
+		@printf "Y%4s: %2.2f \tS%4s: %2.2f\n" gn[i] nout(i)/nin(gni[:CO2]) gn[i] nout(i)/(nin(gni[:CO2])-nout(gni[:CO2]))
+	end
+
+	fluxes = HeatFluxes_EB_I(t,solt,grid,sys,data)
+	ns = keys(fluxes)
+	vs = values(fluxes)
+	#QG_01,	QG_10, H_thermal, H_reaction, Qconv_10,	Qconv_34, QG_34, QG_43,	Qsides = fluxes
+	println("\nEnergy Balancing [W]:")
+	for i=1:length(fluxes)
+		@printf "%s:\t%.2f \n" String(ns[i]) vs[i]
+	end
+	@printf "Sum:\t\t%.6f \n" sum(fluxes)
+
+end
+
+@doc raw"""
+Helper function to export to VTK format for visualization 3D solutions of the
+    photo thermal catalytic reactor (PTR) model. Exported are the pressure, 
+    species molar fractions and temperature fields in the 3D domain.
+"""
+function WriteSolution3D(sol,grid,data;desc="")
+    (;dim,ip,iT,ibf,gn,nflowin,solve_T_equation) = data
+    ng=ngas(data)
+    _t = now()
+    tm = "$(hour(_t))_$(minute(_t))_$(second(_t))"
+    desc = isempty(desc) ? desc : "_"*desc
+    path = "../data/out/$(Date(_t))/$(tm)$(desc)"
+    try
+        mkpath(path)
+    catch e
+        println("Directory " * path * " already exists.")
+    end
+    #mkdir(string(Date(_t)))
+    
+    VoronoiFVM.writeVTK("$(path)/$(tm)_3D_ptot_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[ip,:])
+	if solve_T_equation
+        VoronoiFVM.writeVTK("$(path)/$(tm)_3D_T_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[iT,:] .-273.15)
+    end
+    for i=1:ng
+        VoronoiFVM.writeVTK("$(path)/$(tm)_3D_x$(gn[i])_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[i,:])
+    end
+	if dim == 3
+		VoronoiFVM.writeVTK("$(path)/$(tm)_3D_irradiation_flux_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[ibf,:])
+	end
 end

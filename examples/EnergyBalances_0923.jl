@@ -25,7 +25,7 @@ function flux_in_profile(f,u,bnode,data)
 end
 
 
-# function radiosity_window(f,u,bnode,data)
+# function PTR_radiosity_window(f,u,bnode,data)
 #     (;iT,FluxIntp,FluxEmbed,Tglass,uc_window,uc_cat,uc_frit,vf_uc_window_cat,vf_uc_window_frit)=data
 #     # irradiation exchange between quartz window (1), cat surface (2) & frit surface (3)
 #     # window properties (1)
@@ -57,7 +57,7 @@ end
 #     return G1_bot_vis,G1_bot_IR
 # end
 
-function radiosity_window(f,u,bnode,data)
+function PTR_radiosity_window(f,u,bnode,data)
     (;iT,iTw,FluxIntp,FluxEmbed,uc_window,uc_cat,uc_frit)=data
     # irradiation exchange between quartz window (1), cat surface (2) 
     # window properties (1)
@@ -89,7 +89,7 @@ function flux_window_underside(f,u,bnode,data)
     if bnode.region==Γ_top_cat
         (;iT)=data
 
-        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+        G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
 
         f[iT] = G1_bot_vis + G1_bot_IR
     end
@@ -100,7 +100,7 @@ function flux_window_underside_IR(f,u,bnode,data)
     if bnode.region==Γ_top_cat
         (;iT)=data
 
-        _, G1_bot_IR = radiosity_window(f,u,bnode,data)
+        _, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
 
         f[iT] = G1_bot_IR
     end
@@ -111,7 +111,7 @@ function flux_window_underside_vis(f,u,bnode,data)
     if bnode.region==Γ_top_cat
         (;iT)=data
 
-        G1_bot_vis, _ = radiosity_window(f,u,bnode,data)
+        G1_bot_vis, _ = PTR_radiosity_window(f,u,bnode,data)
 
         f[iT] = G1_bot_vis
     end
@@ -126,7 +126,7 @@ function flux_catalyst_layer(f,u,bnode,data)
         rho2_IR=uc_cat.rho_IR
         eps2=uc_cat.eps
 
-        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+        G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
 
         G2_vis = rho2_vis*G1_bot_vis
 
@@ -145,7 +145,7 @@ function flux_catalyst_layer_IR(f,u,bnode,data)
         rho2_IR=uc_cat.rho_IR
         eps2=uc_cat.eps
 
-        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+        G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
         
         G2_IR = eps2*ph"σ"*u[iT]^4 + rho2_IR*G1_bot_IR
 
@@ -162,7 +162,7 @@ function flux_catalyst_layer_vis(f,u,bnode,data)
         rho2_IR=uc_cat.rho_IR
         eps2=uc_cat.eps
 
-        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+        G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
         
         G2_vis = rho2_vis*G1_bot_vis
 
@@ -179,7 +179,7 @@ function flux_frit(f,u,bnode,data)
         rho3_IR=uc_frit.rho_IR
         eps3=uc_frit.eps
 
-        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+        G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
 
         G3_vis = rho3_vis*G1_bot_vis
         
@@ -198,7 +198,7 @@ function flux_frit_IR(f,u,bnode,data)
         rho3_IR=uc_frit.rho_IR
         eps3=uc_frit.eps
 
-        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+        G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
        
         G3_IR = eps3*ph"σ"*u[iT]^4 + rho3_IR*G1_bot_IR
         
@@ -215,7 +215,7 @@ function flux_frit_vis(f,u,bnode,data)
         rho3_IR=uc_frit.rho_IR
         eps3=uc_frit.eps
 
-        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+        G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
 
         G3_vis = rho3_vis*G1_bot_vis
                 
@@ -235,7 +235,7 @@ function flux_transmission_top_catalyst_layer(f,u,bnode,data)
         rho2_IR=uc_cat.rho_IR
         eps2=uc_cat.eps
 
-        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+        G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
 
         G2_vis = rho2_vis*G1_bot_vis
 
@@ -261,7 +261,7 @@ function flux_transmission_top_frit(f,u,bnode,data)
         rho3_IR=uc_frit.rho_IR
         eps3=uc_frit.eps
 
-        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+        G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
         
         G3_vis = rho3_vis*G1_bot_vis
 
@@ -435,7 +435,7 @@ function flux_abs_top_catalyst_layer(f,u,bnode,data)
         rho2_IR=uc_cat.rho_IR
         eps2=uc_cat.eps
 
-        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+        G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
 
         G2_vis = rho2_vis*G1_bot_vis		
         
@@ -458,7 +458,7 @@ function flux_abs_top_frit(f,u,bnode,data)
         rho3_IR=uc_frit.rho_IR
         eps3=uc_frit.eps
 
-        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+        G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
         
         G3_vis = rho3_vis*G1_bot_vis
 

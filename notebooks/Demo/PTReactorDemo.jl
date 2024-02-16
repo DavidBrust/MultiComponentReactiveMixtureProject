@@ -61,7 +61,7 @@ end
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	grid, inb,irrb,outb,sb,catr =  grid_boundaries_regions(dim, nref=nref)
+	grid, inb,irrb,outb,sb,catr =  PTR_grid_boundaries_regions(dim, nref=nref)
 	if dim == 2
 		gridplot(grid, resolution=(660,300), aspect=4.0, zoom=2.8)
 	else
@@ -89,7 +89,7 @@ Also the thermal energy equation is solved, taking into account convective-diffu
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
 function ThermalDemo(dim; nref=nref)
 
-	grid, inb, irrb, outb, sb, catr =  grid_boundaries_regions(dim, nref=nref)
+	grid, inb, irrb, outb, sb, catr =  PTR_grid_boundaries_regions(dim, nref=nref)
 
 	data = ReactorData(
 		dim=dim,
@@ -108,7 +108,7 @@ function ThermalDemo(dim; nref=nref)
 		rhos=5.0*ufac"kg/m^3" # low value for solid density -> low thermal inertia
 	)
 	
-	inival,sys = init_system(dim, grid, data)
+	inival,sys = PTR_init_system(dim, grid, data)
 
 	if dim == 2
 		times = [0,50.0]
@@ -155,12 +155,12 @@ The mass flow boundary condition into the reactor domain is "ramped up" starting
 plothistory(solt)
 
 # ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
-MultiComponentReactiveMixtureProject.DMS_print_summary(sol,grid,sys,data)
+MultiComponentReactiveMixtureProject.Print_summary(sol,grid,sys,data)
 
 # ╔═╡ 3207839f-48a9-49b6-9861-e5e74bc593a4
 # ╠═╡ skip_as_script = true
 #=╠═╡
-MultiComponentReactiveMixtureProject.DMS_print_summary_ext(solt,grid,sys,data)
+MultiComponentReactiveMixtureProject.Print_summary_ext(solt,grid,sys,data)
   ╠═╡ =#
 
 # ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
@@ -248,7 +248,7 @@ let
 		function _2to1(a,b)
 			a[1]=b[2]
 		end
-		_grid,_,_,_,_,_ = grid_boundaries_regions(dim,nref=nref)
+		_grid,_,_,_,_,_ = PTR_grid_boundaries_regions(dim,nref=nref)
 		newreg = num_bfaceregions(grid) + 1
 		bfacemask!(_grid, [0.0,0.0].*ufac"cm",[0.0,0.5].*ufac"cm",newreg)
 		grid1D = subgrid(_grid, [newreg]; boundary = true, transform = _2to1)
@@ -298,7 +298,7 @@ let
 		function _2to1(a,b)
 			a[1]=b[2]
 		end
-		_grid,_,_,_,_,_ = grid_boundaries_regions(dim)
+		_grid,_,_,_,_,_ = PTR_grid_boundaries_regions(dim)
 		bfacemask!(_grid, [3.0,0.0].*ufac"cm",[3.0,0.5].*ufac"cm",5)
 	    grid1D = subgrid(_grid, [5]; boundary = true, transform = _2to1)
 		for i=1:ng

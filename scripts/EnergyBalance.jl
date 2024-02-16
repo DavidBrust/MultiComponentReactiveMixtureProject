@@ -20,7 +20,7 @@ using DataFrames, CSV, Revise, LessUnitful
 # end
 
 
-function radiosity_window(f,u,bnode,data)
+function PTR_radiosity_window(f,u,bnode,data)
     (;iTw,G_lamp,Tamb,uc_window,irradiated_boundaries)=data
 
     eps1=uc_window.eps
@@ -40,7 +40,7 @@ function flux_window_underside(f,u,bnode,data)
     # if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
     if bnode.region in irradiated_boundaries        
 
-        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+        G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
 
         f[iT] = G1_bot_vis + G1_bot_IR
     end
@@ -54,7 +54,7 @@ end
 #         alpha2_IR=uc_cat.alpha_IR
 #         eps2=uc_cat.eps       
 
-#         G1_vis, G1_IR = radiosity_window(f,u,bnode,data)
+#         G1_vis, G1_IR = PTR_radiosity_window(f,u,bnode,data)
 
 #         hflux_irrad = (-eps2*ph"σ"*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR) 
 #         f[iT] += hflux_irrad
@@ -84,7 +84,7 @@ end
 #     if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
 #         (;iT)=data
 
-#         _, G1_bot_IR = radiosity_window(f,u,bnode,data)
+#         _, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
 
 #         f[iT] = G1_bot_IR
 #     end
@@ -95,7 +95,7 @@ end
 #     if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
 #         (;iT)=data
 
-#         G1_bot_vis, _ = radiosity_window(f,u,bnode,data)
+#         G1_bot_vis, _ = PTR_radiosity_window(f,u,bnode,data)
 
 #         f[iT] = G1_bot_vis
 #     end
@@ -111,7 +111,7 @@ function flux_catalyst_layer(f,u,bnode,data)
         rho2_IR=uc_cat.rho_IR
         eps2=uc_cat.eps
 
-        G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+        G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
 
         G2_vis = rho2_vis*G1_bot_vis
 
@@ -130,7 +130,7 @@ end
 #         rho2_IR=uc_cat.rho_IR
 #         eps2=uc_cat.eps
 
-#         G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+#         G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
         
 #         G2_IR = eps2*ph"σ"*u[iT]^4 + rho2_IR*G1_bot_IR
 
@@ -147,7 +147,7 @@ end
 #         rho2_IR=uc_cat.rho_IR
 #         eps2=uc_cat.eps
 
-#         G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+#         G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
         
 #         G2_vis = rho2_vis*G1_bot_vis
 
@@ -164,7 +164,7 @@ end
 #         rho3_IR=uc_frit.rho_IR
 #         eps3=uc_frit.eps
 
-#         G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+#         G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
 
 #         G3_vis = rho3_vis*G1_bot_vis
         
@@ -183,7 +183,7 @@ end
 #         rho3_IR=uc_frit.rho_IR
 #         eps3=uc_frit.eps
 
-#         G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+#         G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
        
 #         G3_IR = eps3*ph"σ"*u[iT]^4 + rho3_IR*G1_bot_IR
         
@@ -200,7 +200,7 @@ end
 #         rho3_IR=uc_frit.rho_IR
 #         eps3=uc_frit.eps
 
-#         G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+#         G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
 
 #         G3_vis = rho3_vis*G1_bot_vis
                 
@@ -220,7 +220,7 @@ end
 #         rho2_IR=uc_cat.rho_IR
 #         eps2=uc_cat.eps
 
-#         G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+#         G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
 
 #         G2_vis = rho2_vis*G1_bot_vis
 
@@ -243,7 +243,7 @@ end
 #         rho3_IR=uc_frit.rho_IR
 #         eps3=uc_frit.eps
 
-#         G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+#         G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
         
 #         G3_vis = rho3_vis*G1_bot_vis
 
@@ -413,7 +413,7 @@ end
 #         rho2_IR=uc_cat.rho_IR
 #         eps2=uc_cat.eps
 
-#         G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+#         G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
 
 #         G2_vis = rho2_vis*G1_bot_vis		
         
@@ -436,7 +436,7 @@ end
 #         rho3_IR=uc_frit.rho_IR
 #         eps3=uc_frit.eps
 
-#         G1_bot_vis, G1_bot_IR = radiosity_window(f,u,bnode,data)
+#         G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
         
 #         G3_vis = rho3_vis*G1_bot_vis
 

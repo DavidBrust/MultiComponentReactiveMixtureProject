@@ -102,7 +102,7 @@ function calc(data,nref=0)
 	(;gni) = data
 	
 	grid = grid1D(nref)
-	inival, sys = init_system(1, grid, data)
+	inival, sys = PTR_init_system(1, grid, data)
 	
 	control = SolverControl(nothing, sys;)
 		control.handle_exceptions=true

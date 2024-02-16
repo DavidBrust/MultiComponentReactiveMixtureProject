@@ -188,7 +188,7 @@ md"""
 """
 
 # ╔═╡ abc28f81-903b-4656-b137-881060ae459c
-function radiosity_window(f,u,bnode,data)
+function PTR_radiosity_window(f,u,bnode,data)
     (;iT,iTw,G_lamp,uc_window,uc_cat,uc_mask)=data
     # irrad. exchange between quartz window (1), cat surface (2), masked sruface (3) 
     tau1_vis=uc_window.tau_vis
@@ -538,7 +538,7 @@ function top(f,u,bnode,data)
 	#alpha3_IR=uc_mask.alpha_IR
 	#eps3=uc_mask.eps
 
-	G1_vis, G1_IR = radiosity_window(f,u,bnode,data)
+	G1_vis, G1_IR = PTR_radiosity_window(f,u,bnode,data)
 	
 	# top boundaries (inlet and mask cross-sections)
 	if bnode.region==Γ_top_in || bnode.region==Γ_top_mask
