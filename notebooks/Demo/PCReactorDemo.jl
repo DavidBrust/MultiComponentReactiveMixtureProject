@@ -19,17 +19,13 @@ begin
 	using Pkg
 	Pkg.activate(joinpath(@__DIR__,"../.."))
 	using Revise, Test
-	using VoronoiFVM
-	using ExtendableGrids, GridVisualize,ExtendableSparse,SparseArrays
-	using NLsolve, LinearSolve,Pardiso, ILUZero
-	using StaticArrays
-
+	using VoronoiFVM, ExtendableGrids, GridVisualize
+	using LinearSolve, Pardiso, ExtendableSparse
+	
 	using LessUnitful
-	using DataFrames
-	using PlutoVista, Plots
-	using PlutoUI, Colors
-	using FixedBed
+	using PlutoUI, PlutoVista, Plots
 	using Printf
+	using FixedBed
 	
 	GridVisualize.default_plotter!(PlutoVista)
 end;
@@ -118,7 +114,7 @@ function ThermalDemo(dim; nref=nref)
 		times = [0,50.0]
 		control = SolverControl(nothing, sys;)
 	elseif dim == 3
-		times = [0,2.0]
+		times = [0,20.0]
 		control = SolverControl(
 			GMRESIteration(MKLPardisoLU(), EquationBlock()),
 			sys
@@ -133,16 +129,17 @@ function ThermalDemo(dim; nref=nref)
 end
 
 # ╔═╡ fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
-# ╠═╡ skip_as_script = true
-#=╠═╡
 if RunSim
 	solt,grid,sys,data=ThermalDemo(dim);
 end;
-  ╠═╡ =#
+
+# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
+@bind t Slider(solt.t,show_value=true,default=solt.t[end])
+
+# ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
+sol = solt(t);
 
 # ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
-# ╠═╡ skip_as_script = true
-#=╠═╡
 md"""
 # Initialisation and Solve
 The simulation is setup as a transient simulation. An initialisation strategy is employed where different physics are enabled step by step once a stationary state is established. Initially, no heat is transported and no chemical reactions take place. 
@@ -153,12 +150,12 @@ The simulation is setup as a transient simulation. An initialisation strategy is
 
 The mass flow boundary condition into the reactor domain is "ramped up" starting from a low value and linearly increasing until the final value is reached. A time delay is given to let the flow stabilize. Once the flow field is established, heat transport is ramped up until a stable temperature field is established. Finally, the reactivity of the catalyst is "ramped up" until its final reactivity value is reached.
 """
-  ╠═╡ =#
 
 # ╔═╡ 1cc9d6c4-e2d6-4501-ae4d-d7568dee1e8f
-#=╠═╡
 plothistory(solt)
-  ╠═╡ =#
+
+# ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
+FixedBed.DMS_print_summary(sol,grid,sys,data)
 
 # ╔═╡ 3207839f-48a9-49b6-9861-e5e74bc593a4
 # ╠═╡ skip_as_script = true
@@ -173,7 +170,7 @@ let
 	inflow_rate, outflow_rate, reaction_rate, stored_amount, I_in, I_out, I_reac = BoundaryFlows_Integrals(solt, sys, data)
 	(;ng, gn, gni, iT, ip) = data
 
-	k=gni[:N2]
+	k=gni[:H2]
 	#k=iT
 
 	if k in 1:ng
@@ -197,31 +194,20 @@ let
 end
   ╠═╡ =#
 
-# ╔═╡ d5b816c3-f5c6-4762-a610-5a2efb77d4ff
-function runtests()
-
-	# 2D
-	function Test2D()
-		solt,grid,sys,data=ThermalDemo(2);
-		
-		inflow_rate, outflow_rate, reaction_rate, stored_amount, I_in, I_out, I_reac = BoundaryFlows_Integrals(solt, sys, data)
-		(;gni, m) = data
+# ╔═╡ dbb6346c-e08a-4ad0-a985-3052272cf6c7
+# 2D
+function Test2D()
+	solt,grid,sys,data=ThermalDemo(2);
 	
-		RR = stack(-reaction_rate, dims=1)[end, gni[:CO]] / m[gni[:CO]] / ufac"mol/hr"
-		return RR
-	end
-    @test isapprox(Test2D(), 1.0439224917035148)
+	inflow_rate, outflow_rate, reaction_rate, stored_amount, I_in, I_out, I_reac = BoundaryFlows_Integrals(solt, sys, data)
+	(;gni, m) = data
 
-	# 3D
-	function Test3D()
-		solt,grid,sys,data=ThermalDemo(3);
-		sol = solt(solt.t[end])
-		
-		(;iT) = data
-		return minimum(sol[iT,:])
-	end
-	@test isapprox(Test3D(), 436.8582985759645)
-end;
+	RR = stack(-reaction_rate, dims=1)[end, gni[:CO]] / m[gni[:CO]] / ufac"mol/hr"
+	return RR
+end
+
+# ╔═╡ 380c74fb-66c4-43fb-a3f5-9c942b13fa0d
+@test isapprox(Test2D(), 1.0439224917035148)
 
 # ╔═╡ 98468f9e-6dee-4b0b-8421-d77ac33012cc
 md"""
@@ -230,22 +216,6 @@ md"""
 2) Window inner surface
 3) Bottom plate
 """
-
-# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-#=╠═╡
-@bind t Slider(solt.t,show_value=true,default=solt.t[end])
-  ╠═╡ =#
-
-# ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
-# ╠═╡ skip_as_script = true
-#=╠═╡
-sol = solt(t);
-  ╠═╡ =#
-
-# ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
-#=╠═╡
-FixedBed.DMS_print_summary(sol,grid,sys,data)
-  ╠═╡ =#
 
 # ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
 # ╠═╡ show_logs = false
@@ -271,7 +241,6 @@ end
 
 # ╔═╡ 8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╠═╡ show_logs = false
-#=╠═╡
 let
 	if dim == 2
 		(;iT,iTw,iTp,irradiated_boundaries,outlet_boundaries) = data
@@ -303,7 +272,6 @@ let
 		scalarplot!(vis[2,2],bgridp, bsolp.-273.15,show=true)
 	end
 end
-  ╠═╡ =#
 
 # ╔═╡ c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
 md"""
@@ -406,17 +374,18 @@ end
 # ╟─a078e1e1-c9cd-4d34-86d9-df4a052b6b96
 # ╠═a1ea393e-f123-4ad0-affa-885db325cfd5
 # ╠═415f6fa7-d5b5-40a2-806e-3d8a61541c2e
-# ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
+# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
+# ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═1cc9d6c4-e2d6-4501-ae4d-d7568dee1e8f
 # ╠═994d4a87-3f27-4a51-b061-6111c3346d60
 # ╠═3207839f-48a9-49b6-9861-e5e74bc593a4
 # ╠═5d5ac33c-f738-4f9e-bcd2-efc43b638109
-# ╠═d5b816c3-f5c6-4762-a610-5a2efb77d4ff
+# ╠═dbb6346c-e08a-4ad0-a985-3052272cf6c7
+# ╠═380c74fb-66c4-43fb-a3f5-9c942b13fa0d
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
-# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╟─99b59260-7651-45d0-b364-4f86db9927f8
 # ╟─58c0b05d-bb0e-4a3f-af05-71782040c8b9
 # ╟─8de4b22d-080c-486f-a6a9-41e8a5489966

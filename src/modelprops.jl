@@ -824,8 +824,8 @@ function radiosity_window(f,u,bnode,data)
 	elseif dim == 3
 		# obtain local irradiation flux value from boundary species
 		# !!! DEBUG !!!
-		G_lamp += nom_flux
-		# G_lamp += u[ibf]
+		# G_lamp += nom_flux
+		G_lamp += u[ibf]
 		# !!! DEBUG !!!
 	end
 	
@@ -1051,13 +1051,15 @@ Function defining the storage function of the boundary species in the photo
     Only relevant if temperature equation is solved.
 """
 function PCR_bstorage(f,u,bnode,data)
-	(;irradiated_boundaries,outlet_boundaries)=data
-	if bnode.region in irradiated_boundaries # window, upper chamber
-		(;iTw) = data
-		f[iTw] = u[iTw]
-	elseif bnode.region in outlet_boundaries # bottom plate, lower chamber
-		(;iTp) = data
-		f[iTp] = u[iTp]
+	(;irradiated_boundaries,outlet_boundaries,solve_T_equation)=data
+	if solve_T_equation
+		if bnode.region in irradiated_boundaries # window, upper chamber
+			(;iTw) = data
+			f[iTw] = u[iTw]
+		elseif bnode.region in outlet_boundaries # bottom plate, lower chamber
+			(;iTp) = data
+			f[iTp] = u[iTp]
+		end
 	end
 end
 
@@ -1126,7 +1128,8 @@ end;
 
 function init_system(dim, grid, data::ReactorData)
 
-	(;p,ip,Tamb,iT,iTw,iTp,ibf,inlet_boundaries,irradiated_boundaries,outlet_boundaries,catalyst_regions,FluxIntp,ng,X0,solve_T_equation)=data
+	(;p,ip,Tamb,iT,iTw,iTp,ibf,inlet_boundaries,irradiated_boundaries,outlet_boundaries,catalyst_regions,FluxIntp,X0,solve_T_equation)=data
+	ng=ngas(data)
 
 	sys=VoronoiFVM.System( 	grid;
 							data=data,
@@ -1174,7 +1177,7 @@ function init_system(dim, grid, data::ReactorData)
 				
 			for inode in sub[CellNodes]
 				c = sub[Coordinates][:,inode]
-				inodeip = sub[ExtendableGrids.NodeInParent][inode]
+				inodeip = sub[ExtendableGrids.NodeParents][inode]
 				inival[ibf,inodeip] = FluxIntp(c[1]-0.02, c[2]-0.02)
 			end
 		end

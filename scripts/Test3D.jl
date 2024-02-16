@@ -1,10 +1,10 @@
-module TestSim
+module Test3D
 
-using FixedBed, VoronoiFVM, LessUnitful, Pardiso, ExtendableSparse
+using FixedBed, VoronoiFVM, LessUnitful, Pardiso, ExtendableSparse, Test, ExampleJuggler
 
-function run(;dim=3, times=[0,20.0])
+function run(;dim=3, times=[0,20.0], nref=0)
 
-    grid, inlet_boundaries, irradiated_boundaries, outlet_boundaries, side_boundaries, catalyst_regions = FixedBed.grid_boundaries_regions(dim)
+    grid, inlet_boundaries, irradiated_boundaries, outlet_boundaries, side_boundaries, catalyst_regions = grid_boundaries_regions(dim,nref=nref)
 
     data=ReactorData(
         dim=dim,
@@ -26,28 +26,24 @@ function run(;dim=3, times=[0,20.0])
     inival,sys = FixedBed.init_system(dim, grid, data)
 
     if dim == 2
-        control = SolverControl(nothing, sys;)
+        control = SolverControl(nothing, sys)
     else
         control = SolverControl(GMRESIteration(MKLPardisoLU(), EquationBlock()), sys)
     end
     control.handle_exceptions=true
-    control.Δu_opt=100
-    println()
+    control.Δu_opt = 100
+    control.reltol = 1.0e-12
+    control.abstol = 1.0e-12
     solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="nae",log=true)
 
     return solt,grid,sys,data
 
 end
 
-function Summary(solt,grid,sys,data)
-
-    t = solt.t[end]
-    sol = solt(t)
-    FixedBed.DMS_print_summary_ext(sol,sys,data)
-    #return HeatFluxes_EB_I(t,solt,grid,sys,data)
-
+function runtests()
+    solt,grid,sys,data = run()
+    sol = solt(solt.t[end])
+    @test isapprox(minimum(sol[data.iT,:]), 410.8628150859246)
 end
-
-    
 
 end

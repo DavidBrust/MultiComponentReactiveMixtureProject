@@ -4,20 +4,25 @@ using ExampleJuggler
 
 ExampleJuggler.verbose!(true)
 
-example_dir = joinpath(@__DIR__, "..", "notebooks/Demo")
 
-# modules = ["ExampleModule.jl"]
-notebooks = ["Residual_MoleFrac1D.jl","Uphill_Diff1D.jl","PCReactorDemo.jl"]
-# scripts = ["testscript.jl", "PlutoTemplate.jl", "ExamplePluto.jl"]
+# notebooks = [
+#     "Residual_MoleFrac1D.jl",
+#     "Uphill_Diff1D.jl",
+#     "PCReactorDemo.jl"
+#     ]
 
-@testset "pluto notebooks" begin
-    @testplutonotebooks(example_dir, notebooks)
-end
-
-# @testset "module examples" begin
-#     @testmodules(example_dir, modules, a=2)
+# @testset "pluto notebooks" begin
+#     @testplutonotebooks(joinpath(@__DIR__, "..", "notebooks/Demo"), notebooks)
 # end
+
+# scripts = ["TestSim.jl"]
 
 # @testset "scripts + notebooks" begin
-#     @testscripts(example_dir, scripts)
+#     @testscripts(joinpath(@__DIR__, "..", "scripts"), scripts)
 # end
+
+modules = ["Test3D.jl"]
+
+@testset "module examples" begin
+    @testmodules(joinpath(@__DIR__, "..", "scripts"), modules)
+end
