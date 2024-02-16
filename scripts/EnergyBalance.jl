@@ -3,7 +3,7 @@ module EnergyBalance
 using DataFrames, CSV, Revise, LessUnitful
 
 
-#include("../notebooks/PCReactorBase.jl")
+#include("../notebooks/PTReactorBase.jl")
 # include("../notebooks/Demo/ThermalDemo.jl")
 
 
@@ -645,7 +645,7 @@ function HeatFluxes_EB_I(solt,grid,sys,data)
     Qconv_34=sum(Qconv_34)
 
     # # Qsides=integrate(sys,side,sol; boundary=true)[iT,[Γ_side_right,Γ_side_back,Γ_side_front,Γ_side_left]]
-    Qsides=integrate(sys,MultiComponentReactiveMixtureProject.PCR_side,sol; boundary=true)[iT,side_boundaries]
+    Qsides=integrate(sys,MultiComponentReactiveMixtureProject.PTR_side,sol; boundary=true)[iT,side_boundaries]
     Qsides=sum(Qsides)
 
     dH_dot = dE_dt - (QG_01 - QG_10) - (QG_43 - QG_34) + Qconv_10 + Qconv_34 + Qsides

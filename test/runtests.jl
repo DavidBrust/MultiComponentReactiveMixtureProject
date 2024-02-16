@@ -5,15 +5,15 @@ using ExampleJuggler
 ExampleJuggler.verbose!(true)
 
 
-# notebooks = [
-#     "Residual_MoleFrac1D.jl",
-#     "Uphill_Diff1D.jl",
-#     "PCReactorDemo.jl"
-#     ]
+notebooks = [
+    "Residual_MoleFrac1D.jl",
+    "Uphill_Diff1D.jl",
+    "PTReactorDemo.jl"
+    ]
 
-# @testset "pluto notebooks" begin
-#     @testplutonotebooks(joinpath(@__DIR__, "..", "notebooks/Demo"), notebooks)
-# end
+@testset "pluto notebooks" begin
+    @testplutonotebooks(joinpath(@__DIR__, "..", "notebooks/Demo"), notebooks)
+end
 
 # scripts = ["TestSim.jl"]
 

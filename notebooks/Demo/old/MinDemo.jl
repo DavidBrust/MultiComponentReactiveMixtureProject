@@ -226,7 +226,7 @@ function MinDemo(dim; times=nothing, mfluxin = nothing)
 							flux=MultiComponentReactiveMixtureProjectponentReactiveMixtureProject.DMS_flux,
 							reaction=MultiComponentReactiveMixtureProject.DMS_reaction,
 							storage=MultiComponentReactiveMixtureProject.DMS_storage,
-							bcondition=MultiComponentReactiveMixtureProject.PCR_bcond,
+							bcondition=MultiComponentReactiveMixtureProject.PTR_bcond,
 							boutflow=MultiComponentReactiveMixtureProject.DMS_boutflow,
 							outflowboundaries=outb,
 							assembly=:edgewise
@@ -302,7 +302,7 @@ MultiComponentReactiveMixtureProject.DMS_print_summary(sol,grid,sys,data)
 # ╔═╡ 06ec3b97-5532-4a86-9abb-61b91e94b4e7
 #=╠═╡
 if dim==3
-	MultiComponentReactiveMixtureProject.PCR_writeSol3D(sol,grid,data;desc="MinDemo")
+	MultiComponentReactiveMixtureProject.PTR_writeSol3D(sol,grid,data;desc="MinDemo")
 end
   ╠═╡ =#
 

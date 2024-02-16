@@ -3,7 +3,7 @@ module EnergyBalances
 using DataFrames, CSV, Plots.PlotMeasures, Revise
 
 
-include("../notebooks/PCReactor3D_DGM.jl")
+include("../notebooks/PTReactor3D_DGM.jl")
 
 
 

@@ -1,4 +1,4 @@
-# PhotoCatalyticReactor
+# MultiComponenReactiveMixtureProject
 Project package for the implementation of a photo-thermal catalytic reactor model.
 
 A 3D (square prismatic) domain of porous material is modelled.
@@ -16,4 +16,4 @@ The simulation utilizes the finite volume method as implemented in the
 The code development takes place in Pluto notebooks, located in the notebooks 
 subfolder.
 
-The most comprehensive Pluto notebook [PorousCatalystHot3DTopFlowIrrExchange_NonAlloc.jl](https://github.com/DavidBrust/PhotoCatalyticReactor/blob/main/notebooks/PorousCatalystHot3DTopFlowIrrExchange_NonAlloc.jl) considers irradiation exchange together with plotting and post-processing.
+The most comprehensive Pluto notebook [PorousCatalystHot3DTopFlowIrrExchange_NonAlloc.jl](https://github.com/DavidBrust/MultiComponenReactiveMixtureProject/blob/main/notebooks/PorousCatalystHot3DTopFlowIrrExchange_NonAlloc.jl) considers irradiation exchange together with plotting and post-processing.

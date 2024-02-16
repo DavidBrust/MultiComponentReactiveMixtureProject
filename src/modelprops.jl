@@ -772,10 +772,10 @@ end
 
 @doc raw"""
 Helper function to export to VTK format for visualization 3D solutions of the
-    photo thermal catalytic reactor (PCR) model. Exported are the pressure, 
+    photo thermal catalytic reactor (PTR) model. Exported are the pressure, 
     species molar fractions and temperature fields in the 3D domain.
 """
-function PCR_writeSol3D(sol,grid,data;desc="")
+function PTR_writeSol3D(sol,grid,data;desc="")
     (;dim,ip,iT,ibf,gn,nflowin,solve_T_equation) = data
     ng=ngas(data)
     _t = now()
@@ -804,7 +804,7 @@ end
 @doc raw"""
 Helper function to calculate radiation emitted from the window towards the surface
     of the catalyst layer in the upper chamber in the photo thermal catalytic
-    reactor (PCR) model.
+    reactor (PTR) model.
 """
 function radiosity_window(f,u,bnode,data)
     # (;dim,iTw,G_lamp,nom_flux,FluxIntp,Tamb,uc_window,irradiated_boundaries)=data
@@ -842,9 +842,9 @@ end
 
 @doc raw"""
 Function defining the top/inlet boundary condition in the photo thermal catalytic
-    reactor (PCR) model.
+    reactor (PTR) model.
 """
-function PCR_top(f,u,bnode,data)
+function PTR_top(f,u,bnode,data)
 	(;ip,iT,iTw,Tamb,T_gas_in,mfluxin,X0,W0,mmix0,uc_window,uc_cat,uc_h,Nu,k_nat_conv,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,solve_T_equation,Fluids)=data
 	ng=ngas(data)
 
@@ -932,9 +932,9 @@ end
 
 @doc raw"""
 Function defining the side boundary condition in the photo thermal catalytic
-    reactor (PCR) model.
+    reactor (PTR) model.
 """
-function PCR_side(f,u,bnode,data)
+function PTR_side(f,u,bnode,data)
 	(;iT,k_nat_conv,delta_gap,Tamb,side_boundaries,solve_T_equation,dt_hf_enth)=data
 	ng=ngas(data)
 
@@ -953,9 +953,9 @@ end
 
 @doc raw"""
 Function defining the bottom/outlet boundary condition in the photo thermal catalytic
-    reactor (PCR) model.
+    reactor (PTR) model.
 """
-function PCR_bottom(f,u,bnode,data)
+function PTR_bottom(f,u,bnode,data)
 	(;iT,iTp,k_nat_conv,Tamb,lc_h,Nu,dt_hf_irrad,lc_frit,lc_plate,solve_T_equation,outlet_boundaries) = data
 	ng=ngas(data)
 	
@@ -1014,14 +1014,14 @@ end
 
 @doc raw"""
 Wrapper function defining the boundary conditions in the photo thermal catalytic
-    reactor (PCR) model. Used with the VoronoiFVM.jl package
+    reactor (PTR) model. Used with the VoronoiFVM.jl package
 """
-function PCR_bcond(f,u,bnode,data)
+function PTR_bcond(f,u,bnode,data)
 	(;p,ip,outlet_boundaries)=data
 	
-    MultiComponentReactiveMixtureProject.PCR_top(f,u,bnode,data)
-    MultiComponentReactiveMixtureProject.PCR_side(f,u,bnode,data)
-    MultiComponentReactiveMixtureProject.PCR_bottom(f,u,bnode,data)
+    MultiComponentReactiveMixtureProject.PTR_top(f,u,bnode,data)
+    MultiComponentReactiveMixtureProject.PTR_side(f,u,bnode,data)
+    MultiComponentReactiveMixtureProject.PTR_bottom(f,u,bnode,data)
     for boundary in outlet_boundaries
         boundary_dirichlet!(f,u,bnode, species=ip,region=boundary,value=p)
     end	
@@ -1029,10 +1029,10 @@ end
 
 @doc raw"""
 Function defining the flux function in the boundary species in the photo thermal catalytic
-    reactor (PCR) model. Calculates the heat flux occuring in the window and 
+    reactor (PTR) model. Calculates the heat flux occuring in the window and 
     bottom plate respectively. Only relevant if temperature equation is solved.
 """
-function PCR_bflux(f,u,bedge,data)
+function PTR_bflux(f,u,bedge,data)
 	(;irradiated_boundaries,outlet_boundaries)=data
 
 	if bedge.region in irradiated_boundaries # window, upper chamber
@@ -1046,11 +1046,11 @@ end
 
 @doc raw"""
 Function defining the storage function of the boundary species in the photo
-    thermal catalytic reactor (PCR) model. Calculates the heat storage capacity
+    thermal catalytic reactor (PTR) model. Calculates the heat storage capacity
     for transient simulations in the window and bottom plate respectively.
     Only relevant if temperature equation is solved.
 """
-function PCR_bstorage(f,u,bnode,data)
+function PTR_bstorage(f,u,bnode,data)
 	(;irradiated_boundaries,outlet_boundaries,solve_T_equation)=data
 	if solve_T_equation
 		if bnode.region in irradiated_boundaries # window, upper chamber
@@ -1136,9 +1136,9 @@ function init_system(dim, grid, data::ReactorData)
 							flux=MultiComponentReactiveMixtureProject.DMS_flux,
 							reaction=MultiComponentReactiveMixtureProject.DMS_reaction,
 							storage=MultiComponentReactiveMixtureProject.DMS_storage,
-							bcondition=MultiComponentReactiveMixtureProject.PCR_bcond,
-							bflux=MultiComponentReactiveMixtureProject.PCR_bflux,
-							bstorage=MultiComponentReactiveMixtureProject.PCR_bstorage,
+							bcondition=MultiComponentReactiveMixtureProject.PTR_bcond,
+							bflux=MultiComponentReactiveMixtureProject.PTR_bflux,
+							bstorage=MultiComponentReactiveMixtureProject.PTR_bstorage,
 							boutflow=MultiComponentReactiveMixtureProject.DMS_boutflow,
 							outflowboundaries=outlet_boundaries,
 							assembly=:edgewise,

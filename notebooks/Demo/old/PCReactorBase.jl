@@ -37,13 +37,13 @@ end;
 # ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
 # ╠═╡ skip_as_script = true
 #=╠═╡
-PlutoUI.TableOfContents(title="Photo Catalytic (PC) Reactor")
+PlutoUI.TableOfContents(title="Photo Thermal (PT) Reactor")
   ╠═╡ =#
 
 # ╔═╡ b2791860-ae0f-412d-9082-bb2e27f990bc
 md"""
 # Introduction
-Demonstration notebook for the photo thermal catalytic reactor (PCR) model. Solve energy equation alongside multicomponent species transport. Include reactive gas mixture (CO2,H2,CO,CH4,H2O,N2) with variable physical properties and a Ni based catalyst described with kinetics from published literature.
+Demonstration notebook for the photo thermal catalytic reactor (PTR) model. Solve energy equation alongside multicomponent species transport. Include reactive gas mixture (CO2,H2,CO,CH4,H2O,N2) with variable physical properties and a Ni based catalyst described with kinetics from published literature.
 
 Select problem dimension: $(@bind dim Select([2, 3], default=2))
 
@@ -149,7 +149,7 @@ Also the thermal energy equation is solved, taking into account convective-diffu
 @doc MultiComponentReactiveMixtureProject.DMS_Info_thermal()
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
-function PCR_base(dim; times=nothing, verbose="aen")
+function PTR_base(dim; times=nothing, verbose="aen")
 	
 	times = isnothing(times) ? [0,15.0] : times
 
@@ -172,9 +172,9 @@ function PCR_base(dim; times=nothing, verbose="aen")
 							flux=MultiComponentReactiveMixtureProject.DMS_flux,
 							reaction=MultiComponentReactiveMixtureProject.DMS_reaction,
 							storage=MultiComponentReactiveMixtureProject.DMS_storage,
-							bcondition=MultiComponentReactiveMixtureProject.PCR_bcond,
-							bflux=MultiComponentReactiveMixtureProject.PCR_bflux,
-							bstorage=MultiComponentReactiveMixtureProject.PCR_bstorage,
+							bcondition=MultiComponentReactiveMixtureProject.PTR_bcond,
+							bflux=MultiComponentReactiveMixtureProject.PTR_bflux,
+							bstorage=MultiComponentReactiveMixtureProject.PTR_bstorage,
 							boutflow=MultiComponentReactiveMixtureProject.DMS_boutflow,
 							outflowboundaries=outb,
 							assembly=:edgewise
@@ -233,7 +233,7 @@ end
 # ╠═╡ skip_as_script = true
 #=╠═╡
 if RunSim
-	solt,grid,sys,data=PCR_base(dim);
+	solt,grid,sys,data=PTR_base(dim);
 end;
   ╠═╡ =#
 

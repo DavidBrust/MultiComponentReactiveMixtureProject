@@ -1,7 +1,7 @@
 module Sensitivity
 
 using DataFrames, CSV, LinearAlgebra
-include("../../notebooks/model_props_physics/PCReactor_sens.jl")
+include("../../notebooks/model_props_physics/PTReactor_sens.jl")
 
 function run(nom_fluxs, nflowins; SensPar=SensPar)
 
@@ -31,9 +31,9 @@ function run(nom_fluxs, nflowins; SensPar=SensPar)
     end
 
     function probe_Temps(par;dim=2)
-        # solt,grid,sys,data=PCR_base(dim,par;times=[0.0,5.0]);
+        # solt,grid,sys,data=PTR_base(dim,par;times=[0.0,5.0]);
         # return solt,grid,sys,data
-        return PCR_base(dim,par);
+        return PTR_base(dim,par);
         
 
         sol = solt(solt.t[end])

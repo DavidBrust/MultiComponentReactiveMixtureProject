@@ -37,13 +37,13 @@ end;
 # ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
 # ╠═╡ skip_as_script = true
 #=╠═╡
-PlutoUI.TableOfContents(title="Photo Catalytic (PC) Reactor")
+PlutoUI.TableOfContents(title="Photo Thermal (PT) Reactor")
   ╠═╡ =#
 
 # ╔═╡ b2791860-ae0f-412d-9082-bb2e27f990bc
 md"""
 # Introduction
-Demonstration notebook for the photo thermal catalytic reactor (PCR) model. Solve energy equation alongside multicomponent species transport. Include reactive gas mixture (CO2,H2,CO,CH4,H2O,N2) with variable physical properties and a Ni based catalyst described with kinetics from published literature.
+Demonstration notebook for the photo thermal catalytic reactor (PTR) model. Solve energy equation alongside multicomponent species transport. Include reactive gas mixture (CO2,H2,CO,CH4,H2O,N2) with variable physical properties and a Ni based catalyst described with kinetics from published literature.
 
 Select problem dimension: $(@bind dim Select([2, 3], default=2))
 

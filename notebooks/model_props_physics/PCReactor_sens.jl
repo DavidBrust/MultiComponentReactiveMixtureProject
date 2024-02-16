@@ -38,7 +38,7 @@ end;
 # ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
 # ╠═╡ skip_as_script = true
 #=╠═╡
-PlutoUI.TableOfContents(title="Photo Catalytic (PC) Reactor")
+PlutoUI.TableOfContents(title="Photo Thermal (PT) Reactor")
   ╠═╡ =#
 
 # ╔═╡ b2791860-ae0f-412d-9082-bb2e27f990bc
@@ -46,7 +46,7 @@ PlutoUI.TableOfContents(title="Photo Catalytic (PC) Reactor")
 #=╠═╡
 md"""
 # Introduction
-Demonstration notebook for the photo thermal catalytic reactor (PCR) model. Solve energy equation alongside multicomponent species transport. Include reactive gas mixture (CO2,H2,CO,CH4,H2O,N2) with variable physical properties and a Ni based catalyst described with kinetics from published literature.
+Demonstration notebook for the photo thermal catalytic reactor (PTR) model. Solve energy equation alongside multicomponent species transport. Include reactive gas mixture (CO2,H2,CO,CH4,H2O,N2) with variable physical properties and a Ni based catalyst described with kinetics from published literature.
 
 Select problem dimension: $(@bind dim Select([2, 3], default=2))
 
@@ -256,7 +256,7 @@ end
   ╠═╡ =#
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
-function PCR_base(dim, par; times=nothing)	
+function PTR_base(dim, par; times=nothing)	
 	times = isnothing(times) ? [0,20.0] : times
 	
 	G_lamp, nflowin, T_gas_in, abs1_vis, abs1_IR, abs2_vis, abs2_IR, abs3_IR, abs4_IR, mcat, poros, dp, perm, lambdas, delta_uc, delta_lc, delta_gap, Nu, k_conv= par
@@ -329,9 +329,9 @@ function PCR_base(dim, par; times=nothing)
 	# 						flux=MultiComponentReactiveMixtureProject.DMS_flux,
 	# 						reaction=MultiComponentReactiveMixtureProject.DMS_reaction,
 	# 						storage=MultiComponentReactiveMixtureProject.DMS_storage,
-	# 						bcondition=MultiComponentReactiveMixtureProject.PCR_bcond,
-	# 						bflux=MultiComponentReactiveMixtureProject.PCR_bflux,
-	# 						bstorage=MultiComponentReactiveMixtureProject.PCR_bstorage,
+	# 						bcondition=MultiComponentReactiveMixtureProject.PTR_bcond,
+	# 						bflux=MultiComponentReactiveMixtureProject.PTR_bflux,
+	# 						bstorage=MultiComponentReactiveMixtureProject.PTR_bstorage,
 	# 						boutflow=MultiComponentReactiveMixtureProject.DMS_boutflow,
 	# 						outflowboundaries=outb,
 	# 						assembly=:edgewise,
@@ -415,7 +415,7 @@ function T2_part_deriv(dim,p,data)
 	(;iT) = data
 
 	function f(p) 
-		solt,grid,sys,data=PCR_base(dim,p);
+		solt,grid,sys,data=PTR_base(dim,p);
 		sol = solt(solt.t[end])
 		sol[iT,91] # corresponds to node at (r,z) = (0,5 mmm), center at cat surface
 	end
@@ -475,7 +475,7 @@ end
 # ╔═╡ fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 # ╠═╡ skip_as_script = true
 #=╠═╡
-solt,grid,sys,data=PCR_base(dim,transformSensPar(SensPar));
+solt,grid,sys,data=PTR_base(dim,transformSensPar(SensPar));
   ╠═╡ =#
 
 # ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
