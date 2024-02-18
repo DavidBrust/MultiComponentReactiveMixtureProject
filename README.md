@@ -29,6 +29,6 @@ where notebooks located in the notebooks subfolder.
 #### Notebooks
 
 - `documentation.jl`: project documentation
-- `Demo/Uphill_Diff1D.jl`: example of transport uphill a concentration gradient in iso-thermal conditions
-- `Demo/Residual_MoleFrac1D.jl`: investigation of grid refinement on residual molar fractions
-- `Demo/PTReactorDemo.jl.jl`: example application of photo-thermal reactor in 2D and 3D geometry and non-isothermal conditions
+- `Uphill_Diff1D.jl`: example of transport uphill a concentration gradient in iso-thermal conditions
+- `Residual_MoleFrac1D.jl`: investigation of grid refinement on residual molar fractions
+- `PTReactorDemo.jl.jl`: example application of photo-thermal reactor in 2D and 3D geometry and non-isothermal conditions
