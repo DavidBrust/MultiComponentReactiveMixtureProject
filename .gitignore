@@ -1,4 +1,7 @@
 img/out*
 data/out/*
 Manifest.toml
+docs/build
+docs/src/examples
+docs/src/notebooks
 \#*

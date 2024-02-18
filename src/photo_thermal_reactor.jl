@@ -398,9 +398,14 @@ function flux_interpol(flux)
 end
 
 
-# const itp12 = flux_interpol(70.0*ufac"kW/m^2")
+"""
+$(TYPEDEF)
+Mutable data structure to hold modeling parameters of photo-thermal reactor
+$(TYPEDFIELDS)
+"""
 
 @kwdef mutable struct ReactorData{NG, KP}
+    "Spatial dimension, default=2"
 	dim::Int64 = 2
     # time constants for ramp functions
     dt_mf::Tuple{Float64, Float64}=(0.0,1.0)
