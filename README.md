@@ -13,6 +13,11 @@ Model equations and correlations for effective properties of heat transfer throu
 The simulation utilizes the finite volume method as implemented in the
 [VoronoiFVM.jl](https://github.com/j-fu/VoronoiFVM.jl) package.
 
+Check out the package with ``git``:
+```
+git clone https://github.com/DavidBrust/MultiComponentReactiveMixtureProject
+```
+
 After checking out or updating, run from the project root directory:
 ```
 $ julia --project -e "using Pkg; Pkg.instantiate()"
