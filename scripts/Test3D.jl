@@ -38,6 +38,27 @@ function run(;dim=3, times=[0,20.0], nref=0)
 
 end
 
+function run_steadystate(solt,sys,grid,data)
+
+    (;dim) = data
+
+    if dim == 2
+        control = SolverControl(nothing, sys)
+    else
+        control = SolverControl(GMRESIteration(MKLPardisoLU(), EquationBlock()), sys)
+    end
+
+    sol_steadystate = VoronoiFVM.solve(
+		sys;
+		time = 100.0,
+		inival=solt(solt.t[end]),
+        control,
+		verbose="na"
+	)
+
+    return sol_steadystate,grid,sys,data
+end
+
 function runtests()
     solt,grid,sys,data = run()
     sol = solt(solt.t[end])

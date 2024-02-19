@@ -139,20 +139,6 @@ end;
 # ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
 sol = solt(t);
 
-# ╔═╡ 1c23f934-641a-4b6b-868a-b8c64797ca93
-let	
-	sol_steadystate = VoronoiFVM.solve(
-		sys;
-		time = 100.0,
-		inival=solt(solt.t[end]),
-		verbose="na"
-	)
-	sys
-
-	#plot_bounds2D(dim,sol_steadystate,data)
-	
-end
-
 # ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
 md"""
 # Initialisation and Solve
@@ -285,6 +271,19 @@ function plot_bounds2D(dim,sol,data)
 	bgridp = subgrid(grid, outlet_boundaries; boundary = true, transform = __2to1)
 	bsolp=view(sol[iTp, :], bgridp)
 	scalarplot!(vis[2,2],bgridp, bsolp.-273.15,show=true)
+end
+
+# ╔═╡ 1c23f934-641a-4b6b-868a-b8c64797ca93
+let	
+	sol_steadystate = VoronoiFVM.solve(
+		sys;
+		time = 100.0,
+		inival=solt(solt.t[end]),
+		verbose="na"
+	)
+
+	plot_bounds2D(dim,sol_steadystate,data)
+	
 end
 
 # ╔═╡ 55076cf5-2b05-4752-969c-69a365f1b1c5
