@@ -12,7 +12,7 @@ notebooks = [
     ]
 
 @testset "pluto notebooks" begin
-    @testplutonotebooks(joinpath(@__DIR__, "..", "notebooks/Demo"), notebooks)
+    @testplutonotebooks(joinpath(@__DIR__, "..", "notebooks"), notebooks)
 end
 
 # scripts = ["TestSim.jl"]

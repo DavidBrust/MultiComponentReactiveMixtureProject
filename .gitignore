@@ -1,5 +1,6 @@
 img/out*
 data/out/*
+notebooks/experimental
 Manifest.toml
 docs/build
 docs/src/examples

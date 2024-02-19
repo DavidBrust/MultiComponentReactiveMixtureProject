@@ -139,17 +139,19 @@ end;
 # ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
 sol = solt(t);
 
-# ╔═╡ 8d184d79-4051-4f6d-b570-d0c1cda9fe34
-solss = VoronoiFVM.solve(sys;inival=solt(solt.t[end]),verbose="a")
-
 # ╔═╡ 1c23f934-641a-4b6b-868a-b8c64797ca93
-let
-	(;iT, iTp, iTw) = data
-	solss[iT,:]
-end
+let	
+	sol_steadystate = VoronoiFVM.solve(
+		sys;
+		time = 100.0,
+		inival=solt(solt.t[end]),
+		verbose="na"
+	)
+	sys
 
-# ╔═╡ 1b11e3a1-cab5-400d-baf3-d7e51192938d
-sol
+	#plot_bounds2D(dim,sol_steadystate,data)
+	
+end
 
 # ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
 md"""
@@ -393,9 +395,7 @@ end
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
-# ╠═8d184d79-4051-4f6d-b570-d0c1cda9fe34
 # ╠═1c23f934-641a-4b6b-868a-b8c64797ca93
-# ╠═1b11e3a1-cab5-400d-baf3-d7e51192938d
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═1cc9d6c4-e2d6-4501-ae4d-d7568dee1e8f
 # ╠═994d4a87-3f27-4a51-b061-6111c3346d60
