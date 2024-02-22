@@ -5,7 +5,7 @@ Helper function to calculate radiation emitted from the window towards the surfa
 """
 function PTR_radiosity_window(f,u,bnode,data)
     # (;dim,iTw,G_lamp,nom_flux,FluxIntp,Tamb,uc_window,irradiated_boundaries)=data
-	(;dim,iTw,ibf,nom_flux,Tamb,uc_window,irradiated_boundaries)=data
+	(;dim,iTw,ibf,nom_flux,Tamb,uc_window,irradiated_boundaries,constant_irradiation_flux_bc,sp)=data
 	
     # irrad. exchange between quartz window (1), cat surface (2), masked sruface (3) 
     tau1_vis=uc_window.tau_vis
@@ -14,18 +14,21 @@ function PTR_radiosity_window(f,u,bnode,data)
     rho1_IR=uc_window.rho_IR
     eps1=uc_window.eps
 	
-	# G_lamp = u[ibf]
 	G_lamp = zero(eltype(u))
 	if dim == 2
 		G_lamp += nom_flux
 	elseif dim == 3
-		# obtain local irradiation flux value from boundary species
-		# !!! DEBUG !!!
-		# G_lamp += nom_flux
-		G_lamp += u[ibf]
-		# !!! DEBUG !!!
+		if constant_irradiation_flux_bc
+			# constant value for irradiation flux boundary condition
+			G_lamp += nom_flux
+		else
+			# obtain local irradiation flux value from boundary species
+			G_lamp += u[ibf]
+		end
 	end
-	
+	# !!! SENSITIVITY !!!
+	G_lamp *= (1 + sp[1])
+	# !!! SENSITIVITY !!!
 
     Tglass = u[iTw] # local tempererature of quartz window
     G1_bot_IR = eps1*ph"σ"*(Tglass^4-Tamb^4)+ph"σ"*Tamb^4
@@ -233,7 +236,7 @@ function PTR_bflux(f,u,bedge,data)
 	if bedge.region in irradiated_boundaries # window, upper chamber
 		(;iTw,lambda_window) = data
 		f[iTw] = lambda_window * (u[iTw, 1] - u[iTw, 2])
-	elseif bedge.region in outlet_boundaries # bottom plate, lower chamber
+			elseif bedge.region in outlet_boundaries # bottom plate, lower chamber
 		(;iTp,lambda_Al) = data
 		f[iTp] = lambda_Al * (u[iTp, 1] - u[iTp, 2])
 	end
@@ -251,7 +254,7 @@ function PTR_bstorage(f,u,bnode,data)
 		if bnode.region in irradiated_boundaries # window, upper chamber
 			(;iTw) = data
 			f[iTw] = u[iTw]
-		elseif bnode.region in outlet_boundaries # bottom plate, lower chamber
+					elseif bnode.region in outlet_boundaries # bottom plate, lower chamber
 			(;iTp) = data
 			f[iTp] = u[iTp]
 		end
@@ -327,16 +330,16 @@ const uc_window = SurfaceOpticalProps(
 const uc_cat = SurfaceOpticalProps(
 	alpha_IR=0.56, # measurement (ideally at high T) integrated over IR
 	tau_IR=0.0, # opaque surface
-	alpha_vis=0.39, # measurement (ideally at high T) integrated over vis
-	tau_vis=0.0 # opaque surface	
+	alpha_vis=0.47, # measurement (ideally at high T) integrated over vis
+	tau_vis=0.13 
 )
 
 # optical parameters for uncoated frit in upper chamber (uc)
 const uc_mask = SurfaceOpticalProps(
 	alpha_IR=0.55, # measurement (ideally at high T) integrated over IR
 	tau_IR=0.0, # opaque surface
-	alpha_vis=0.15, # measurement (ideally at high T) integrated over vis
-	tau_vis=0.0 # opaque surface	
+	alpha_vis=0.16, # measurement (ideally at high T) integrated over vis
+	tau_vis=0.13 
 )
 
 # optical parameters for uncoated frit in lower chamber (lc) = frit in upper chamber
@@ -404,7 +407,7 @@ Mutable data structure to hold modeling parameters of photo-thermal reactor
 $(TYPEDFIELDS)
 """
 
-@kwdef mutable struct ReactorData{NG, KP}
+@kwdef mutable struct ReactorData{NG, KP, Tv}
     "Spatial dimension, default=2"
 	dim::Int64 = 2
     # time constants for ramp functions
@@ -426,6 +429,7 @@ $(TYPEDFIELDS)
     # switches to control the simulation
 	is_reactive::Bool = true
     solve_T_equation::Bool = true
+	constant_irradiation_flux_bc = true
     constant_properties::Bool = false
 
 	#ip::Int64 = NG+1
@@ -508,16 +512,22 @@ $(TYPEDFIELDS)
 	lambda_window::Float64=1.38*ufac"W/(m*K)"
 	lambda_Al::Float64=235.0*ufac"W/(m*K)"
 
-    function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+	# Sensitivity Parameters
+	# sp1::Tv = 1.0
+	sp::Vector{Tv} = [0.0]
+	
+
+    function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_irradiation_flux_bc,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,sp)
         KP = MultiComponentReactiveMixtureProject.KinData{nreac(kinpar)}
+		Tv = eltype(sp)
 		# FluxIntp = flux_interpol(nom_flux)
 		# flux_inner, flux_outer = flux_inner_outer(nom_flux)
-        new{ng,KP}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+        new{ng,KP,Tv}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_irradiation_flux_bc,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,sp)
 
     end
 end
 
-ngas(::ReactorData{NG,KP}) where {NG,KP} = NG
+ngas(::ReactorData{NG,KP,Tv}) where {NG,KP,Tv} = NG
 
 function PTR_grid_boundaries_regions(dim;nref=0)
 	Ω_catalyst = 2
@@ -581,12 +591,14 @@ function PTR_grid_boundaries_regions(dim;nref=0)
 	return grid, inb, irrb, outb, sb, [Ω_catalyst]
 end
 
-function PTR_init_system(dim, grid, data::ReactorData)
+function PTR_init_system(dim, grid, data::ReactorData; assembly=:edgewise, unknown_storage=:dense)
 
-	(;p,ip,Tamb,iT,iTw,iTp,ibf,inlet_boundaries,irradiated_boundaries,outlet_boundaries,catalyst_regions,X0,solve_T_equation,nom_flux)=data
+	(;p,ip,Tamb,iT,iTw,iTp,ibf,inlet_boundaries,irradiated_boundaries,outlet_boundaries,catalyst_regions,X0,solve_T_equation,nom_flux,constant_irradiation_flux_bc,sp)=data
 	ng=ngas(data)
+	Tv = eltype(sp)
 
 	sys=VoronoiFVM.System( 	grid;
+							valuetype = Tv,
 							data=data,
 							flux=DMS_flux,
 							reaction=DMS_reaction,
@@ -596,7 +608,8 @@ function PTR_init_system(dim, grid, data::ReactorData)
 							bstorage=PTR_bstorage,
 							boutflow=DMS_boutflow,
 							outflowboundaries=outlet_boundaries,
-							assembly=:edgewise,
+							assembly=assembly,
+							unknown_storage=unknown_storage
 							)
 
 	if solve_T_equation
@@ -604,7 +617,7 @@ function PTR_init_system(dim, grid, data::ReactorData)
 		enable_boundary_species!(sys, iTw, irradiated_boundaries) # window temperature as boundary species in upper chamber
 
 		# for 3 dimensional domain, apply measured irradiation flux density as boundary condition
-		if dim == 3
+		if dim == 3 && !constant_irradiation_flux_bc
 			# boundary flux species, workaround to implement spatially varying irradiation
 			enable_boundary_species!(sys, ibf, irradiated_boundaries)
 		end
@@ -622,7 +635,7 @@ function PTR_init_system(dim, grid, data::ReactorData)
 
 	if solve_T_equation
 		inival[[iT,iTw,iTp],:] .= Tamb
-		if dim == 3
+		if dim == 3 && !constant_irradiation_flux_bc
 
             FluxIntp = flux_interpol(nom_flux)
 			function d3tod2(a,b)

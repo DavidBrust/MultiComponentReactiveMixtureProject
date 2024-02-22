@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.36
+# v0.19.38
 
 using Markdown
 using InteractiveUtils
@@ -17,7 +17,7 @@ end
 # ╔═╡ c21e1942-628c-11ee-2434-fd4adbdd2b93
 begin
 	using Pkg
-	Pkg.activate(joinpath(@__DIR__,"../.."))
+	Pkg.activate(joinpath(@__DIR__,".."))
 	using Revise, Test
 	using VoronoiFVM, ExtendableGrids, GridVisualize
 	using LinearSolve, Pardiso, ExtendableSparse
@@ -94,7 +94,7 @@ function ThermalDemo(dim; nref=nref)
 	data = ReactorData(
 		dim=dim,
 		nflowin = 7.4*ufac"mol/hr",
-		nom_flux = 100.0*ufac"kW/m^2",		
+		nom_flux = 70.0*ufac"kW/m^2",		
 		dt_hf_irrad = (2.0, 10.0),
 		dt_hf_enth = (2.0, 3.0),
 		T_gas_in = 273.15 + 25,
@@ -207,7 +207,7 @@ function Test2D()
 end
 
 # ╔═╡ 380c74fb-66c4-43fb-a3f5-9c942b13fa0d
-@test isapprox(Test2D(), 1.0439224917035148)
+@test isapprox(Test2D(), 0.8862394201643371)
 
 # ╔═╡ 98468f9e-6dee-4b0b-8421-d77ac33012cc
 md"""

@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.36
+# v0.19.38
 
 using Markdown
 using InteractiveUtils
@@ -185,6 +185,18 @@ Parameters determining convective heat transport:
 
 """
 
+# ╔═╡ 12cd7938-1f1d-417f-861b-b340edbd668d
+function T2_part_deriv(dim,p,data)
+	(;iT) = data
+
+	function f(p) 
+		solt,grid,sys,data=PTR_base(dim,p);
+		sol = solt(solt.t[end])
+		sol[iT,91] # corresponds to node at (r,z) = (0,5 mmm), center at cat surface
+	end
+	grad(forward_fdm(3, 1), f, p)[1]
+end 
+
 # ╔═╡ c7901b7f-27b9-469c-86f8-080df0cd3fa4
 SensPar = [G_lamp, nflowin, T_gas_in, abs1_vis, abs1_IR, abs2_vis, abs2_IR, abs3_IR, abs4_IR, mcat, poros, dp, perm, lambdas, delta_uc, delta_lc, delta_gap, Nu, k_conv]
 
@@ -192,6 +204,41 @@ SensPar = [G_lamp, nflowin, T_gas_in, abs1_vis, abs1_IR, abs2_vis, abs2_IR, abs3
 function transformSensPar(SensPar) 
 	return [SensPar[1]*ufac"kW/m^2", SensPar[2]*ufac"mol/hr", SensPar[3]+273.15, SensPar[4:9]..., SensPar[10]*ufac"mg", SensPar[11], SensPar[12]*ufac"μm", SensPar[13], SensPar[14], SensPar[15:17].*ufac"mm"..., SensPar[18:end]... ]
 end
+
+# ╔═╡ 8c8e91bd-7abb-453a-b10c-3b10203b44a0
+# ╠═╡ skip_as_script = true
+#=╠═╡
+if RunSens
+	dT2_dp = T2_part_deriv(2,transformSensPar(SensPar), ReactorData())
+end
+  ╠═╡ =#
+
+# ╔═╡ 2801c5bd-991f-4f85-aa49-43927369605f
+# ╠═╡ skip_as_script = true
+#=╠═╡
+md"""
+Sensitivities:
+1.  $\partial T_2 / \partial G_0 =$  $(round(dT2_dp[1]*ufac"kW/m^2",sigdigits=2)) K/(kW/m^2)
+1.  $\partial T_2 / \partial \dot n_{\text{in,total}} =$  $(round(dT2_dp[2]*ufac"mol/hr",sigdigits=2)) K/(mol/hr)
+1.  $\partial T_2 / \partial T_{\text{gas,in}} =$  $(round(dT2_dp[3],sigdigits=2)) K/K
+1.  $\partial T_2 / \partial \alpha_1^{\text{VIS}} =$  $(round(dT2_dp[4],sigdigits=2)) K
+1.  $\partial T_2 / \partial \alpha_1^{\text{IR}} =$  $(round(dT2_dp[5],sigdigits=2)) K
+1.  $\partial T_2 / \partial \alpha_2^{\text{VIS}} =$  $(round(dT2_dp[6],sigdigits=2)) K
+1.  $\partial T_2 / \partial \alpha_2^{\text{IR}} =$  $(round(dT2_dp[7],sigdigits=2)) K
+1.  $\partial T_2 / \partial \alpha_3^{\text{IR}} =$  $(round(dT2_dp[8],sigdigits=2)) K
+1.  $\partial T_2 / \partial \alpha_4^{\text{IR}} =$  $(round(dT2_dp[9],sigdigits=2)) K
+1.  $\partial T_2 / \partial m_{\text{cat}} =$  $(round(dT2_dp[10]*ufac"mg",sigdigits=2)) K/mg
+1.  $\partial T_2 / \partial \text{porosity} =$  $(round(dT2_dp[11],sigdigits=2)) K
+1.  $\partial T_2 / \partial d_{\text p} =$  $(round(dT2_dp[12]*ufac"μm",sigdigits=2)) K/μm
+1.  $\partial T_2 / \partial \text{permeability} =$  $(round(dT2_dp[13],sigdigits=2)) K
+1.  $\partial T_2 / \partial \lambda_{\text{frit,solid}} =$  $(round(dT2_dp[14],sigdigits=2)) K/(W/m/K)
+1.  $\partial T_2 / \partial \delta_{\text{uc}} =$  $(round(dT2_dp[15]*ufac"mm",sigdigits=2)) K/mm
+1.  $\partial T_2 / \partial \delta_{\text{lc}} =$  $(round(dT2_dp[16]*ufac"mm",sigdigits=2)) K/mm
+1.  $\partial T_2 / \partial \delta_{\text{gap,side}} =$  $(round(dT2_dp[17]*ufac"mm",sigdigits=2)) K/mm
+1.  $\partial T_2 / \partial \text{Nu}$ = $(round(dT2_dp[18],sigdigits=2)) K
+1.  $\partial T_2 / \partial k_{\text{conv,outer}}$ =  $(round(dT2_dp[19],sigdigits=2)) K/(W/m^2/K)
+"""
+  ╠═╡ =#
 
 # ╔═╡ 115aebe4-459b-4113-b689-38e381cdf64f
 # ╠═╡ skip_as_script = true
@@ -235,228 +282,6 @@ function calc_combined_uncertainty_T2(SensPar, dT2_dp)
 	sqrt(sum(dT2_dp.^2 .* uc))
 end
 
-# ╔═╡ debdf189-7269-4d96-aa12-ff1c2c162f02
-# ╠═╡ skip_as_script = true
-#=╠═╡
-par_unc(transformSensPar(SensPar))
-  ╠═╡ =#
-
-# ╔═╡ a995f83c-6ff7-4b95-a798-ea636ccb1d88
-# ╠═╡ show_logs = false
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	grid, inb,irrb,outb,sb,catr =  PTR_grid_boundaries_regions(dim)
-	if dim == 2
-		gridplot(grid, resolution=(660,300), aspect=4.0, zoom=2.8)
-	else
-		gridplot(grid,  xplane=xcut, resolution=(660,460), zoom=1.8, )
-	end
-end
-  ╠═╡ =#
-
-# ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
-function PTR_base(dim, par; times=nothing)	
-	times = isnothing(times) ? [0,20.0] : times
-	
-	G_lamp, nflowin, T_gas_in, abs1_vis, abs1_IR, abs2_vis, abs2_IR, abs3_IR, abs4_IR, mcat, poros, dp, perm, lambdas, delta_uc, delta_lc, delta_gap, Nu, k_conv= par
-
-	uc_window = SurfaceOpticalProps( # upper chamber: window surface, 1
-		alpha_IR=abs1_IR, 
-		tau_IR=1-abs1_IR,
-		alpha_vis=abs1_vis, 
-		tau_vis=0.93 
-	)
-	
-	uc_cat = SurfaceOpticalProps( # upper chamber: catalyst surface, 2
-		alpha_IR=abs2_IR, 
-		tau_IR=0.0,
-		alpha_vis=abs2_vis, 
-		tau_vis=0.0 
-	)
-
-	lc_frit = SurfaceOpticalProps( # lower chamber: porous frit surface, 3
-		alpha_IR=abs3_IR, 
-		tau_IR=0.0,
-		alpha_vis=0.15, 
-		tau_vis=0.0 
-	)
-	
-	lc_plate = SurfaceOpticalProps( # lower chamber: Al plate surface, 4
-		alpha_IR=abs4_IR, 
-		tau_IR=0.0,
-		alpha_vis=0.1, 
-		tau_vis=0.0 
-	)
-
-	# grid, inb,irrb,outb,sb,catr =  PTR_grid_boundaries_regions(dim)
-	grid, inb,irrb,outb,sb,catr =  MultiComponentReactiveMixtureProject.PTR_grid_boundaries_regions(dim)
-	
-	data=ReactorData(
-		dim=dim,
-		nom_flux=G_lamp,
-		nflowin=nflowin,
-		T_gas_in=T_gas_in,
-		uc_window=uc_window,
-		uc_cat=uc_cat,
-		lc_frit=lc_frit,
-		lc_plate=lc_plate,
-		uc_h=delta_uc,
-		lc_h=delta_lc,
-		Nu=Nu,
-		k_nat_conv=k_conv,
-		mcat=mcat,
-		poros=poros,
-		dp=dp,
-		perm=perm,
-		lambdas=lambdas,
-		delta_gap=delta_gap,
-		inlet_boundaries=inb,
-		irradiated_boundaries=irrb,
-		outlet_boundaries=outb,
-		side_boundaries=sb,
-		catalyst_regions=catr,
-		rhos=5.0*ufac"kg/m^3" # set solid density to low value to reduce thermal inertia of system
-		)
-
-	# ##########################################################################
-	# # BEGIN SYS INIT
-	# (;p,ip,Tamb,iT,iTw,iTp,ibf,irradiated_boundaries,FluxIntp,ng,X0)=data
-	# ng=ngas(data)
-
-	# sys=VoronoiFVM.System( 	grid;
-	# 						data=data,
-	# 						flux=MultiComponentReactiveMixtureProject.DMS_flux,
-	# 						reaction=MultiComponentReactiveMixtureProject.DMS_reaction,
-	# 						storage=MultiComponentReactiveMixtureProject.DMS_storage,
-	# 						bcondition=MultiComponentReactiveMixtureProject.PTR_bcond,
-	# 						bflux=MultiComponentReactiveMixtureProject.PTR_bflux,
-	# 						bstorage=MultiComponentReactiveMixtureProject.PTR_bstorage,
-	# 						boutflow=MultiComponentReactiveMixtureProject.DMS_boutflow,
-	# 						outflowboundaries=outb,
-	# 						assembly=:edgewise,
-	# 						)
-
-	# enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
-	# enable_boundary_species!(sys, iTw, irrb) # window temperature as boundary species in upper chamber
-	# enable_boundary_species!(sys, ibf, irrb) # boundary flux species, workaround to implement spatially varying irradiation
-	# enable_boundary_species!(sys, iTp, outb) # plate temperature as boundary species in lower chamber
-
-	# # END SYS INIT
-	# ##########################################################################
-	# # BEGIN INIVAL
-	
-	# inival=unknowns(sys)
-
-	# inival[ip,:].=p
-	# inival[[iT,iTw,iTp],:] .= Tamb
-
-	# for i=1:ng
-	# 	inival[i,:] .= X0[i]
-	# end
-
-	# # Only for variable irradiation flux density bc
-	# function d3tod2(a,b)
-	# 	a[1]=b[1]
-	# 	a[2]=b[2]
-	# end
-	# inival[ibf,:] .= 0.0
-	# sub=subgrid(grid,irradiated_boundaries,boundary=true, transform=d3tod2 )
-		
-	# for inode in sub[CellNodes]
-	# 	c = sub[Coordinates][:,inode]
-	# 	inodeip = sub[ExtendableGrids.NodeInParent][inode]
-	# 	inival[ibf,inodeip] = FluxIntp(c[1]-0.02, c[2]-0.02)
-	# end		
-
-	# # END INIVAL
-	# ##########################################################################
-	# # BEGIN DATA INIT
-	# catalyst_nodes = []
-	# for reg in catr
-	# 	catalyst_nodes = vcat(catalyst_nodes, unique(grid[CellNodes][:,grid[CellRegions] .== reg]) )
-	# end
-		
-	# cat_vol = sum(nodevolumes(sys)[unique(catalyst_nodes)])
-
-	# data.lcat = data.mcat/cat_vol
-	# local Ain = 0.0
-	# for boundary in inb
-	# 	Ain += bareas(boundary,sys,grid)
-	# end
-	# data.mfluxin = data.mflowin / Ain
-	# # END DATA INIT
-	# ##########################################################################
-	# BEGIN Solver control
-	if dim == 2
-		control = SolverControl(nothing, sys;)
-	else
-		control = SolverControl(;
-        method_linear = KrylovJL_GMRES(
-        ),
-        precon_linear = VoronoiFVM.factorizationstrategy(
-			MKLPardisoLU(), NoBlock(), sys),
-   		)
-	end
-	control.handle_exceptions=true
-	control.Δu_opt=100
-	# END Solver control
-	##########################################################################
-		
-	inival,sys = MultiComponentReactiveMixtureProject.PTR_init_system!(dim, grid, data)
-
-	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="nae",log=true)
-
-	return solt,grid,sys,data
-end
-
-# ╔═╡ 12cd7938-1f1d-417f-861b-b340edbd668d
-function T2_part_deriv(dim,p,data)
-	(;iT) = data
-
-	function f(p) 
-		solt,grid,sys,data=PTR_base(dim,p);
-		sol = solt(solt.t[end])
-		sol[iT,91] # corresponds to node at (r,z) = (0,5 mmm), center at cat surface
-	end
-	grad(forward_fdm(3, 1), f, p)[1]
-end 
-
-# ╔═╡ 8c8e91bd-7abb-453a-b10c-3b10203b44a0
-# ╠═╡ skip_as_script = true
-#=╠═╡
-if RunSens
-	dT2_dp = T2_part_deriv(2,transformSensPar(SensPar), ReactorData())
-end
-  ╠═╡ =#
-
-# ╔═╡ 2801c5bd-991f-4f85-aa49-43927369605f
-# ╠═╡ skip_as_script = true
-#=╠═╡
-md"""
-Sensitivities:
-1.  $\partial T_2 / \partial G_0 =$  $(round(dT2_dp[1]*ufac"kW/m^2",sigdigits=2)) K/(kW/m^2)
-1.  $\partial T_2 / \partial \dot n_{\text{in,total}} =$  $(round(dT2_dp[2]*ufac"mol/hr",sigdigits=2)) K/(mol/hr)
-1.  $\partial T_2 / \partial T_{\text{gas,in}} =$  $(round(dT2_dp[3],sigdigits=2)) K/K
-1.  $\partial T_2 / \partial \alpha_1^{\text{VIS}} =$  $(round(dT2_dp[4],sigdigits=2)) K
-1.  $\partial T_2 / \partial \alpha_1^{\text{IR}} =$  $(round(dT2_dp[5],sigdigits=2)) K
-1.  $\partial T_2 / \partial \alpha_2^{\text{VIS}} =$  $(round(dT2_dp[6],sigdigits=2)) K
-1.  $\partial T_2 / \partial \alpha_2^{\text{IR}} =$  $(round(dT2_dp[7],sigdigits=2)) K
-1.  $\partial T_2 / \partial \alpha_3^{\text{IR}} =$  $(round(dT2_dp[8],sigdigits=2)) K
-1.  $\partial T_2 / \partial \alpha_4^{\text{IR}} =$  $(round(dT2_dp[9],sigdigits=2)) K
-1.  $\partial T_2 / \partial m_{\text{cat}} =$  $(round(dT2_dp[10]*ufac"mg",sigdigits=2)) K/mg
-1.  $\partial T_2 / \partial \text{porosity} =$  $(round(dT2_dp[11],sigdigits=2)) K
-1.  $\partial T_2 / \partial d_{\text p} =$  $(round(dT2_dp[12]*ufac"μm",sigdigits=2)) K/μm
-1.  $\partial T_2 / \partial \text{permeability} =$  $(round(dT2_dp[13],sigdigits=2)) K
-1.  $\partial T_2 / \partial \lambda_{\text{frit,solid}} =$  $(round(dT2_dp[14],sigdigits=2)) K/(W/m/K)
-1.  $\partial T_2 / \partial \delta_{\text{uc}} =$  $(round(dT2_dp[15]*ufac"mm",sigdigits=2)) K/mm
-1.  $\partial T_2 / \partial \delta_{\text{lc}} =$  $(round(dT2_dp[16]*ufac"mm",sigdigits=2)) K/mm
-1.  $\partial T_2 / \partial \delta_{\text{gap,side}} =$  $(round(dT2_dp[17]*ufac"mm",sigdigits=2)) K/mm
-1.  $\partial T_2 / \partial \text{Nu}$ = $(round(dT2_dp[18],sigdigits=2)) K
-1.  $\partial T_2 / \partial k_{\text{conv,outer}}$ =  $(round(dT2_dp[19],sigdigits=2)) K/(W/m^2/K)
-"""
-  ╠═╡ =#
-
 # ╔═╡ e75c1f26-ba4b-417d-95da-e9f4203298e7
 # ╠═╡ skip_as_script = true
 #=╠═╡
@@ -472,10 +297,10 @@ let
 end
   ╠═╡ =#
 
-# ╔═╡ fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
+# ╔═╡ debdf189-7269-4d96-aa12-ff1c2c162f02
 # ╠═╡ skip_as_script = true
 #=╠═╡
-solt,grid,sys,data=PTR_base(dim,transformSensPar(SensPar));
+par_unc(transformSensPar(SensPar))
   ╠═╡ =#
 
 # ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
@@ -491,6 +316,20 @@ The simulation is setup as a transient simulation. An initialisation strategy is
 
 The mass flow boundary condition into the reactor domain is "ramped up" starting from a low value and linearly increasing until the final value is reached. A time delay is given to let the flow stabilize. Once the flow field is established, heat transport is ramped up until a stable temperature field is established. Finally, the reactivity of the catalyst is "ramped up" until its final reactivity value is reached.
 """
+  ╠═╡ =#
+
+# ╔═╡ a995f83c-6ff7-4b95-a798-ea636ccb1d88
+# ╠═╡ show_logs = false
+# ╠═╡ skip_as_script = true
+#=╠═╡
+let
+	grid, inb,irrb,outb,sb,catr =  PTR_grid_boundaries_regions(dim)
+	if dim == 2
+		gridplot(grid, resolution=(660,300), aspect=4.0, zoom=2.8)
+	else
+		gridplot(grid,  xplane=xcut, resolution=(660,460), zoom=1.8, )
+	end
+end
   ╠═╡ =#
 
 # ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
@@ -759,6 +598,169 @@ let
 		scalarplot!(vis[3,1], grid, sol[gni[:CH4],:])
 	end	
 	reveal(vis)
+end
+  ╠═╡ =#
+
+# ╔═╡ fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
+# ╠═╡ skip_as_script = true
+#=╠═╡
+solt,grid,sys,data=PTR_base(dim,transformSensPar(SensPar));
+  ╠═╡ =#
+
+# ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
+#=╠═╡
+function PTR_base(dim, par; times=nothing)	
+	times = isnothing(times) ? [0,20.0] : times
+	
+	G_lamp, nflowin, T_gas_in, abs1_vis, abs1_IR, abs2_vis, abs2_IR, abs3_IR, abs4_IR, mcat, poros, dp, perm, lambdas, delta_uc, delta_lc, delta_gap, Nu, k_conv= par
+
+	uc_window = SurfaceOpticalProps( # upper chamber: window surface, 1
+		alpha_IR=abs1_IR, 
+		tau_IR=1-abs1_IR,
+		alpha_vis=abs1_vis, 
+		tau_vis=0.93 
+	)
+	
+	uc_cat = SurfaceOpticalProps( # upper chamber: catalyst surface, 2
+		alpha_IR=abs2_IR, 
+		tau_IR=0.0,
+		alpha_vis=abs2_vis, 
+		tau_vis=0.0 
+	)
+
+	lc_frit = SurfaceOpticalProps( # lower chamber: porous frit surface, 3
+		alpha_IR=abs3_IR, 
+		tau_IR=0.0,
+		alpha_vis=0.15, 
+		tau_vis=0.0 
+	)
+	
+	lc_plate = SurfaceOpticalProps( # lower chamber: Al plate surface, 4
+		alpha_IR=abs4_IR, 
+		tau_IR=0.0,
+		alpha_vis=0.1, 
+		tau_vis=0.0 
+	)
+
+	# grid, inb,irrb,outb,sb,catr =  PTR_grid_boundaries_regions(dim)
+	grid, inb,irrb,outb,sb,catr =  MultiComponentReactiveMixtureProject.PTR_grid_boundaries_regions(dim)
+	
+	data=ReactorData(
+		dim=dim,
+		nom_flux=G_lamp,
+		nflowin=nflowin,
+		T_gas_in=T_gas_in,
+		uc_window=uc_window,
+		uc_cat=uc_cat,
+		lc_frit=lc_frit,
+		lc_plate=lc_plate,
+		uc_h=delta_uc,
+		lc_h=delta_lc,
+		Nu=Nu,
+		k_nat_conv=k_conv,
+		mcat=mcat,
+		poros=poros,
+		dp=dp,
+		perm=perm,
+		lambdas=lambdas,
+		delta_gap=delta_gap,
+		inlet_boundaries=inb,
+		irradiated_boundaries=irrb,
+		outlet_boundaries=outb,
+		side_boundaries=sb,
+		catalyst_regions=catr,
+		rhos=5.0*ufac"kg/m^3" # set solid density to low value to reduce thermal inertia of system
+		)
+
+	# ##########################################################################
+	# # BEGIN SYS INIT
+	# (;p,ip,Tamb,iT,iTw,iTp,ibf,irradiated_boundaries,FluxIntp,ng,X0)=data
+	# ng=ngas(data)
+
+	# sys=VoronoiFVM.System( 	grid;
+	# 						data=data,
+	# 						flux=MultiComponentReactiveMixtureProject.DMS_flux,
+	# 						reaction=MultiComponentReactiveMixtureProject.DMS_reaction,
+	# 						storage=MultiComponentReactiveMixtureProject.DMS_storage,
+	# 						bcondition=MultiComponentReactiveMixtureProject.PTR_bcond,
+	# 						bflux=MultiComponentReactiveMixtureProject.PTR_bflux,
+	# 						bstorage=MultiComponentReactiveMixtureProject.PTR_bstorage,
+	# 						boutflow=MultiComponentReactiveMixtureProject.DMS_boutflow,
+	# 						outflowboundaries=outb,
+	# 						assembly=:edgewise,
+	# 						)
+
+	# enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
+	# enable_boundary_species!(sys, iTw, irrb) # window temperature as boundary species in upper chamber
+	# enable_boundary_species!(sys, ibf, irrb) # boundary flux species, workaround to implement spatially varying irradiation
+	# enable_boundary_species!(sys, iTp, outb) # plate temperature as boundary species in lower chamber
+
+	# # END SYS INIT
+	# ##########################################################################
+	# # BEGIN INIVAL
+	
+	# inival=unknowns(sys)
+
+	# inival[ip,:].=p
+	# inival[[iT,iTw,iTp],:] .= Tamb
+
+	# for i=1:ng
+	# 	inival[i,:] .= X0[i]
+	# end
+
+	# # Only for variable irradiation flux density bc
+	# function d3tod2(a,b)
+	# 	a[1]=b[1]
+	# 	a[2]=b[2]
+	# end
+	# inival[ibf,:] .= 0.0
+	# sub=subgrid(grid,irradiated_boundaries,boundary=true, transform=d3tod2 )
+		
+	# for inode in sub[CellNodes]
+	# 	c = sub[Coordinates][:,inode]
+	# 	inodeip = sub[ExtendableGrids.NodeInParent][inode]
+	# 	inival[ibf,inodeip] = FluxIntp(c[1]-0.02, c[2]-0.02)
+	# end		
+
+	# # END INIVAL
+	# ##########################################################################
+	# # BEGIN DATA INIT
+	# catalyst_nodes = []
+	# for reg in catr
+	# 	catalyst_nodes = vcat(catalyst_nodes, unique(grid[CellNodes][:,grid[CellRegions] .== reg]) )
+	# end
+		
+	# cat_vol = sum(nodevolumes(sys)[unique(catalyst_nodes)])
+
+	# data.lcat = data.mcat/cat_vol
+	# local Ain = 0.0
+	# for boundary in inb
+	# 	Ain += bareas(boundary,sys,grid)
+	# end
+	# data.mfluxin = data.mflowin / Ain
+	# # END DATA INIT
+	# ##########################################################################
+	# BEGIN Solver control
+	if dim == 2
+		control = SolverControl(nothing, sys;)
+	else
+		control = SolverControl(;
+        method_linear = KrylovJL_GMRES(
+        ),
+        precon_linear = VoronoiFVM.factorizationstrategy(
+			MKLPardisoLU(), NoBlock(), sys),
+   		)
+	end
+	control.handle_exceptions=true
+	control.Δu_opt=100
+	# END Solver control
+	##########################################################################
+		
+	inival,sys = MultiComponentReactiveMixtureProject.PTR_init_system!(dim, grid, data)
+
+	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="nae",log=true)
+
+	return solt,grid,sys,data
 end
   ╠═╡ =#
 

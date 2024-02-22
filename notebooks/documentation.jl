@@ -50,9 +50,42 @@ The combined __convective-diffusive__ species mass flux $\vec \Psi_i = \vec \Phi
 
 """
 
-# ╔═╡ 00663964-7c47-4ba8-9fc9-e65c63c9f6b8
+# ╔═╡ 4ac838f9-777e-41d6-a89c-5ed4282b4288
 md"""
 ## Thermal Energy Transport
+"""
+
+# ╔═╡ bcd95c4a-a4a3-4225-a5fb-ca0a323b05b0
+md"""
+```math
+\begin{align}
+\frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec \Phi_i \right) + \vec q \right ) + \sum h_i^0 r_i &= 0
+
+\end{align}
+```
+"""
+
+# ╔═╡ 52afc3f1-064c-4a45-af0d-942e89e2c524
+md"""
+```math
+\begin{align}
+h_i &= h_i^0 + \int_{T_{\text{ref}}}^T c_{p,i}(\widetilde{T}) d\widetilde{T} \\
+&= h_i^0 + h_i^{\text{th}}(T)
+\end{align}
+```
+"""
+
+# ╔═╡ f2668597-d7c1-4200-ad6b-bc6d536068ef
+md"""
+```math
+\begin{align}
+\vec q = -\lambda_{\text{eff}} \nabla T
+\end{align}
+```
+"""
+
+# ╔═╡ 00663964-7c47-4ba8-9fc9-e65c63c9f6b8
+md"""
 
 The thermal energy equation considers convective-diffusive transport of thermal energy and is formulated with effective transport parameters that are a consequence of the quasi-homogeneous phase approach:
 
@@ -74,8 +107,123 @@ During chemical reactions the chemical bonds in the species involved in the reac
 In case of an exothermal reaction, the products have less chemical energy thus the difference is released as heat. In contrast for endothermal reactions the products hava more chemical energy than the reactants and thus consume heat during the reaction.
 """
 
+# ╔═╡ 83cd18d8-40c8-49c8-8b01-32f0aa8cc17b
+md"""
+### Derivation of Enthalpy Balance
+"""
+
+# ╔═╡ 30ca1e60-ee79-4b6d-9c66-d5e3313ade3a
+md"""
+```math
+\begin{align}
+\frac{\partial h}{\partial t} + \nabla \cdot ( \rho h \vec v ) + \nabla \cdot \left(  \sum_i^n h_i \vec \Phi_i \right) + \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
+\end{align}
+```
+"""
+
+# ╔═╡ 7c3f89da-9b81-4395-8ffc-00c65fdc7529
+md"""
+```math
+\begin{align}
+\frac{\partial (\sum \rho_i h_i )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i \vec v \right) + \nabla \cdot \left ( \sum_i^n h_i \vec \Phi_i \right )+ \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
+\end{align}
+```
+"""
+
+# ╔═╡ cf75ad38-c5d6-4258-ab39-710ece3b7663
+md"""
+```math
+h_i = h_i^0 + \int_{T_{\text{ref}}}^T c_{p,i}(\widetilde{T}) d\widetilde{T} = h_i^0 + h_i^{\text{th}}(T)
+```
+"""
+
+# ╔═╡ 70fbdc66-fefc-432e-abeb-05a322b34e00
+md"""
+```math
+\begin{align}
+\frac{\partial (\sum \rho_i h_i^0 )}{\partial t} + \frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i^0 \vec v \right) + \nabla \cdot \left( \sum \rho_i h_i^{\text{th}}(T) \vec v \right) + \dots \\
+
++ \nabla \cdot \left ( \sum h_i^0 \vec \Phi_i \right ) + \nabla \cdot \left ( \sum h_i^{\text{th}}(T) \vec \Phi_i \right ) + \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
+\end{align}
+```
+"""
+
+# ╔═╡ cb64283a-4c74-43ea-be69-a0ee293491fd
+md"""
+```math
+\begin{align}
+\frac{\partial (\sum \rho_i h_i^0 )}{\partial t} = \sum \left[ \frac{\partial (\rho_i h_i^0 )}{\partial t} \right ] \\
+\nabla \cdot \left( \sum \rho_i h_i^0 \vec v \right) = \sum \left[ \nabla \cdot \left(  \rho_i h_i^0 \vec v \right) \right] \\
+\nabla \cdot \left ( \sum h_i^0 \vec \Phi_i \right ) = \sum \left[ \nabla \cdot \left ( h_i^0 \vec \Phi_i \right ) \right ]
+\end{align}
+```
+"""
+
+# ╔═╡ 730348aa-3ff7-43bd-8c43-e9ba6823d318
+md"""
+```math
+\begin{align}
+\sum \left( \frac{\partial (\rho_i h_i^0 )}{\partial t} + \nabla \cdot \left(  \rho_i h_i^0 \vec v \right) + \nabla \cdot \left ( h_i^0 \vec \Phi_i \right ) \right) + \dots\\
+ + \frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i^{\text{th}}(T) \vec v \right) 
+
++ \nabla \cdot \left ( \sum h_i^{\text{th}}(T) \vec \Phi_i \right ) + \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
+\end{align}
+```
+"""
+
+# ╔═╡ 3e53e30d-f601-4d78-9f93-037172e40504
+md"""
+Multiply the species mass balance with $h_i^0$:
+```math
+\begin{align}
+\frac{\partial \rho_i}{\partial t} + \nabla \cdot \left( \rho_i \vec v \right ) + \nabla \cdot \vec \Phi_i = r_i \\
+h_i^0 \frac{\partial \rho_i}{\partial t} + h_i^0 \left( \nabla \cdot \left( \rho_i \vec v \right ) \right) + h_i^0 \left( \nabla \cdot \vec \Phi_i \right )= h_i^0 r_i
+\end{align}
+```
+Because $h_i^0$ are constant:
+```math
+\begin{align}
+\frac{\partial (\rho_i h_i^0 )}{\partial t} + \nabla \cdot \left(  \rho_i h_i^0 \vec v \right) + \nabla \cdot \left ( h_i^0 \vec \Phi_i \right ) = h_i^0 r_i
+\end{align}
+```
+Summing over both sides: 
+
+```math
+\begin{align}
+\sum \left( \frac{\partial (\rho_i h_i^0 )}{\partial t} + \nabla \cdot \left(  \rho_i h_i^0 \vec v \right) + \nabla \cdot \left ( h_i^0 \vec \Phi_i \right ) \right) = \sum h_i^0 r_i
+
+
+\end{align}
+```
+Leading to the finally implemented form of the enthalpy equation:
+```math
+\begin{align}
+\frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i^{\text{th}}(T) \vec v \right) + \nabla \cdot \left ( \sum h_i^{\text{th}}(T) \vec \Phi_i \right ) + \nabla \cdot \vec q + \sum h_i^0 r_i &= \frac{\partial p}{\partial t} \\
+\end{align}
+```
+Or simplifying with $\frac{\partial p}{\partial t} = 0$ for the case of constant pressure:
+```math
+\begin{align}
+\frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec \Phi_i \right) + \vec q \right ) + \sum h_i^0 r_i &= 0
+\end{align}
+```
+
+"""
+
 # ╔═╡ Cell order:
 # ╠═64469510-f2f5-11ed-0dd5-2b60d8d52b40
-# ╠═7011d5ff-58f2-4ba9-a64c-96fb4df689f4
+# ╟─7011d5ff-58f2-4ba9-a64c-96fb4df689f4
 # ╟─ceb22984-3af0-4d76-8e27-b5cba9c4e51c
-# ╠═00663964-7c47-4ba8-9fc9-e65c63c9f6b8
+# ╟─4ac838f9-777e-41d6-a89c-5ed4282b4288
+# ╟─bcd95c4a-a4a3-4225-a5fb-ca0a323b05b0
+# ╟─52afc3f1-064c-4a45-af0d-942e89e2c524
+# ╟─f2668597-d7c1-4200-ad6b-bc6d536068ef
+# ╟─00663964-7c47-4ba8-9fc9-e65c63c9f6b8
+# ╟─83cd18d8-40c8-49c8-8b01-32f0aa8cc17b
+# ╟─30ca1e60-ee79-4b6d-9c66-d5e3313ade3a
+# ╟─7c3f89da-9b81-4395-8ffc-00c65fdc7529
+# ╟─cf75ad38-c5d6-4258-ab39-710ece3b7663
+# ╟─70fbdc66-fefc-432e-abeb-05a322b34e00
+# ╟─cb64283a-4c74-43ea-be69-a0ee293491fd
+# ╟─730348aa-3ff7-43bd-8c43-e9ba6823d318
+# ╟─3e53e30d-f601-4d78-9f93-037172e40504

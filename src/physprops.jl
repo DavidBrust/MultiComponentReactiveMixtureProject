@@ -403,17 +403,17 @@ function dynvisc_thermcond_mix(data, T, x)
 
     #  !!!ALLOC for types stubility & correctness
     #  !!!ALLOC initialize with zero(eltype) instead of 0.0
-    mumix=zero(eltype(x))
-    lambdamix=zero(eltype(x))
+    mumix=zero(eltype(T))
+    lambdamix=zero(eltype(T))
     
     if constant_properties
         mumix += 2.0e-5*ufac"Pa*s"
         lambdamix += 2.0e-2*ufac"W/(m*K)"
     else
         # !!!ALLOC Use MVectors with static size information instead of Vector
-        mu=MVector{ngas(data),eltype(x)}(undef)
-        lambda=MVector{ngas(data),eltype(x)}(undef)
-        M=MVector{ngas(data),eltype(x)}(undef)
+        mu=MVector{ngas(data),eltype(T)}(undef)
+        lambda=MVector{ngas(data),eltype(T)}(undef)
+        M=MVector{ngas(data),eltype(T)}(undef)
 
         for i=1:ngas(data)
             mu[i] = dynvisc_gas(Fluids[i], T)
@@ -459,7 +459,7 @@ function heatcap_gas(Fluid::FluidProps, T)
 end
 
 function heatcap_mix(Fluids::AbstractVector, T, x)
-    cpmix = zero(eltype(x))
+    cpmix = zero(eltype(T))
     ng=length(x)
     @inbounds for i=1:ng
         cpmix += x[i] * heatcap_gas(Fluids[i], T)
@@ -469,7 +469,7 @@ end
 
 function heatcap_mix(data, T, x)
     (;Fluids,constant_properties) = data
-    cpmix = zero(eltype(x))
+    cpmix = zero(eltype(T))
     
     if constant_properties
         cpmix += 30.0*ufac"J/(mol*K)"
@@ -506,7 +506,7 @@ end
 
 function enthalpy_mix(data, T, x)
     (;Fluids,constant_properties) = data
-    hmix = zero(eltype(x))
+    hmix = zero(eltype(T))
 	
     if constant_properties
 		# !!! DEBUG !!!

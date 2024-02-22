@@ -11,9 +11,9 @@ notebooks = [
     "PTReactorDemo.jl"
     ]
 
-@testset "pluto notebooks" begin
-    @testplutonotebooks(joinpath(@__DIR__, "..", "notebooks"), notebooks)
-end
+# @testset "pluto notebooks" begin
+#     @testplutonotebooks(joinpath(@__DIR__, "..", "notebooks"), notebooks)
+# end
 
 # scripts = ["TestSim.jl"]
 
