@@ -31,10 +31,10 @@ function run(;dim=3, constant_irradiation_flux_bc=false, times=[0.0,20.0], nref=
     else
         
         # control = SolverControl( DirectSolver(factorization = MKLPardisoFactorize()), sys)
-        control = SolverControl(GMRESIteration(MKLPardisoLU(), EquationBlock()), sys)
+        # control = SolverControl(GMRESIteration(MKLPardisoLU(), EquationBlock()), sys)
         # control = SolverControl(GMRESIteration(ILUZeroFactorization()), sys)
         # control = SolverControl(CGIteration(MKLPardisoLU(), EquationBlock()), sys)
-        # control = SolverControl(nothing, sys)
+        control = SolverControl(nothing, sys)
     end
     # control = SolverControl(nothing, sys)
     control.handle_exceptions=true

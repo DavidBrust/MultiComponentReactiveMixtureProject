@@ -5,6 +5,7 @@ Helper function to calculate radiation emitted from the window towards the surfa
 """
 function PTR_radiosity_window(f,u,bnode,data)
     # (;dim,iTw,G_lamp,nom_flux,FluxIntp,Tamb,uc_window,irradiated_boundaries)=data
+	# (;dim,iTw,ibf,nom_flux,Tamb,uc_window,irradiated_boundaries,constant_irradiation_flux_bc,sp)=data
 	(;dim,iTw,ibf,nom_flux,Tamb,uc_window,irradiated_boundaries,constant_irradiation_flux_bc,sp)=data
 	
     # irrad. exchange between quartz window (1), cat surface (2), masked sruface (3) 
@@ -27,6 +28,7 @@ function PTR_radiosity_window(f,u,bnode,data)
 		end
 	end
 	# !!! SENSITIVITY !!!
+	# sp = parameters(u)
 	G_lamp *= (1 + sp[1])
 	# !!! SENSITIVITY !!!
 
@@ -236,7 +238,7 @@ function PTR_bflux(f,u,bedge,data)
 	if bedge.region in irradiated_boundaries # window, upper chamber
 		(;iTw,lambda_window) = data
 		f[iTw] = lambda_window * (u[iTw, 1] - u[iTw, 2])
-			elseif bedge.region in outlet_boundaries # bottom plate, lower chamber
+	elseif bedge.region in outlet_boundaries # bottom plate, lower chamber
 		(;iTp,lambda_Al) = data
 		f[iTp] = lambda_Al * (u[iTp, 1] - u[iTp, 2])
 	end
@@ -249,12 +251,16 @@ Function defining the storage function of the boundary species in the photo
     Only relevant if temperature equation is solved.
 """
 function PTR_bstorage(f,u,bnode,data)
-	(;irradiated_boundaries,outlet_boundaries,solve_T_equation)=data
+	(;irradiated_boundaries,outlet_boundaries,solve_T_equation,constant_irradiation_flux_bc,dim)=data
 	if solve_T_equation
 		if bnode.region in irradiated_boundaries # window, upper chamber
 			(;iTw) = data
 			f[iTw] = u[iTw]
-					elseif bnode.region in outlet_boundaries # bottom plate, lower chamber
+			if dim == 3 && !constant_irradiation_flux_bc
+				(;ibf) = data
+				f[ibf] = u[ibf]
+			end
+		elseif bnode.region in outlet_boundaries # bottom plate, lower chamber
 			(;iTp) = data
 			f[iTp] = u[iTp]
 		end
