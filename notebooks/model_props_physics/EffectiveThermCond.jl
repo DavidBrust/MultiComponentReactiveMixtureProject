@@ -77,8 +77,8 @@ __Chudnovsky, A.F.__, thermal-physical characteristics of materials. 1962.
 
 # ╔═╡ 4927c598-997e-4237-91cc-08f39a7e896d
 function lambda_eff_tight_backfill(data,λf)
-	(;ϕ) = data
-	phi=100*ϕ
+	(;poros) = data
+	phi=100*poros
 	if phi-26 > 1e-3
 		3*π*λf*log((43.0+0.31*phi)/(phi-26))
 	else
@@ -220,7 +220,7 @@ let
 	#plot!(p,100*phis,λeff_tight_backfill, label="Chudnovsky\nTight Backfill", ls=:auto)
 	plot!(p,100*phis,λeff_schuetz, label="Schuetz", ls=:auto)
 
-	plot!(p,[100ϕ_meas],[λeff_meas_mean],yerror=[λeff_meas_std], m=:circle, label="λeff exp")
+	plot!(p,[100ϕ_meas],[λeff_meas_mean],yerror=[λeff_meas_std], m=:circle, label=L"\lambda_{\textrm{eff,exp}}")
 
 	lens!(p,[33, 39], [0.37, 0.41], inset = (1, bbox(0.3, 0.15, 0.3, 0.3)))
 
@@ -245,7 +245,7 @@ end
 # ╠═4927c598-997e-4237-91cc-08f39a7e896d
 # ╟─97814644-a5e9-4a7f-a4dd-b4f49286c220
 # ╠═15e11af7-1f81-4d06-83b9-f7acc6c2ad97
-# ╠═81d9a193-3683-44d1-899a-810e02bdb1c7
+# ╟─81d9a193-3683-44d1-899a-810e02bdb1c7
 # ╠═81bf69c2-7ef1-4964-a852-c13ea51b3785
 # ╟─8c13c9a2-3859-4eac-9732-adae7da2fab3
 # ╟─12fffc7d-ae4d-4988-8051-a75a605b8ad2

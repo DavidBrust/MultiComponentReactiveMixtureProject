@@ -639,6 +639,11 @@ function PTR_init_system(dim, grid, data::ReactorData; assembly=:edgewise, unkno
 		inival[i,:] .= X0[i]
 	end
 
+	# for inert gas (pure N2), set is_reactive to false
+	if !any(X0[1:(ng-1)] .> 0.0)
+		data.is_reactive = false
+	end
+
 	if solve_T_equation
 		inival[[iT,iTw,iTp],:] .= Tamb
 		if dim == 3 && !constant_irradiation_flux_bc

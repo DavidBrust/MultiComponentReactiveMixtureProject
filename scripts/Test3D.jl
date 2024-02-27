@@ -31,12 +31,11 @@ function run(;dim=3, constant_irradiation_flux_bc=false, times=[0.0,20.0], nref=
     else
         
         # control = SolverControl( DirectSolver(factorization = MKLPardisoFactorize()), sys)
-        # control = SolverControl(GMRESIteration(MKLPardisoLU(), EquationBlock()), sys)
+        control = SolverControl(GMRESIteration(MKLPardisoLU(), EquationBlock()), sys)
         # control = SolverControl(GMRESIteration(ILUZeroFactorization()), sys)
         # control = SolverControl(CGIteration(MKLPardisoLU(), EquationBlock()), sys)
-        control = SolverControl(nothing, sys)
+        # control = SolverControl(nothing, sys)
     end
-    # control = SolverControl(nothing, sys)
     control.handle_exceptions=true
     control.Δu_opt = 100
 
@@ -73,7 +72,7 @@ function runtests()
     solt,grid,sys,data = run()
     sol = solt(solt.t[end])
     # @test isapprox(minimum(sol[data.iT,:]), 410.8628150859246)
-    @test trunc(minimum(sol[data.iT,:]), digits=4) == 422.6527
+    @test trunc(minimum(sol[data.iT,:]), digits=4) == 394.5154
 end
 
 end

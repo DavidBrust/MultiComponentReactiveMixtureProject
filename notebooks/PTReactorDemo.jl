@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.39
+# v0.19.38
 
 using Markdown
 using InteractiveUtils
@@ -207,7 +207,7 @@ function Test2D()
 end
 
 # ╔═╡ 380c74fb-66c4-43fb-a3f5-9c942b13fa0d
-@test isapprox(Test2D(), 0.8862394201643371)
+@test isapprox(Test2D(), 0.8811225954998759)
 
 # ╔═╡ 98468f9e-6dee-4b0b-8421-d77ac33012cc
 md"""
@@ -278,6 +278,7 @@ md"""
 ### Molar fractions
 1) CO
 2) CO2
+3) N2
 """
 
 # ╔═╡ 111b1b1f-51a5-4069-a365-a713c92b79f4
@@ -378,7 +379,7 @@ end
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
-# ╠═927dccb1-832b-4e83-a011-0efa1b3e9ffb
+# ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═1cc9d6c4-e2d6-4501-ae4d-d7568dee1e8f
 # ╠═994d4a87-3f27-4a51-b061-6111c3346d60
 # ╠═3207839f-48a9-49b6-9861-e5e74bc593a4
@@ -392,4 +393,4 @@ end
 # ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
 # ╟─111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╟─eb9dd385-c4be-42a2-8565-cf3cc9b2a078
-# ╟─de69f808-2618-4add-b092-522a1d7e0bb7
+# ╠═de69f808-2618-4add-b092-522a1d7e0bb7

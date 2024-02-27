@@ -1,8 +1,8 @@
 module MultiComponentReactiveMixtureProject
 
 using VoronoiFVM, ExtendableGrids
+using StaticArrays, SparseArrays
 using LessUnitful, Printf, Dates, CSV, DataFrames, Interpolations
-using StaticArrays
 using Documenter
 using DocStringExtensions: TYPEDEF, TYPEDSIGNATURES, SIGNATURES, TYPEDFIELDS, METHODLIST
 
