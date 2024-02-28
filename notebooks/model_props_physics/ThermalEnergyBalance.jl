@@ -39,23 +39,13 @@ md"""
 # Energy Conservation and Simplification
 """
 
-# ╔═╡ d906e8af-f315-4355-8b9f-15c3fc7cd744
-md"""
-Internal energy equation (2.2.21, Giovangigli [1], 3.76, [2]):
-```math
-\begin{align}
-\partial_t(\rho e) + \nabla \cdot (\rho e \vec v) + \nabla \cdot (p \vec v) + \nabla \cdot \vec Q = - (\vec \Pi \:\: \colon \: \nabla \vec v) + \vec v \cdot \nabla p
-\end{align}
-```
-"""
-
 # ╔═╡ a39d4d01-dde9-4a59-85bb-6f590b2bd397
 md"""
 
 Total energy equation eq. (2.2.3) following Giovangigli [1]:
 ```math
 \begin{align}
-\partial_t(\rho e^{\text{tot}}) + \nabla \cdot ((\rho e^{\text{tot}} + p)\vec v) + \nabla \cdot(\vec Q+ \vec \Pi \cdot \vec v) = \sum_{i=1 \dots N} (\rho_i \vec v + F_i) \cdot \vec b_i
+\partial_t(\rho e^{\text{tot}}) + \nabla \cdot ((\rho e^{\text{tot}} + p)\vec v) + \nabla \cdot(\vec Q+ \Pi \cdot \vec v) = \sum_{i=1 \dots N} (\rho_i \vec v + \vec F_i) \cdot \vec b_i
 \end{align}
 ```
 where $e^{\text{tot}}$ is the specific total energy and $\vec Q$ is the heat flux.
@@ -72,28 +62,56 @@ Decompose total specific energy of the mixture $e^{\text{tot}}$ into
 where $e$ is the specific internal energy and $\frac{1}{2}\vec v \cdot \vec v$ is the specific kinetic energy.
 """
 
-# ╔═╡ 3d7ca3da-7446-413c-b905-6d818a778a90
+# ╔═╡ d906e8af-f315-4355-8b9f-15c3fc7cd744
 md"""
-## Estimation of orders of magnitude
-"""
-
-# ╔═╡ 8a40b0bf-a7dd-4200-9ff5-01281272fe23
-md"""
-### Specific internal energy
+## Internal energy equation
+Internal energy equation (2.2.21, Giovangigli [1], 3.76, [2]):
 ```math
 \begin{align}
-e_i(T) &= e_i^0 + \int_{T_{\text{ref}}}^T c_{v,i}(\widetilde{T}) d\widetilde{T} \\
-&\approx e_i^0 + \frac{c_{v,i}(T) + c_{v,i}(T_{\text{ref}})}{2} (T-T_{\text{ref}}) \\
-c_{v,i} &= c_{p,i} - \frac{R}{M_i}
+\partial_t(\rho e) + \nabla \cdot (\rho e \vec v) + \nabla \cdot (p \vec v) + \nabla \cdot \vec Q = - ( \Pi \:\: \colon \: \nabla \vec v) + \vec v \cdot \nabla p
 \end{align}
 ```
 """
+
+# ╔═╡ eaf88376-bf27-4fee-b0f8-6480740adc15
+
 
 # ╔═╡ e8749b9f-c394-43aa-9ae1-fa00f49f3b64
 md"""
 ### Specific kinetic energy
 ```math
 k = \frac{1}{2}\vec v \cdot \vec v
+```
+"""
+
+# ╔═╡ bb014dcb-f5f8-4e37-a7bd-5f9879b3a1c2
+md"""
+## Entahlpy equation
+```math
+\begin{align}
+h &= e + pv \\
+\rho e &= \rho h - p
+\end{align}
+```
+```math
+\begin{align}
+\partial_t(\rho h) + \nabla \cdot (\rho h \vec v) + \nabla \cdot \vec Q = \partial_t p - (\vec \Pi \:\: \colon \: \nabla \vec v) + \vec v \cdot \nabla p
+\end{align}
+```
+"""
+
+# ╔═╡ 51c3da00-9f35-4b54-8cc5-ac5a4dcc3980
+md"""
+TODO: Show that terms on right hand side are small compared to remaining terms.
+"""
+
+# ╔═╡ 5b0a0cf5-8ac4-49c6-8890-85b81c7e333f
+md"""
+According to Giovangigli [3] the viscous momentum flux $\Pi$ can be written as:
+```math
+\begin{align}
+	\Pi =- \kappa (\nabla \cdot \vec v)I - \eta(\nabla v + (\nabla v)^t - \frac{2}{d'} (\nabla \cdot v)I)
+\end{align}
 ```
 """
 
@@ -128,6 +146,28 @@ end
 # ╔═╡ 82be58bb-8bb3-4769-b7b9-1fbfc5f9d5ea
 solt,grid,sys,data = setup_solve()
 
+# ╔═╡ 6aa9ea5e-5914-4e73-b77c-500b09e4a9cc
+V_flow_in = data.nflowin * ph"R" * 293.15 / (1.0*ufac"bar") / ufac"l/minute"
+
+# ╔═╡ 3d7ca3da-7446-413c-b905-6d818a778a90
+md"""
+## Estimation of orders of magnitude
+Exemplary case of N2 feed flow of $(round(V_flow_in)) l/min the resulting mass specific internal and kinetic energies are computed at $(data.Tamb-273.15) °C.
+"""
+
+# ╔═╡ 8a40b0bf-a7dd-4200-9ff5-01281272fe23
+md"""
+### Specific internal energy
+```math
+\begin{align}
+e_i(T) &= e_i^0 + \int_{T_{\text{ref}}}^T c_{v,i}(\widetilde{T}) d\widetilde{T} \\
+&\approx e_i^0 + \frac{c_{v,i}(T) + c_{v,i}(T_{\text{ref}})}{2} (T-T_{\text{ref}}) \\
+c_{v,i} &= c_{p,i} - \frac{R}{M_i}
+\end{align}
+```
+For N2 at $(data.Tamb-273.15) °C:
+"""
+
 # ╔═╡ 18756563-680e-4906-8274-f8601c7e6cd7
 let
 	T = data.Tamb
@@ -152,7 +192,7 @@ let
 
 	v = massflux./ repeat(reshape(rho,1,:),2)
 	v_magnitude = [sqrt(dot(v_,v_)) for v_ in eachcol(v)]
-	#@info maximum(v_magnitude)
+	# @info maximum(v_magnitude)
 	k = 0.5* [dot(v_,v_) for v_ in eachcol(v)]
 	maximum(k)
 end
@@ -211,20 +251,26 @@ md"""
 # References
 1) Giovangigli, Vincent (1999): Multicomponent flow modeling. Boston, Basel, Berlin: Birkhäuser (Modeling and simulation in science, engineering, and technology).
 1) Marquardt, Wolfgang (2014): Modellierung technischer Systeme. Vorlesungsmanuskript, RWTH Aachen University.
+1) Giovangigli, Vincent (2016): Solutions for Models of Chemically Reacting Mixtures. In: Yoshikazu Giga und Antonin Novotny (Hg.): Handbook of Mathematical Analysis in Mechanics of Viscous Fluids.
 """
 
 # ╔═╡ Cell order:
 # ╠═5d07bf50-a4ec-11ee-2769-19a4be2d9386
 # ╟─c426878f-67e1-4d2d-924e-73bbba9a06c7
 # ╟─48eb2a52-fabb-4daa-b6da-f8ac9a55668d
-# ╟─d906e8af-f315-4355-8b9f-15c3fc7cd744
 # ╟─a39d4d01-dde9-4a59-85bb-6f590b2bd397
 # ╟─586fabe6-2f89-4dac-b95c-5149f86afc6f
+# ╟─d906e8af-f315-4355-8b9f-15c3fc7cd744
+# ╠═eaf88376-bf27-4fee-b0f8-6480740adc15
 # ╟─3d7ca3da-7446-413c-b905-6d818a778a90
+# ╠═6aa9ea5e-5914-4e73-b77c-500b09e4a9cc
 # ╟─8a40b0bf-a7dd-4200-9ff5-01281272fe23
 # ╠═18756563-680e-4906-8274-f8601c7e6cd7
 # ╟─e8749b9f-c394-43aa-9ae1-fa00f49f3b64
 # ╠═f53131ee-fafe-4c72-a25d-50c58cbd2484
+# ╟─bb014dcb-f5f8-4e37-a7bd-5f9879b3a1c2
+# ╟─51c3da00-9f35-4b54-8cc5-ac5a4dcc3980
+# ╟─5b0a0cf5-8ac4-49c6-8890-85b81c7e333f
 # ╠═520848fc-1d79-4cc6-8448-9a5a6bb755bf
 # ╠═82be58bb-8bb3-4769-b7b9-1fbfc5f9d5ea
 # ╠═b7a0e5f5-3772-419c-8e20-10660275b3aa

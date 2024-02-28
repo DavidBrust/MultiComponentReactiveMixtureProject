@@ -45,9 +45,6 @@ $\vec \Phi_i$ is the __diffusive__ mass flux of species $i$ ($\frac{\text{kg}}{\
 and $r_i$ is the species mass volumetric source/sink ($\frac{\text{kg}}{\text{m}^3 \text{s}}$) of gas phase species $i$.
 
 The __convective__ mass flux of species $i$ is the product of the superficial mean velocity with the partial mass density $\rho_i \vec v$.
-The combined __convective-diffusive__ species mass flux $\vec \Psi_i = \vec \Phi_i + \rho_i \vec v$ can be introduced as an auxiliary variable.
-
-
 """
 
 # ╔═╡ 4ac838f9-777e-41d6-a89c-5ed4282b4288
@@ -57,9 +54,30 @@ md"""
 
 # ╔═╡ bcd95c4a-a4a3-4225-a5fb-ca0a323b05b0
 md"""
+Enthalpy equation for __gas phase only__. Considers convective-diffusive transport of thermal energy, including "thermal drift" from diffusive species fluxes $\vec \Phi_i$ carrying enthalpy.
+
+Formulation based on separation of "reference  enthalpy" and "thermal enthalpy".  See section "Derivation of Separated Formulation".
 ```math
 \begin{align}
 \frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec \Phi_i \right) + \vec q \right ) + \sum h_i^0 r_i &= 0
+\end{align}
+```
+
+```math
+\begin{align}
+\vec q = -\lambda \nabla T
+\end{align}
+```
+"""
+
+# ╔═╡ 37ec2c8a-1711-4e1e-badd-0f5322eef41e
+md"""
+Enthalpy equation for __gas + solid phase__. It is formulated with effective transport parameters that are a consequence of the quasi-homogeneous phase approach. It needs to be checked that this is permissible. 
+Formulation based on separation of "reference  enthalpy" and "thermal enthalpy".  See also section "Derivation of Separated Formulation".
+
+```math
+\begin{align}
+\frac{\partial (\varepsilon \sum (\rho_i h_i^{\text{th}}(T))  + [1-\varepsilon] \rho_{\text s} h_{\text s}) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec \Phi_i \right) + \vec q_{\text{eff}} \right ) + \sum h_i^0 r_i &= 0
 
 \end{align}
 ```
@@ -79,44 +97,32 @@ h_i &= h_i^0 + \int_{T_{\text{ref}}}^T c_{p,i}(\widetilde{T}) d\widetilde{T} \\
 md"""
 ```math
 \begin{align}
-\vec q = -\lambda_{\text{eff}} \nabla T
+\vec q_{\text{eff}} = -\lambda_{\text{eff}} \nabla T
 \end{align}
 ```
-"""
-
-# ╔═╡ 00663964-7c47-4ba8-9fc9-e65c63c9f6b8
-md"""
-
-The thermal energy equation considers convective-diffusive transport of thermal energy and is formulated with effective transport parameters that are a consequence of the quasi-homogeneous phase approach:
-
-```math
-\begin{align}
-\frac{\partial \overline h}{\partial t} - \nabla \cdot \left(\lambda_{\text{eff}} \nabla T - \sum_i^n \vec \Psi_i h_i / M_i \right) &= 0 \\
-\overline h &= (\varepsilon \sum_i^n \rho_i h_i / M_i + [1-\varepsilon] \rho_{\text s} h_{\text s}) \\
-h_i(T) &= h_i^0(T_{\text{ref}}) + \int_{T_{\text{ref}}}^{T} c_{p,i} \,dT 
-\end{align}
-```
-where $\overline h$ is the volumetric enthalpy [$\text{J/m}^3$] of the quasi-homogeneous domain comprised of gas and solid volume fractions, the gas phase species enthalpy $h_i$ and $\rho_{\text s}$ and $h_{\text s}$ are the mass density and enthalpy of the solid matrix respectively.
-
-Here $\lambda_{\text{eff}}$ is the effective thermal conductivity in the quasi-homogeneous approach, which is a (complicated) function of the thermal conductivities of the solid and gas phases.
-
-Another process contributing to heat transport within the porous medium is "thermal drift", resulting from gas phase mass flow carrying enthalpy.
-It is expressed as the sum  of species mass fluxes and species specific enthalpies $\sum_i^n \vec \Psi_i h_i / M_i$ (division by $M_i$ as $h_i$ is given on a molar basis).
-The gas phase species enthalpies consist of a chemical contribution originating from the potential energy stored within the chemical bonds of the species, and a thermal contribution depending on the species' heat capacity and temperature.
-During chemical reactions the chemical bonds in the species involved in the reaction are rearranged. If in the process of rearranging of chemical bonds the products have a different chemical potential energy than the reactants, the difference is made up from thermal energy.
-In case of an exothermal reaction, the products have less chemical energy thus the difference is released as heat. In contrast for endothermal reactions the products hava more chemical energy than the reactants and thus consume heat during the reaction.
 """
 
 # ╔═╡ 83cd18d8-40c8-49c8-8b01-32f0aa8cc17b
 md"""
-### Derivation of Enthalpy Balance
+### Derivation of Separated Formulation
+Total species enthalpy $h_i$ consists of two contibutions via
+ - a reference enthalpy ("formation enthalpy" at reference conditions, typically 298.15 K, 1 bar) 
+ - a thermal enthalpy due to the species temperature unequal the reference temperatrue.
+
+The reference enthalpy must be considered only when species transformations through chemical reactions occur. For non-reacting mixtures it cancels out exactly.
+
+An improvement in numerical convergence was observed after separating the (constant) "formation" enthalpy from the thermal contribution and account for the species transformation via the reaction source term ("reaction enthalpy").
+
+In the following it is shown how to obtain the "separated formulation" from the "combined formulation" of enthalpy balance equation. For simplicity, only the gas phase mixture is considered. 
+
+TODO: Check what happens when also considering the presence of the porous medium.
 """
 
 # ╔═╡ 30ca1e60-ee79-4b6d-9c66-d5e3313ade3a
 md"""
 ```math
 \begin{align}
-\frac{\partial h}{\partial t} + \nabla \cdot ( \rho h \vec v ) + \nabla \cdot \left(  \sum_i^n h_i \vec \Phi_i \right) + \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
+\frac{\partial \rho h}{\partial t} + \nabla \cdot ( \rho h \vec v ) + \nabla \cdot \left(  \sum_i^n h_i \vec \Phi_i \right) + \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
 \end{align}
 ```
 """
@@ -212,13 +218,13 @@ Or simplifying with $\frac{\partial p}{\partial t} = 0$ for the case of constant
 
 # ╔═╡ Cell order:
 # ╠═64469510-f2f5-11ed-0dd5-2b60d8d52b40
-# ╟─7011d5ff-58f2-4ba9-a64c-96fb4df689f4
+# ╠═7011d5ff-58f2-4ba9-a64c-96fb4df689f4
 # ╟─ceb22984-3af0-4d76-8e27-b5cba9c4e51c
 # ╟─4ac838f9-777e-41d6-a89c-5ed4282b4288
 # ╟─bcd95c4a-a4a3-4225-a5fb-ca0a323b05b0
+# ╟─37ec2c8a-1711-4e1e-badd-0f5322eef41e
 # ╟─52afc3f1-064c-4a45-af0d-942e89e2c524
 # ╟─f2668597-d7c1-4200-ad6b-bc6d536068ef
-# ╟─00663964-7c47-4ba8-9fc9-e65c63c9f6b8
 # ╟─83cd18d8-40c8-49c8-8b01-32f0aa8cc17b
 # ╟─30ca1e60-ee79-4b6d-9c66-d5e3313ade3a
 # ╟─7c3f89da-9b81-4395-8ffc-00c65fdc7529
