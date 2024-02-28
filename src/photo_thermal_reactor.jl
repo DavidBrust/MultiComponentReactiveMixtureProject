@@ -536,7 +536,8 @@ end
 ngas(::ReactorData{NG,KP,Tv}) where {NG,KP,Tv} = NG
 
 function PTR_grid_boundaries_regions(dim;nref=0)
-	Ω_catalyst = 2
+	Ω_accessible = 2
+	Ω_catalyst = 3
 	W=16
 	H=0.5
 
@@ -548,8 +549,9 @@ function PTR_grid_boundaries_regions(dim;nref=0)
 		#Γ_bottom_insulating = 7
 		Γ_side = 2
 		Γ_sym = 4		
-		Γ_top_permeable = 5
-		Γ_top_irradiated = 6
+		# Γ_top_permeable = 5
+		Γ_top_irradiated = 5
+		# Γ_top_irradiated = 6
 
 		W=W/2 # axisymmetry, half domain is sufficient
 		nr=W*2^(nref)
@@ -558,11 +560,14 @@ function PTR_grid_boundaries_regions(dim;nref=0)
 		grid=simplexgrid(R,Z)
 		circular_symmetric!(grid)
 	
-		cellmask!(grid,[0,9/10*H].*ufac"cm",[W,H].*ufac"cm",Ω_catalyst) # catalyst layer	
-		bfacemask!(grid, [0,H].*ufac"cm",[W-1,H].*ufac"cm",Γ_top_permeable)
+		cellmask!(grid,[0,0].*ufac"cm",[6/8*W,9/10*H].*ufac"cm",Ω_accessible) # gas permeable region
+		cellmask!(grid,[0,9/10*H].*ufac"cm",[6/8*W,H].*ufac"cm",Ω_catalyst) # catalyst layer region
+
+		#bfacemask!(grid, [0,H].*ufac"cm",[W-1,H].*ufac"cm",Γ_top_permeable)
 		bfacemask!(grid, [0,H].*ufac"cm",[W-2,0.5].*ufac"cm",Γ_top_irradiated) 
 				
-		inb = [Γ_top_permeable,Γ_top_irradiated]
+		# inb = [Γ_top_permeable,Γ_top_irradiated]
+		inb = [Γ_top_irradiated]
 		irrb = [Γ_top_irradiated]
 		outb = [Γ_bottom]
 		sb = [Γ_side]

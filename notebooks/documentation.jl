@@ -77,7 +77,7 @@ Formulation based on separation of "reference  enthalpy" and "thermal enthalpy".
 
 ```math
 \begin{align}
-\frac{\partial (\varepsilon \sum (\rho_i h_i^{\text{th}}(T))  + [1-\varepsilon] \rho_{\text s} h_{\text s}) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec \Phi_i \right) + \vec q_{\text{eff}} \right ) + \sum h_i^0 r_i &= 0
+\frac{\partial (\varepsilon \sum (\rho_i h_i^{\text{th}}(T))  + (1-\varepsilon) \rho_{\text s} h_{\text{s}}) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec \Phi_i \right) + \vec q_{\text{eff}} \right ) + \sum h_i^0 r_i &= 0
 
 \end{align}
 ```
@@ -219,12 +219,12 @@ Or simplifying with $\frac{\partial p}{\partial t} = 0$ for the case of constant
 # ╔═╡ Cell order:
 # ╠═64469510-f2f5-11ed-0dd5-2b60d8d52b40
 # ╠═7011d5ff-58f2-4ba9-a64c-96fb4df689f4
-# ╟─ceb22984-3af0-4d76-8e27-b5cba9c4e51c
+# ╠═ceb22984-3af0-4d76-8e27-b5cba9c4e51c
 # ╟─4ac838f9-777e-41d6-a89c-5ed4282b4288
 # ╟─bcd95c4a-a4a3-4225-a5fb-ca0a323b05b0
 # ╟─37ec2c8a-1711-4e1e-badd-0f5322eef41e
 # ╟─52afc3f1-064c-4a45-af0d-942e89e2c524
-# ╟─f2668597-d7c1-4200-ad6b-bc6d536068ef
+# ╠═f2668597-d7c1-4200-ad6b-bc6d536068ef
 # ╟─83cd18d8-40c8-49c8-8b01-32f0aa8cc17b
 # ╟─30ca1e60-ee79-4b6d-9c66-d5e3313ade3a
 # ╟─7c3f89da-9b81-4395-8ffc-00c65fdc7529
