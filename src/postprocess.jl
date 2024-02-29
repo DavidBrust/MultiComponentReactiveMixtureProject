@@ -300,11 +300,13 @@ end
 Helper function to print an extended summary based on calculated flux integrals over in- 
     and outflow boundaries in the Darcy-Maxwell-Stefan (DMS) model.
 """
-function Print_summary_ext(solt,grid,sys,data)
+function Print_summary_ext(sol,grid,sys,data)
 
-	t = solt.t[end]
-	sol = solt(t)
-
+    if isa(sol, VoronoiFVM.TransientSolution)
+        t = sol.t[end]
+        sol = sol(t)
+    end
+    
 	(;gn,gni,m,nflowin,X0) = data
 	ng=ngas(data)
 	in_,out_ = _checkinout(sol,sys,data)
@@ -338,15 +340,17 @@ function Print_summary_ext(solt,grid,sys,data)
 		@printf "Y%4s: %2.2f \tS%4s: %2.2f\n" gn[i] nout(i)/nin(gni[:CO2]) gn[i] nout(i)/(nin(gni[:CO2])-nout(gni[:CO2]))
 	end
 
-	fluxes = HeatFluxes_EB_I(t,solt,grid,sys,data)
-	ns = keys(fluxes)
-	vs = values(fluxes)
-	#QG_01,	QG_10, H_thermal, H_reaction, Qconv_10,	Qconv_34, QG_34, QG_43,	Qsides = fluxes
-	println("\nEnergy Balancing [W]:")
-	for i=1:length(fluxes)
-		@printf "%s:\t%.2f \n" String(ns[i]) vs[i]
-	end
-	@printf "Sum:\t\t%.6f \n" sum(fluxes)
+    if isa(sol, VoronoiFVM.TransientSolution)
+        fluxes = HeatFluxes_EB_I(t,solt,grid,sys,data)
+        ns = keys(fluxes)
+        vs = values(fluxes)
+        #QG_01,	QG_10, H_thermal, H_reaction, Qconv_10,	Qconv_34, QG_34, QG_43,	Qsides = fluxes
+        println("\nEnergy Balancing [W]:")
+        for i=1:length(fluxes)
+            @printf "%s:\t%.2f \n" String(ns[i]) vs[i]
+        end
+        @printf "Sum:\t\t%.6f \n" sum(fluxes)
+    end
 
 end
 

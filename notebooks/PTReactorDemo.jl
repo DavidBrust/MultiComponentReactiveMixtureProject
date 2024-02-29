@@ -23,17 +23,15 @@ begin
 	using LinearSolve, Pardiso, ExtendableSparse
 	
 	using LessUnitful
-	using PlutoUI, PlutoVista, Plots
+	using PlutoUI, PlutoVista, Plots, GLMakie, Dates
 	using Printf
 	using MultiComponentReactiveMixtureProject
-	
-	GridVisualize.default_plotter!(PlutoVista)
 end;
 
 # ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
 # ╠═╡ skip_as_script = true
 #=╠═╡
-PlutoUI.TableOfContents(title="Photo Thermal (PT) Reactor")
+PlutoUI.TableOfContents(title="Photo Thermal (PT) Reactor",aside=false)
   ╠═╡ =#
 
 # ╔═╡ b2791860-ae0f-412d-9082-bb2e27f990bc
@@ -46,27 +44,22 @@ Select problem dimension: $(@bind dim Select([2, 3], default=2))
 Select grid refinement level: $(@bind nref Select([0,1,2,3], default=0))
 
 Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=true))
+
+Check the box to __save generated images__: $(@bind saveimg PlutoUI.CheckBox(default=false))
 """
+
+# ╔═╡ 0bd392ac-00d6-4921-a1ab-118eba933a41
+if saveimg
+	Plotter=GLMakie
+else
+	Plotter=PlutoVista
+end
 
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═╡ skip_as_script = true
 #=╠═╡
 if dim == 3
-	@bind xcut Slider(linspace(0,16,17)*ufac"cm",show_value=true,default=8*ufac"cm")
-end
-  ╠═╡ =#
-
-# ╔═╡ a995f83c-6ff7-4b95-a798-ea636ccb1d88
-# ╠═╡ show_logs = false
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	grid, inb,irrb,outb,sb,catr =  PTR_grid_boundaries_regions(dim, nref=nref)
-	if dim == 2
-		gridplot(grid, resolution=(660,300), aspect=4.0, zoom=2.8)
-	else
-		gridplot(grid,  xplane=xcut, resolution=(660,460), zoom=1.8, )
-	end
+	@bind xcut PlutoUI.Slider(linspace(0,16,17)*ufac"cm",show_value=true,default=8*ufac"cm")
 end
   ╠═╡ =#
 
@@ -134,7 +127,7 @@ if RunSim
 end;
 
 # ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-@bind t Slider(solt.t,show_value=true,default=solt.t[end])
+@bind t PlutoUI.Slider(solt.t,show_value=true,default=solt.t[end])
 
 # ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
 sol = solt(t);
@@ -217,18 +210,6 @@ md"""
 3) Bottom plate
 """
 
-# ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
-# ╠═╡ show_logs = false
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	(;iT,iTw,iTp,irradiated_boundaries,outlet_boundaries)=data
-	#vis=GridVisualizer(layout=(3,1), resolution=(680,900))
-	vis=GridVisualizer(layout=(1,1), resolution=(680,300))
-	scalarplot!(vis[1,1],grid, sol[iT,:] .- 273.15, zoom = 2.8, aspect=4.0, show=true)
-end
-  ╠═╡ =#
-
 # ╔═╡ 58c0b05d-bb0e-4a3f-af05-71782040c8b9
 if dim == 2
 md"""
@@ -281,43 +262,6 @@ md"""
 3) N2
 """
 
-# ╔═╡ 111b1b1f-51a5-4069-a365-a713c92b79f4
-# ╠═╡ show_logs = false
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	(;ip,p,gn,gni) = data
-	ng=ngas(data)
-	if dim == 2
-		vis=GridVisualizer(layout=(4,1), resolution=(680,900))
-		scalarplot!(vis[1,1], grid, sol[gni[:CO],:], aspect = 4.0,zoom = 2.8) # CO
-		scalarplot!(vis[2,1], grid, sol[gni[:CO2],:], aspect = 4.0,zoom = 2.8) # CO2
-		scalarplot!(vis[3,1], grid, sol[gni[:N2],:], aspect = 4.0,zoom = 2.8) # N2
-
-		cols = distinguishable_colors(ng)
-		# plot species molar fractions along frit thickness (along y axis)
-		function _2to1(a,b)
-			a[1]=b[2]
-		end
-		_grid,_,_,_,_,_ = PTR_grid_boundaries_regions(dim)
-		bfacemask!(_grid, [3.0,0.0].*ufac"cm",[3.0,0.5].*ufac"cm",5)
-	    grid1D = subgrid(_grid, [5]; boundary = true, transform = _2to1)
-		for i=1:ng
-			sol1D=view(sol[i, :], grid1D)
-			scalarplot!(vis[4,1],grid1D, sol1D, label=gn[i], color=cols[i],clear=false)
-		end
-		reveal(vis)
-	
-	else
-		vis=GridVisualizer(layout=(3,1), resolution=(400,1200), outlinealpha=0.0)
-		scalarplot!(vis[1,1], grid, sol[1,:])
-		scalarplot!(vis[2,1], grid, sol[2,:])
-		scalarplot!(vis[3,1], grid, sol[3,:])
-	end	
-	reveal(vis)
-end
-  ╠═╡ =#
-
 # ╔═╡ eb9dd385-c4be-42a2-8565-cf3cc9b2a078
 md"""
 ### Flow field
@@ -326,6 +270,98 @@ md"""
 3. Velocity X
 4. Velocity Y
 """
+
+# ╔═╡ a34bd3aa-12fd-42e2-ab1c-da4fe48fd305
+function save_img(fn,vis)
+	path = "../img/out/$(Date(now()))"
+		
+	try
+		mkpath(path)
+	catch e
+		println("Directory " * path * " already exists.")
+	end
+	GridVisualize.save(path*"/$(fn).png",vis)
+end
+
+# ╔═╡ a995f83c-6ff7-4b95-a798-ea636ccb1d88
+# ╠═╡ show_logs = false
+# ╠═╡ skip_as_script = true
+#=╠═╡
+let
+	grid, inb,irrb,outb,sb,catr =  PTR_grid_boundaries_regions(dim, nref=nref)
+
+	vis = GridVisualizer(Plotter=Plotter,resolution=(660,300))
+	if dim == 2
+		gridplot!(vis, grid, aspect=4.0, zoom=2.8, linewidth=0.3)
+	else
+		gridplot!(vis, grid, xplane=xcut, zoom=1.8, linewidth=0.3 )
+	end
+	
+	if saveimg
+    	fn = "grid_$(dim)D"
+		save_img(fn,vis)
+	end
+	reveal(vis)
+end
+  ╠═╡ =#
+
+# ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
+# ╠═╡ show_logs = false
+# ╠═╡ skip_as_script = true
+#=╠═╡
+let
+	(;iT,iTw,iTp,irradiated_boundaries,outlet_boundaries)=data
+
+	vis=GridVisualizer(resolution=(680,300), Plotter=Plotter)	
+	scalarplot!(vis,grid, sol[iT,:] .- 273.15, zoom = 2.8, aspect=4.0, show=true)
+	
+	if saveimg
+    	fn = "Temperature_$(dim)D"
+		save_img(fn,vis)
+	end
+	reveal(vis)
+end
+  ╠═╡ =#
+
+# ╔═╡ 111b1b1f-51a5-4069-a365-a713c92b79f4
+# ╠═╡ show_logs = false
+# ╠═╡ skip_as_script = true
+#=╠═╡
+let
+	(;ip,p,gn,gni) = data
+	ng=ngas(data)
+	if dim == 2
+		vis=GridVisualizer(layout=(2,1), resolution=(680,450), Plotter=Plotter)
+		scalarplot!(vis[1,1], grid, sol[gni[:CO],:], aspect = 4.0,zoom = 2.8) # CO
+		scalarplot!(vis[2,1], grid, sol[gni[:CO2],:], aspect = 4.0,zoom = 2.8) # CO2
+
+		cols = distinguishable_colors(ng)
+		# plot species molar fractions along frit thickness (along y axis)
+		function _2to1(a,b)
+			a[1]=b[2]
+		end
+		_grid,_,_,_,_,_ = PTR_grid_boundaries_regions(dim, nref=nref)
+		bfacemask!(_grid, [3.0,0.0].*ufac"cm",[3.0,0.5].*ufac"cm",5)
+	    grid1D = subgrid(_grid, [5]; boundary = true, transform = _2to1)
+		for i=1:ng
+			sol1D=view(sol[i, :], grid1D)
+			#scalarplot!(vis[4,1],grid1D, sol1D, label=gn[i], color=cols[i],clear=false)
+		end
+		#reveal(vis)
+		#GridVisualize.save("../img/out/240228/chem.png",vis)	
+	else
+		vis=GridVisualizer(layout=(3,1), resolution=(400,1200), outlinealpha=0.0, Plotter=Plotter)
+		scalarplot!(vis[1,1], grid, sol[1,:])
+		scalarplot!(vis[2,1], grid, sol[2,:])
+		scalarplot!(vis[3,1], grid, sol[3,:])
+	end
+	if saveimg
+    	fn = "COx_CO2x_$(dim)D"
+		save_img(fn,vis)
+	end	
+	reveal(vis)
+end
+  ╠═╡ =#
 
 # ╔═╡ de69f808-2618-4add-b092-522a1d7e0bb7
 # ╠═╡ show_logs = false
@@ -349,7 +385,7 @@ let
 	rho = @. ps * mmix /(ph"R"*Ts)
 	
 	if dim == 2
-		vis=GridVisualizer(layout=(4,1), resolution=(600,800))
+		vis=GridVisualizer(layout=(4,1), resolution=(600,800), Plotter=Plotter)
 		scalarplot!(vis[1,1], grid, ps, aspect=4.0, zoom=3.5) # Total pressure
 		scalarplot!(vis[2,1], grid, rho, aspect=4.0, zoom=3.5) # Total Density
 		nf = nodeflux(sys, sol)
@@ -357,19 +393,24 @@ let
 		scalarplot!(vis[3,1], grid, massflux[1,:]./rho, aspect=4.0, zoom=3.5) # Velocity - X
 		scalarplot!(vis[4,1], grid, massflux[2,:]./rho, aspect=4.0, zoom=3.5) # Velocity - Y
 	else
-		vis=GridVisualizer(layout=(2,1), resolution=(400,800), outlinealpha=0.0)
+		vis=GridVisualizer(layout=(2,1), resolution=(400,800), outlinealpha=0.0, Plotter=Plotter)
 		scalarplot!(vis[1,1], grid, ps, title="Total Pressure")
 		scalarplot!(vis[2,1], grid, rho, title="Total Density")
 		
 	end
+	if saveimg
+    	fn = "FlowField_$(dim)D"
+		save_img(fn,vis)
+	end	
 	reveal(vis)
 end
   ╠═╡ =#
 
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
-# ╟─d3278ac7-db94-4119-8efd-4dd18107e248
+# ╠═d3278ac7-db94-4119-8efd-4dd18107e248
 # ╟─b2791860-ae0f-412d-9082-bb2e27f990bc
+# ╠═0bd392ac-00d6-4921-a1ab-118eba933a41
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
 # ╟─a078e1e1-c9cd-4d34-86d9-df4a052b6b96
@@ -387,10 +428,11 @@ end
 # ╠═dbb6346c-e08a-4ad0-a985-3052272cf6c7
 # ╠═380c74fb-66c4-43fb-a3f5-9c942b13fa0d
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
-# ╟─99b59260-7651-45d0-b364-4f86db9927f8
+# ╠═99b59260-7651-45d0-b364-4f86db9927f8
 # ╟─58c0b05d-bb0e-4a3f-af05-71782040c8b9
 # ╟─8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
-# ╟─111b1b1f-51a5-4069-a365-a713c92b79f4
+# ╠═111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╟─eb9dd385-c4be-42a2-8565-cf3cc9b2a078
 # ╠═de69f808-2618-4add-b092-522a1d7e0bb7
+# ╠═a34bd3aa-12fd-42e2-ab1c-da4fe48fd305
