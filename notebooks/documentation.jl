@@ -43,18 +43,16 @@ where $\rho$ is the (total) mixture density, $\vec v$ is the mass-averaged (bary
 $x_i$, $w_i$ and $M_i$ are the molar fraction, mass fraction and molar mass of species $i$ respectively,
 $\vec \Phi_i$ is the __diffusive__ mass flux of species $i$ ($\frac{\text{kg}}{\text{m}^2 \text{s}}$)
 and $r_i$ is the species mass volumetric source/sink ($\frac{\text{kg}}{\text{m}^3 \text{s}}$) of gas phase species $i$.
-
 The __convective__ mass flux of species $i$ is the product of the superficial mean velocity with the partial mass density $\rho_i \vec v$.
 """
 
 # ╔═╡ 4ac838f9-777e-41d6-a89c-5ed4282b4288
 md"""
 ## Thermal Energy Transport
-"""
 
-# ╔═╡ bcd95c4a-a4a3-4225-a5fb-ca0a323b05b0
-md"""
-Enthalpy equation for __gas phase only__. Considers convective-diffusive transport of thermal energy, including "thermal drift" from diffusive species fluxes $\vec \Phi_i$ carrying enthalpy.
+Enthalpy equation for __gas phase only__.
+Considers convective-diffusive transport of thermal energy,
+including "thermal drift" from convective-diffusive species fluxes $\vec \Phi_i + \rho_i \vec v$ carrying enthalpy.
 
 Formulation based on separation of "reference  enthalpy" and "thermal enthalpy".  See section "Derivation of Separated Formulation".
 ```math
@@ -221,7 +219,6 @@ Or simplifying with $\frac{\partial p}{\partial t} = 0$ for the case of constant
 # ╠═7011d5ff-58f2-4ba9-a64c-96fb4df689f4
 # ╟─ceb22984-3af0-4d76-8e27-b5cba9c4e51c
 # ╟─4ac838f9-777e-41d6-a89c-5ed4282b4288
-# ╟─bcd95c4a-a4a3-4225-a5fb-ca0a323b05b0
 # ╟─37ec2c8a-1711-4e1e-badd-0f5322eef41e
 # ╟─52afc3f1-064c-4a45-af0d-942e89e2c524
 # ╟─f2668597-d7c1-4200-ad6b-bc6d536068ef
