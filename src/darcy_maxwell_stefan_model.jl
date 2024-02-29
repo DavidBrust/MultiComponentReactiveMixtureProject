@@ -270,7 +270,8 @@ function DMS_reaction(f,u,node,data)
 			for j=1:nreac(kinpar)
 				f[i] += nuij[(j-1)*ng+i] * RR[j] * m[i]
 				if solve_T_equation
-					f[iT] -= nuij[(j-1)*ng+i] * RR[j] * enthalpy_gas(kinpar.Fluids[i], T)
+					# f[iT] -= nuij[(j-1)*ng+i] * RR[j] * enthalpy_gas(kinpar.Fluids[i], T)
+					f[iT] -= nuij[(j-1)*ng+i] * RR[j] * kinpar.Fluids[i].ΔHform 
 				end
 			end			
 		end
