@@ -44,12 +44,9 @@ $x_i$, $w_i$ and $M_i$ are the molar fraction, mass fraction and molar mass of s
 $\vec \Phi_i$ is the __diffusive__ mass flux of species $i$ ($\frac{\text{kg}}{\text{m}^2 \text{s}}$)
 and $r_i$ is the species mass volumetric source/sink ($\frac{\text{kg}}{\text{m}^3 \text{s}}$) of gas phase species $i$.
 The __convective__ mass flux of species $i$ is the product of the superficial mean velocity with the partial mass density $\rho_i \vec v$.
-The combined __convective-diffusive__ species mass flux $\vec \Psi_i = \vec \Phi_i + \rho_i \vec v$ can be introduced as an auxiliary variable.
-
-
 """
 
-# ╔═╡ 00663964-7c47-4ba8-9fc9-e65c63c9f6b8
+# ╔═╡ 4ac838f9-777e-41d6-a89c-5ed4282b4288
 md"""
 ## Thermal Energy Transport
 
@@ -66,20 +63,155 @@ Formulation based on separation of "reference  enthalpy" and "thermal enthalpy".
 
 ```math
 \begin{align}
-\frac{\partial \overline h}{\partial t} - \nabla \cdot \left(\lambda_{\text{eff}} \nabla T - \sum_i^n \vec \Psi_i h_i / M_i \right) &= 0 \\
-\overline h &= (\varepsilon \sum_i^n \rho_i h_i / M_i + [1-\varepsilon] \rho_{\text s} h_{\text s}) \\
-h_i(T) &= h_i^0(T_{\text{ref}}) + \int_{T_{\text{ref}}}^{T} c_{p,i} \,dT 
+\vec q = -\lambda \nabla T
 \end{align}
 ```
-where $\overline h$ is the volumetric enthalpy [$\text{J/m}^3$] of the quasi-homogeneous domain comprised of gas and solid volume fractions, the gas phase species enthalpy $h_i$ and $\rho_{\text s}$ and $h_{\text s}$ are the mass density and enthalpy of the solid matrix respectively.
+"""
 
-Here $\lambda_{\text{eff}}$ is the effective thermal conductivity in the quasi-homogeneous approach, which is a (complicated) function of the thermal conductivities of the solid and gas phases.
+# ╔═╡ 37ec2c8a-1711-4e1e-badd-0f5322eef41e
+md"""
+Enthalpy equation for __gas + solid phase__. It is formulated with effective transport parameters that are a consequence of the quasi-homogeneous phase approach. It needs to be checked that this is permissible. 
+Formulation based on separation of "reference  enthalpy" and "thermal enthalpy".  See also section "Derivation of Separated Formulation".
 
-Another process contributing to heat transport within the porous medium is "thermal drift", resulting from gas phase mass flow carrying enthalpy.
-It is expressed as the sum  of species mass fluxes and species specific enthalpies $\sum_i^n \vec \Psi_i h_i / M_i$ (division by $M_i$ as $h_i$ is given on a molar basis).
-The gas phase species enthalpies consist of a chemical contribution originating from the potential energy stored within the chemical bonds of the species, and a thermal contribution depending on the species' heat capacity and temperature.
-During chemical reactions the chemical bonds in the species involved in the reaction are rearranged. If in the process of rearranging of chemical bonds the products have a different chemical potential energy than the reactants, the difference is made up from thermal energy.
-In case of an exothermal reaction, the products have less chemical energy thus the difference is released as heat. In contrast for endothermal reactions the products hava more chemical energy than the reactants and thus consume heat during the reaction.
+```math
+\begin{align}
+\frac{\partial (\varepsilon \sum (\rho_i h_i^{\text{th}}(T))  + [1-\varepsilon] \rho_{\text s} h_{\text s}) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec \Phi_i \right) + \vec q_{\text{eff}} \right ) + \sum h_i^0 r_i &= 0
+
+\end{align}
+```
+"""
+
+# ╔═╡ 52afc3f1-064c-4a45-af0d-942e89e2c524
+md"""
+```math
+\begin{align}
+h_i &= h_i^0 + \int_{T_{\text{ref}}}^T c_{p,i}(\widetilde{T}) d\widetilde{T} \\
+&= h_i^0 + h_i^{\text{th}}(T)
+\end{align}
+```
+"""
+
+# ╔═╡ f2668597-d7c1-4200-ad6b-bc6d536068ef
+md"""
+```math
+\begin{align}
+\vec q_{\text{eff}} = -\lambda_{\text{eff}} \nabla T
+\end{align}
+```
+"""
+
+# ╔═╡ 83cd18d8-40c8-49c8-8b01-32f0aa8cc17b
+md"""
+### Derivation of Separated Formulation
+Total species enthalpy $h_i$ consists of two contibutions via
+ - a reference enthalpy ("formation enthalpy" at reference conditions, typically 298.15 K, 1 bar) 
+ - a thermal enthalpy due to the species temperature unequal the reference temperatrue.
+
+The reference enthalpy must be considered only when species transformations through chemical reactions occur. For non-reacting mixtures it cancels out exactly.
+
+An improvement in numerical convergence was observed after separating the (constant) "formation" enthalpy from the thermal contribution and account for the species transformation via the reaction source term ("reaction enthalpy").
+
+In the following it is shown how to obtain the "separated formulation" from the "combined formulation" of enthalpy balance equation. For simplicity, only the gas phase mixture is considered. 
+
+TODO: Check what happens when also considering the presence of the porous medium.
+"""
+
+# ╔═╡ 30ca1e60-ee79-4b6d-9c66-d5e3313ade3a
+md"""
+```math
+\begin{align}
+\frac{\partial \rho h}{\partial t} + \nabla \cdot ( \rho h \vec v ) + \nabla \cdot \left(  \sum_i^n h_i \vec \Phi_i \right) + \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
+\end{align}
+```
+"""
+
+# ╔═╡ 7c3f89da-9b81-4395-8ffc-00c65fdc7529
+md"""
+```math
+\begin{align}
+\frac{\partial (\sum \rho_i h_i )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i \vec v \right) + \nabla \cdot \left ( \sum_i^n h_i \vec \Phi_i \right )+ \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
+\end{align}
+```
+"""
+
+# ╔═╡ cf75ad38-c5d6-4258-ab39-710ece3b7663
+md"""
+```math
+h_i = h_i^0 + \int_{T_{\text{ref}}}^T c_{p,i}(\widetilde{T}) d\widetilde{T} = h_i^0 + h_i^{\text{th}}(T)
+```
+"""
+
+# ╔═╡ 70fbdc66-fefc-432e-abeb-05a322b34e00
+md"""
+```math
+\begin{align}
+\frac{\partial (\sum \rho_i h_i^0 )}{\partial t} + \frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i^0 \vec v \right) + \nabla \cdot \left( \sum \rho_i h_i^{\text{th}}(T) \vec v \right) + \dots \\
+
++ \nabla \cdot \left ( \sum h_i^0 \vec \Phi_i \right ) + \nabla \cdot \left ( \sum h_i^{\text{th}}(T) \vec \Phi_i \right ) + \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
+\end{align}
+```
+"""
+
+# ╔═╡ cb64283a-4c74-43ea-be69-a0ee293491fd
+md"""
+```math
+\begin{align}
+\frac{\partial (\sum \rho_i h_i^0 )}{\partial t} = \sum \left[ \frac{\partial (\rho_i h_i^0 )}{\partial t} \right ] \\
+\nabla \cdot \left( \sum \rho_i h_i^0 \vec v \right) = \sum \left[ \nabla \cdot \left(  \rho_i h_i^0 \vec v \right) \right] \\
+\nabla \cdot \left ( \sum h_i^0 \vec \Phi_i \right ) = \sum \left[ \nabla \cdot \left ( h_i^0 \vec \Phi_i \right ) \right ]
+\end{align}
+```
+"""
+
+# ╔═╡ 730348aa-3ff7-43bd-8c43-e9ba6823d318
+md"""
+```math
+\begin{align}
+\sum \left( \frac{\partial (\rho_i h_i^0 )}{\partial t} + \nabla \cdot \left(  \rho_i h_i^0 \vec v \right) + \nabla \cdot \left ( h_i^0 \vec \Phi_i \right ) \right) + \dots\\
+ + \frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i^{\text{th}}(T) \vec v \right) 
+
++ \nabla \cdot \left ( \sum h_i^{\text{th}}(T) \vec \Phi_i \right ) + \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
+\end{align}
+```
+"""
+
+# ╔═╡ 3e53e30d-f601-4d78-9f93-037172e40504
+md"""
+Multiply the species mass balance with $h_i^0$:
+```math
+\begin{align}
+\frac{\partial \rho_i}{\partial t} + \nabla \cdot \left( \rho_i \vec v \right ) + \nabla \cdot \vec \Phi_i = r_i \\
+h_i^0 \frac{\partial \rho_i}{\partial t} + h_i^0 \left( \nabla \cdot \left( \rho_i \vec v \right ) \right) + h_i^0 \left( \nabla \cdot \vec \Phi_i \right )= h_i^0 r_i
+\end{align}
+```
+Because $h_i^0$ are constant:
+```math
+\begin{align}
+\frac{\partial (\rho_i h_i^0 )}{\partial t} + \nabla \cdot \left(  \rho_i h_i^0 \vec v \right) + \nabla \cdot \left ( h_i^0 \vec \Phi_i \right ) = h_i^0 r_i
+\end{align}
+```
+Summing over both sides: 
+
+```math
+\begin{align}
+\sum \left( \frac{\partial (\rho_i h_i^0 )}{\partial t} + \nabla \cdot \left(  \rho_i h_i^0 \vec v \right) + \nabla \cdot \left ( h_i^0 \vec \Phi_i \right ) \right) = \sum h_i^0 r_i
+
+
+\end{align}
+```
+Leading to the finally implemented form of the enthalpy equation:
+```math
+\begin{align}
+\frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i^{\text{th}}(T) \vec v \right) + \nabla \cdot \left ( \sum h_i^{\text{th}}(T) \vec \Phi_i \right ) + \nabla \cdot \vec q + \sum h_i^0 r_i &= \frac{\partial p}{\partial t} \\
+\end{align}
+```
+Or simplifying with $\frac{\partial p}{\partial t} = 0$ for the case of constant pressure:
+```math
+\begin{align}
+\frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec \Phi_i \right) + \vec q \right ) + \sum h_i^0 r_i &= 0
+\end{align}
+```
+
 """
 
 # ╔═╡ Cell order:
