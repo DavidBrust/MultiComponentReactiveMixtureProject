@@ -426,8 +426,8 @@ $(TYPEDFIELDS)
     irradiated_boundaries::Vector{Int64} = Int64[]
     outlet_boundaries::Vector{Int64} = Int64[]
     side_boundaries::Vector{Int64} = Int64[]
-    catalyst_regions::Vector{Int64} =[2]
-    impermeable_regions::Vector{Int64} =[3]
+    catalyst_regions::Vector{Int64} =[3]
+    permeable_regions::Vector{Int64} =[2,3]
 
     kinpar::KP = XuFroment
     ng::Int64 = kinpar.ng
@@ -506,7 +506,8 @@ $(TYPEDFIELDS)
 	# VitraPor data
 	dp::Float64=200.0*ufac"μm" # average pore size, por class 0
 	poros::Float64=0.33 # porosity, VitraPor sintetered filter class 0
-	perm::Float64=1.23e-10*ufac"m^2" # perm. of porous medium, use in Darcy Eq.
+	# perm::Float64=1.23e-10*ufac"m^2" # perm. of porous medium, use in Darcy Eq.
+	perm::Vector{Float64}=[1.0e-6,1.0,1.0]*1.23e-10*ufac"m^2" # perm. of porous medium, use in Darcy Eq.
 	γ_τ::Float64=poros^1.5 # constriction/tourtuosity factor
 	
 	# Solid (non-porous) Borosilica glass (frit material)
@@ -523,12 +524,12 @@ $(TYPEDFIELDS)
 	sp::Vector{Tv} = [0.0]
 	
 
-    function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_irradiation_flux_bc,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,sp)
+    function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,permeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_irradiation_flux_bc,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,sp)
         KP = MultiComponentReactiveMixtureProject.KinData{nreac(kinpar)}
 		Tv = eltype(sp)
 		# FluxIntp = flux_interpol(nom_flux)
 		# flux_inner, flux_outer = flux_inner_outer(nom_flux)
-        new{ng,KP,Tv}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_irradiation_flux_bc,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,sp)
+        new{ng,KP,Tv}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,permeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_irradiation_flux_bc,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,sp)
 
     end
 end
@@ -536,7 +537,7 @@ end
 ngas(::ReactorData{NG,KP,Tv}) where {NG,KP,Tv} = NG
 
 function PTR_grid_boundaries_regions(dim;nref=0)
-	Ω_accessible = 2
+	Ω_high_perm = 2 # high permeability, unblocked region
 	Ω_catalyst = 3
 	W=16
 	H=0.5
@@ -545,13 +546,13 @@ function PTR_grid_boundaries_regions(dim;nref=0)
 	Z=(0:(H/nz):H)*ufac"cm"
 
 	if dim == 2
-		Γ_bottom = 1
+		# Γ_bottom = 1
 		#Γ_bottom_insulating = 7
 		Γ_side = 2
 		Γ_sym = 4		
 		# Γ_top_permeable = 5
-		Γ_top_irradiated = 5
-		# Γ_top_irradiated = 6
+		Γ_bottom_permeable = 5
+		Γ_top_irradiated = 6
 
 		W=W/2 # axisymmetry, half domain is sufficient
 		nr=W*2^(nref)
@@ -560,16 +561,16 @@ function PTR_grid_boundaries_regions(dim;nref=0)
 		grid=simplexgrid(R,Z)
 		circular_symmetric!(grid)
 	
-		cellmask!(grid,[0,0].*ufac"cm",[6/8*W,9/10*H].*ufac"cm",Ω_accessible) # gas permeable region
+		cellmask!(grid,[0,0].*ufac"cm",[6/8*W,9/10*H].*ufac"cm",Ω_high_perm) # gas permeable region
 		cellmask!(grid,[0,9/10*H].*ufac"cm",[6/8*W,H].*ufac"cm",Ω_catalyst) # catalyst layer region
 
-		#bfacemask!(grid, [0,H].*ufac"cm",[W-1,H].*ufac"cm",Γ_top_permeable)
-		bfacemask!(grid, [0,H].*ufac"cm",[W-2,0.5].*ufac"cm",Γ_top_irradiated) 
+		bfacemask!(grid, [0,0].*ufac"cm",[W-2,0].*ufac"cm",Γ_bottom_permeable)
+		bfacemask!(grid, [0,H].*ufac"cm",[W-2,H].*ufac"cm",Γ_top_irradiated) 
 				
 		# inb = [Γ_top_permeable,Γ_top_irradiated]
 		inb = [Γ_top_irradiated]
 		irrb = [Γ_top_irradiated]
-		outb = [Γ_bottom]
+		outb = [Γ_bottom_permeable]
 		sb = [Γ_side]
 	else
 		Γ_side_1 = 1 
@@ -583,13 +584,10 @@ function PTR_grid_boundaries_regions(dim;nref=0)
 		nxy=W*2^(nref)
 		X=(0:(W/nxy):W)*ufac"cm"
 		Y=X
-		# X=(0:1:W)*ufac"cm"
-		# Y=(0:1:W)*ufac"cm"
-		# Z=(0:H/10:H)*ufac"cm"	
+		
 		grid=simplexgrid(X,Y,Z)
 	
-		# catalyst region
-		cellmask!(grid,[0,0,9/10*H].*ufac"cm",[W,W,H].*ufac"cm",Ω_catalyst) # catalyst layer	
+		cellmask!(grid,[0,0,9/10*H].*ufac"cm",[W,W,H].*ufac"cm",Ω_catalyst) # catalyst layer region	
 		bfacemask!(grid, [1,1,H].*ufac"cm",[W-1,W-1,H].*ufac"cm",Γ_top_permeable)
 		bfacemask!(grid, [2,2,H].*ufac"cm",[W-2,W-2,H].*ufac"cm",Γ_top_irradiated)
 
@@ -599,12 +597,13 @@ function PTR_grid_boundaries_regions(dim;nref=0)
 		sb = [Γ_side_1,Γ_side_2,Γ_side_3,Γ_side_4]
 	end
 
-	return grid, inb, irrb, outb, sb, [Ω_catalyst]
+	# return grid, inb, irrb, outb, sb, [Ω_catalyst]
+	return grid, inb, irrb, outb, sb, [Ω_catalyst], [Ω_high_perm, Ω_catalyst]
 end
 
 function PTR_init_system(dim, grid, data::ReactorData; assembly=:edgewise, unknown_storage=:dense)
 
-	(;p,ip,Tamb,iT,iTw,iTp,ibf,inlet_boundaries,irradiated_boundaries,outlet_boundaries,catalyst_regions,X0,solve_T_equation,nom_flux,constant_irradiation_flux_bc,sp)=data
+	(;p,ip,Tamb,iT,iTw,iTp,ibf,inlet_boundaries,irradiated_boundaries,outlet_boundaries,catalyst_regions,permeable_regions,X0,solve_T_equation,nom_flux,constant_irradiation_flux_bc,sp)=data
 	ng=ngas(data)
 	Tv = eltype(sp)
 
@@ -638,10 +637,18 @@ function PTR_init_system(dim, grid, data::ReactorData; assembly=:edgewise, unkno
 	end
 
 	inival=unknowns(sys)
+	inival .= 0.0
 	inival[ip,:].=p
 
+	# if dim > 1
+	# 	permeable_nodes = []
+	# 	for reg in permeable_regions
+	# 		permeable_nodes = vcat(permeable_nodes, unique(grid[CellNodes][:,grid[CellRegions] .== reg]) )
+	# 	end
+	# end
 	for i=1:ng
 		inival[i,:] .= X0[i]
+		# inival[i,permeable_nodes] .= X0[i]
 	end
 
 	# for inert gas (pure N2), set is_reactive to false

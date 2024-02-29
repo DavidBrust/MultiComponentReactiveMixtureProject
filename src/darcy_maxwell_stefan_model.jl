@@ -119,6 +119,14 @@ function DarcyVelo(u,data,mu)
 	-perm/mu*(u[ip,1]-u[ip,2])	
 end
 
+# version of function for Darcy velocity depending on spatially
+# varying permeability of the porous medium
+# pass the edge struct holding region information
+function DarcyVelo(u,edge,data,mu)
+	(;ip,perm) = data
+	@inbounds -perm[edge.region]/mu*(u[ip,1]-u[ip,2])	
+end
+
 function MoleFrac!(X,u::VoronoiFVM.EdgeUnknowns,data)
 	@inbounds for i=1:ngas(data)
 		X[i] = 0.5*(u[i,1]+u[i,2])
@@ -178,7 +186,8 @@ function DMS_flux(f,u,edge,data)
 	@inline mumix, lambdamix = dynvisc_thermcond_mix(data, Tm, X)
 		
 	rho = c*mmix
-	v = DarcyVelo(u,data,mumix)
+	#v = DarcyVelo(u,data,mumix)
+	v = DarcyVelo(u,edge,data,mumix)
 	
 	f[ip] = -rho*v
 
@@ -313,7 +322,8 @@ function DMS_boutflow(f,u,edge,data)
 	end
 	
     @inline mumix, _ = dynvisc_thermcond_mix(data, Tout, X)
-	v = DarcyVelo(u,data,mumix)
+	# v = DarcyVelo(u,data,mumix)
+	v = DarcyVelo(u,edge,data,mumix)
 	
 	for i=1:(ng-1)
 		f[i] = v*cout*u[i,k]*m[i] # species mass flux at outflow

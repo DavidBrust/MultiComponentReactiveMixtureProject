@@ -45,7 +45,7 @@ Select problem dimension: $(@bind dim Select([2, 3], default=2))
 
 Select grid refinement level: $(@bind nref Select([0,1,2,3], default=0))
 
-Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=true))
+Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=false))
 """
 
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
@@ -61,7 +61,7 @@ end
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	grid, inb,irrb,outb,sb,catr =  PTR_grid_boundaries_regions(dim, nref=nref)
+	grid, inb,irrb,outb,sb,catr,accr =  PTR_grid_boundaries_regions(dim, nref=nref)
 	if dim == 2
 		gridplot(grid, resolution=(660,300), aspect=4.0, zoom=2.8)
 	else
@@ -89,7 +89,7 @@ Also the thermal energy equation is solved, taking into account convective-diffu
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
 function ThermalDemo(dim; nref=nref)
 
-	grid, inb, irrb, outb, sb, catr =  PTR_grid_boundaries_regions(dim, nref=nref)
+	grid, inb, irrb, outb, sb, catr, permr =  PTR_grid_boundaries_regions(dim, nref=nref)
 
 	data = ReactorData(
 		dim=dim,
@@ -105,6 +105,7 @@ function ThermalDemo(dim; nref=nref)
 		outlet_boundaries=outb,
 		side_boundaries=sb,
 		catalyst_regions=catr,
+		permeable_regions=permr,
 		rhos=5.0*ufac"kg/m^3" # low value for solid density -> low thermal inertia
 	)
 	
@@ -123,7 +124,7 @@ function ThermalDemo(dim; nref=nref)
 	control.handle_exceptions=true
 	control.Δu_opt=100
 		
-	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="a",log=true)
+	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="aen",log=true)
 	
 	return solt,grid,sys,data
 end
@@ -132,12 +133,6 @@ end
 if RunSim
 	solt,grid,sys,data=ThermalDemo(dim);
 end;
-
-# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-@bind t Slider(solt.t,show_value=true,default=solt.t[end])
-
-# ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
-sol = solt(t);
 
 # ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
 md"""
@@ -153,9 +148,6 @@ The mass flow boundary condition into the reactor domain is "ramped up" starting
 
 # ╔═╡ 1cc9d6c4-e2d6-4501-ae4d-d7568dee1e8f
 plothistory(solt)
-
-# ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
-MultiComponentReactiveMixtureProject.Print_summary(sol,grid,sys,data)
 
 # ╔═╡ 3207839f-48a9-49b6-9861-e5e74bc593a4
 # ╠═╡ skip_as_script = true
@@ -217,6 +209,42 @@ md"""
 3) Bottom plate
 """
 
+# ╔═╡ 58c0b05d-bb0e-4a3f-af05-71782040c8b9
+if dim == 2
+md"""
+- (1,1): T-profile at r=0
+- (2,1): T-profile at z=0
+- (1,2): Window T-profile
+- (2,2): Bottom Plate T-profile
+"""
+end
+
+# ╔═╡ c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
+md"""
+### Molar fractions
+1) CO
+2) CO2
+3) N2
+"""
+
+# ╔═╡ eb9dd385-c4be-42a2-8565-cf3cc9b2a078
+md"""
+### Flow field
+1. Pressure
+2. Density
+3. Velocity X
+4. Velocity Y
+"""
+
+# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
+@bind t Slider(solt.t,show_value=true,default=solt.t[end])
+
+# ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
+sol = solt(t);
+
+# ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
+MultiComponentReactiveMixtureProject.Print_summary(sol,grid,sys,data)
+
 # ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
 # ╠═╡ show_logs = false
 # ╠═╡ skip_as_script = true
@@ -228,16 +256,6 @@ let
 	scalarplot!(vis[1,1],grid, sol[iT,:] .- 273.15, zoom = 2.8, aspect=4.0, show=true)
 end
   ╠═╡ =#
-
-# ╔═╡ 58c0b05d-bb0e-4a3f-af05-71782040c8b9
-if dim == 2
-md"""
-- (1,1): T-profile at r=0
-- (2,1): T-profile at z=0
-- (1,2): Window T-profile
-- (2,2): Bottom Plate T-profile
-"""
-end
 
 # ╔═╡ 8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╠═╡ show_logs = false
@@ -272,14 +290,6 @@ let
 		scalarplot!(vis[2,2],bgridp, bsolp.-273.15,show=true)
 	end
 end
-
-# ╔═╡ c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
-md"""
-### Molar fractions
-1) CO
-2) CO2
-3) N2
-"""
 
 # ╔═╡ 111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╠═╡ show_logs = false
@@ -317,15 +327,6 @@ let
 	reveal(vis)
 end
   ╠═╡ =#
-
-# ╔═╡ eb9dd385-c4be-42a2-8565-cf3cc9b2a078
-md"""
-### Flow field
-1. Pressure
-2. Density
-3. Velocity X
-4. Velocity Y
-"""
 
 # ╔═╡ de69f808-2618-4add-b092-522a1d7e0bb7
 # ╠═╡ show_logs = false
@@ -377,7 +378,6 @@ end
 # ╠═415f6fa7-d5b5-40a2-806e-3d8a61541c2e
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
-# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═1cc9d6c4-e2d6-4501-ae4d-d7568dee1e8f
@@ -391,6 +391,7 @@ end
 # ╟─58c0b05d-bb0e-4a3f-af05-71782040c8b9
 # ╟─8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
-# ╟─111b1b1f-51a5-4069-a365-a713c92b79f4
+# ╠═111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╟─eb9dd385-c4be-42a2-8565-cf3cc9b2a078
+# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═de69f808-2618-4add-b092-522a1d7e0bb7
