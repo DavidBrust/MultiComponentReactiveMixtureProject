@@ -43,7 +43,6 @@ where $\rho$ is the (total) mixture density, $\vec v$ is the mass-averaged (bary
 $x_i$, $w_i$ and $M_i$ are the molar fraction, mass fraction and molar mass of species $i$ respectively,
 $\vec \Phi_i$ is the __diffusive__ mass flux of species $i$ ($\frac{\text{kg}}{\text{m}^2 \text{s}}$)
 and $r_i$ is the species mass volumetric source/sink ($\frac{\text{kg}}{\text{m}^3 \text{s}}$) of gas phase species $i$.
-
 The __convective__ mass flux of species $i$ is the product of the superficial mean velocity with the partial mass density $\rho_i \vec v$.
 The combined __convective-diffusive__ species mass flux $\vec \Psi_i = \vec \Phi_i + \rho_i \vec v$ can be introduced as an auxiliary variable.
 
@@ -54,7 +53,16 @@ The combined __convective-diffusive__ species mass flux $\vec \Psi_i = \vec \Phi
 md"""
 ## Thermal Energy Transport
 
-The thermal energy equation considers convective-diffusive transport of thermal energy and is formulated with effective transport parameters that are a consequence of the quasi-homogeneous phase approach:
+Enthalpy equation for __gas phase only__.
+Considers convective-diffusive transport of thermal energy,
+including "thermal drift" from convective-diffusive species fluxes $\vec \Phi_i + \rho_i \vec v$ carrying enthalpy.
+
+Formulation based on separation of "reference  enthalpy" and "thermal enthalpy".  See section "Derivation of Separated Formulation".
+```math
+\begin{align}
+\frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec \Phi_i \right) + \vec q \right ) + \sum h_i^0 r_i &= 0
+\end{align}
+```
 
 ```math
 \begin{align}
@@ -78,4 +86,15 @@ In case of an exothermal reaction, the products have less chemical energy thus t
 # ╠═64469510-f2f5-11ed-0dd5-2b60d8d52b40
 # ╠═7011d5ff-58f2-4ba9-a64c-96fb4df689f4
 # ╟─ceb22984-3af0-4d76-8e27-b5cba9c4e51c
-# ╠═00663964-7c47-4ba8-9fc9-e65c63c9f6b8
+# ╟─4ac838f9-777e-41d6-a89c-5ed4282b4288
+# ╟─37ec2c8a-1711-4e1e-badd-0f5322eef41e
+# ╟─52afc3f1-064c-4a45-af0d-942e89e2c524
+# ╟─f2668597-d7c1-4200-ad6b-bc6d536068ef
+# ╟─83cd18d8-40c8-49c8-8b01-32f0aa8cc17b
+# ╟─30ca1e60-ee79-4b6d-9c66-d5e3313ade3a
+# ╟─7c3f89da-9b81-4395-8ffc-00c65fdc7529
+# ╟─cf75ad38-c5d6-4258-ab39-710ece3b7663
+# ╟─70fbdc66-fefc-432e-abeb-05a322b34e00
+# ╟─cb64283a-4c74-43ea-be69-a0ee293491fd
+# ╟─730348aa-3ff7-43bd-8c43-e9ba6823d318
+# ╟─3e53e30d-f601-4d78-9f93-037172e40504
