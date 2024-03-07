@@ -84,21 +84,42 @@ function DMS_Info_thermal() end
 Assemble symmetric Maxwell-Stefan matrix M expressing the flux-force relations in the Maxwell-Stefan
 framework for multicomponent diffusion.
 """
+# function M_matrix!(M, W, D, data)
+# 	ng=ngas(data)
+# 	@inbounds for i=1:(ng-1)
+# 		for j=1:(ng-1)
+# 			M[i,j] = zero(eltype(W))
+# 		end
+# 		 for j=1:ng
+# 			if i != j
+# 				M[i,i] -= W[j]/D[i,j]
+# 				if j == ng
+# 					 for k=1:(ng-1)
+# 						M[i,k] -= W[i]/D[i,ng]
+# 					end
+# 				else
+# 					M[i,j] += W[i]/D[i,j]
+# 				end
+# 			end
+# 		end
+# 	end			
+# end
 function M_matrix!(M, W, D, data)
 	ng=ngas(data)
+	(;m) = data
 	@inbounds for i=1:(ng-1)
 		for j=1:(ng-1)
 			M[i,j] = zero(eltype(W))
 		end
 		 for j=1:ng
 			if i != j
-				M[i,i] -= W[j]/D[i,j]
+				M[i,i] -= W[j]/(D[i,j]*m[i]*m[j])
 				if j == ng
 					 for k=1:(ng-1)
-						M[i,k] -= W[i]/D[i,ng]
+						M[i,k] -= W[i]/(D[i,ng]*m[i]*m[ng])
 					end
 				else
-					M[i,j] += W[i]/D[i,j]
+					M[i,j] += W[i]/(D[i,j]*m[i]*m[j])
 				end
 			end
 		end
@@ -110,18 +131,56 @@ through the constriction and tourtuosity factor γ_τ which lowers the diffusivi
  ~1 order of magnitude compared to diffusion through free space.
 """
 function D_matrix!(D, T, p, data)
-	(;m,γ_τ,constant_properties)=data
+	(;m,γ_τ,constant_properties,constant_binary_diff_coeffs)=data
 	ng=ngas(data)
-	@inbounds for i=1:(ng-1)
-		for j=(i+1):ng
+	ind = 1
+	@inbounds for i=1:(ng-1) # i: row index
+		for j=(i+1):ng # j: col index
             if !constant_properties
-			    Dji = binary_diff_coeff_gas(data.Fluids[j], data.Fluids[i], T, p)
-			    Dji *= m[i]*m[j]*γ_τ # eff. diffusivity
+			    Dij = binary_diff_coeff_gas(data.Fluids[i], data.Fluids[j], T, p)
+			    # Dij *= m[i]*m[j]*γ_τ # eff. diffusivity
             else
-                Dji = 2.0e-5*m[i]*m[j]
+                # Dij = 2.0e-5*m[i]*m[j]
+				Dij = constant_binary_diff_coeffs[ind]
+				# Dij *= m[i]*m[j]
             end
-			D[j,i] = Dji
-			D[i,j] = Dji
+			# Dij *= m[i]*m[j]*γ_τ # eff. diffusivity
+			Dij *= γ_τ # eff. diffusivity
+			D[i,j] = Dij
+			D[j,i] = Dij # M-S diffusion matrix is symmetric
+			ind += 1
+		end
+	end
+end
+
+@doc raw"""
+Combined function to assemble symmetric Maxwell-Stefan diffusivity and Newman-Soret coefficient matrices D and A.
+For M-S diffusivity, account for porous material through the constriction and tourtuosity factor γ_τ which lowers the diffusivities
+ ~1 order of magnitude compared to diffusion through free space.
+"""
+function D_A_matrices!(D, A, T, p, data)
+	(;m,γ_τ,constant_properties,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs)=data
+	ng=ngas(data)
+	ind = 1
+	@inbounds for i=1:(ng-1) # i: row index
+		for j=(i+1):ng # j: col index
+            if !constant_properties
+			    Dij = binary_diff_coeff_gas(data.Fluids[i], data.Fluids[j], T, p)
+			    # Dij *= m[i]*m[j]*γ_τ # eff. diffusivity
+				Aij = constant_newman_soret_diff_coeffs[ind] # in absence of calculation methods use constant values
+            else
+                # Dij = 2.0e-5*m[i]*m[j]
+				Dij = constant_binary_diff_coeffs[ind]
+				# Dij *= m[i]*m[j]
+				Aij = constant_newman_soret_diff_coeffs[ind]
+            end
+			# Dij *= m[i]*m[j]*γ_τ # eff. diffusivity
+			Dij *= γ_τ # eff. diffusivity
+			D[i,j] = Dij
+			D[j,i] = Dij # M-S diffusion matrix is symmetric
+			A[i,j] = Aij
+			A[j,i] = -Aij # Newman-Soret coefficient matrix is anti-symmetric
+			ind += 1
 		end
 	end
 end

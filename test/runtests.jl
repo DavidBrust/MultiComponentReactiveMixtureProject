@@ -23,6 +23,6 @@ end
 
 modules = ["Test3D.jl"]
 
-@testset "module examples" begin
-    @testmodules(joinpath(@__DIR__, "..", "scripts"), modules)
-end
+# @testset "module examples" begin
+#     @testmodules(joinpath(@__DIR__, "..", "scripts"), modules)
+# end

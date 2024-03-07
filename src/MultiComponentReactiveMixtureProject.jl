@@ -10,14 +10,14 @@ include("physprops.jl")
 export AbstractFluidProps, FluidProps, AbstractPropsCoeffs, PropsCoeffs
 export dynvisc_gas, thermcond_gas, heatcap_gas, density_idealgas, binary_diff_coeff_gas, enthalpy_gas, enthalpy_gas_thermal
 export dynvisc_mix, heatcap_mix, molarweight_mix, dynvisc_thermcond_mix, enthalpy_mix
-export Air, N2, Ar, H2, CO2, CO, H2O, CH4
+export Air, N2, Ar, H2, CO2, CO, H2O, CH4, He, Kr
 
 include("kinetics.jl")
 export KinData, ri, S3P, XuFroment, Riedel_rWGS, Wolf_rWGS
 export nreac
 
 include("darcy_maxwell_stefan_model.jl")
-export M_matrix!, D_matrix!, DarcyVelo, MoleFrac!, MassFrac!
+export M_matrix!, D_matrix!, D_A_matrices!, DarcyVelo, MoleFrac!, MassFrac!
 export DMS_flux, DMS_reaction, DMS_storage, DMS_boutflow
 
 include("photo_thermal_reactor.jl")
