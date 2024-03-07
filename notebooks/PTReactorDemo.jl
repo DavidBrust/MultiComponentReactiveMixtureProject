@@ -25,6 +25,7 @@ begin
 	using LessUnitful
 	using PlutoUI, PlutoVista, Plots
 	using Printf
+	using StaticArrays
 	using MultiComponentReactiveMixtureProject
 	
 	GridVisualize.default_plotter!(PlutoVista)
@@ -170,8 +171,10 @@ let
 	inflow_rate, outflow_rate, reaction_rate, stored_amount, I_in, I_out, I_reac = BoundaryFlows_Integrals(solt, sys, data)
 	(;ng, gn, gni, iT, ip) = data
 
-	k=gni[:H2]
+	#k=gni[:H2]
+	#k=gni[:CO]
 	#k=iT
+	k=ip
 
 	if k in 1:ng
 		name = gn[k]
@@ -183,14 +186,20 @@ let
 	
 	@printf "%s In: %2.2e \t Out: %2.2e \t React: %2.2e \nIn - Out: %2.4e \nStorage tEnd -t0: %2.4e" name I_in[k] I_out[k] I_reac[k] (I_in+I_out-I_reac)[k] (stored_amount[end]-stored_amount[1])[k]
 
-	vis=GridVisualizer(resolution=(600,300), xlabel="Time / s", ylabel="Molar flow / Total Moles")
+	vis=GridVisualizer(resolution=(500,600), layout=(3,1), xlabel="Time / s", ylabel="Inflow / Outflow / Reaction Rate")
 
-	scalarplot!(vis, solt.t[2:end], stack(inflow_rate, dims=1)[:,k], label="Inflow rate")
-	scalarplot!(vis, solt.t[2:end], stack(outflow_rate, dims=1)[:,k], label="Outflow rate", color=:red, clear=false)	
-	scalarplot!(vis, solt.t[2:end], stack(-reaction_rate, dims=1)[:,k], label="Reaction rate",  color=:blue, clear=false)
-	#scalarplot!(vis, solt.t[2:end], stack(stored_amount, dims=1)[:,k], label="Stored amount", color=:green, clear=false, )
+	function plot_flows!(k,vis)
+		scalarplot!(vis, solt.t[2:end], stack(inflow_rate, dims=1)[:,k], label="Inflow rate")
+		scalarplot!(vis, solt.t[2:end], stack(outflow_rate, dims=1)[:,k], label="Outflow rate", color=:red, clear=false)	
+		scalarplot!(vis, solt.t[2:end], stack(-reaction_rate, dims=1)[:,k], label="Reaction rate",  color=:blue, clear=false)
+		#scalarplot!(vis, solt.t[2:end], stack(stored_amount, dims=1)[:,k], label="Stored amount", color=:green, clear=false, )
+	end
+
+	plot_flows!(ip,vis[1,1])
+	plot_flows!(gni[:H2],vis[2,1])
+	plot_flows!(gni[:CO],vis[3,1])
+	
 	reveal(vis)
-
 end
   ╠═╡ =#
 
@@ -382,7 +391,7 @@ end
 # ╠═1cc9d6c4-e2d6-4501-ae4d-d7568dee1e8f
 # ╠═994d4a87-3f27-4a51-b061-6111c3346d60
 # ╠═3207839f-48a9-49b6-9861-e5e74bc593a4
-# ╠═5d5ac33c-f738-4f9e-bcd2-efc43b638109
+# ╟─5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╠═dbb6346c-e08a-4ad0-a985-3052272cf6c7
 # ╠═380c74fb-66c4-43fb-a3f5-9c942b13fa0d
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc

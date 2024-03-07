@@ -597,6 +597,7 @@ function PTR_init_system(dim, grid, data::ReactorData)
 							boutflow=DMS_boutflow,
 							outflowboundaries=outlet_boundaries,
 							assembly=:edgewise,
+							unknown_storage=:dense
 							)
 
 	if solve_T_equation
