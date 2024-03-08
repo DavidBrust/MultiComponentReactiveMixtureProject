@@ -17,7 +17,7 @@ export KinData, ri, S3P, XuFroment, Riedel_rWGS, Wolf_rWGS
 export nreac
 
 include("darcy_maxwell_stefan_model.jl")
-export M_matrix!, D_matrix!, D_A_matrices!, DarcyVelo, MoleFrac!, MassFrac!
+export M_matrix!, D_matrix!, D_A_matrices!, DarcyVelo, MoleFrac!, MassFrac!, ThermalDiffRatio!
 export DMS_flux, DMS_reaction, DMS_storage, DMS_boutflow
 
 include("photo_thermal_reactor.jl")

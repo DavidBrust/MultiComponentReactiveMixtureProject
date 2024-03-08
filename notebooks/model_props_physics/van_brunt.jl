@@ -4,6 +4,16 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+end
+
 # ╔═╡ 349e7220-dc69-11ee-13d2-8f95e6ee5c96
 begin
 	using Pkg
@@ -14,7 +24,9 @@ begin
 	using ExtendableGrids, GridVisualize, PlutoVista
 	using StaticArrays
 	using Revise
+	using Printf
 	using MultiComponentReactiveMixtureProject
+	GridVisualize.default_plotter!(PlutoVista)
 end;
 
 # ╔═╡ 0f102f06-3ff3-4bcc-8892-8d9190a87849
@@ -119,48 +131,25 @@ data = ReactorData(
 	solve_T_equation = true,
 	is_reactive = false,
 	constant_properties = true,
+	#include_Soret_Dufour = true,
+	rhos=1.0*ufac"kg/m^3", # low value for solid density -> low thermal inertia
+	poros=0.1,
 	# 1) He, 2) Ar, 3) Kr
 	# D12:= He-Ar, D13:= He-Kr, D23:= Ar-Kr
 	constant_binary_diff_coeffs = [0.756, 0.6553, 0.1395] * ufac"cm^2/s",
-	constant_newman_soret_diff_coeffs = [-0.291, -0.2906, 0.004] * ufac"cm^2/s"
+	constant_newman_soret_diff_coeffs = [-0.291, -0.2906, 0.004] * ufac"cm^2/s",
 	#constant_newman_soret_diff_coeffs = [-0.3012, -0.2804, -0.0099] * ufac"cm^2/s"
+	outlet_boundaries=[Γ_left],
+	inlet_boundaries=[Γ_right]
 	
 )
-
-# ╔═╡ 175b0dc1-3f13-4c5d-bdd1-d5530855180f
-let
-	(;Tamb,p) = data
-	ng=ngas(data)
-	D = MMatrix{ng,ng,Float64}(undef)
-	A = MMatrix{ng,ng,Float64}(undef)
-	#D_matrix!(D, Tamb, p, data)
-	MultiComponentReactiveMixtureProject.D_A_matrices!(D, A, Tamb, p, data)
-end
-
-# ╔═╡ 728abf6f-3ff1-45c8-8b10-213f08b1b4dd
-let
-	(;iT, gni, gn) = data
-	vis=GridVisualizer(resolution=(600,400), layout=(2,1), Plotter=PlutoVista)
-	scalarplot!(vis[1,1], grid, sol[2,:], clear=false, label=gn[2])
-	scalarplot!(vis[1,1], grid, sol[5,:], clear=false, color=:red, label=gn[5])
-	scalarplot!(vis[1,1], grid, sol[6,:], clear=false, color=:blue, label=gn[6])
-	
-	scalarplot!(vis[2,1], grid, sol[iT,:], clear=false, label="T")
-	reveal(vis)
-end
-
-# ╔═╡ 035d4123-7092-4429-8cfd-1e5926e84493
-#sol, sys = setup_run_sim(grid, data);
 
 # ╔═╡ 93970c02-91c6-499a-9318-f7f632604bb5
 function bcondition(f,u,bnode,data)
 	(;p,ip,iT,Tamb)=data
-	
-	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_left,value=p)
-	boundary_dirichlet!(f,u,bnode, species=ip,region=Γ_right,value=p)
 
 	boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_left,value=300)
-	boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_right,value=400)	
+	boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_right,value=ramp(bnode.time; du=(300,400), dt=(0,5) ) )	
     
 end
 
@@ -188,16 +177,91 @@ function setup_run_sim(grid, data)
 		inival[i,:] .= X0[i]
 	end
 
-	#times=[0,20]
-	#sol=VoronoiFVM.solve(sys;inival=inival,times,verbose="an",log=true)
-	sol=VoronoiFVM.solve(sys;inival=inival,verbose="an",log=true)
+	control = SolverControl(nothing, sys;)
+	control.handle_exceptions=true
+	control.Δu_opt=100
+	
+	times=[0,100]
+	sol=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="aen",log=true)
+	#sol=VoronoiFVM.solve(sys;inival=inival,verbose="an",log=true)
 	return (sol,sys)
 end
+
+# ╔═╡ 035d4123-7092-4429-8cfd-1e5926e84493
+solt, sys = setup_run_sim(grid, data);
+
+# ╔═╡ c995a528-fa98-4860-9bf3-648af15693e9
+let
+	inflow_rate, outflow_rate, reaction_rate, stored_amount, I_in, I_out, I_reac = BoundaryFlows_Integrals(solt, sys, data)
+	(;ng, gn, gni, iT, ip) = data
+
+	#k=gni[:H2]
+	#k=gni[:CO]
+	#k=iT
+	k=ip
+
+	if k in 1:ng
+		name = gn[k]
+	elseif k == ip
+		name = "Total Mass"
+	elseif k == iT
+		name = "Enthalpy Flow"
+	end
+	
+	@printf "%s In: %2.2e \t Out: %2.2e \t React: %2.2e \nIn - Out: %2.4e \nStorage tEnd -t0: %2.4e" name I_in[k] I_out[k] I_reac[k] (I_in+I_out-I_reac)[k] (stored_amount[end]-stored_amount[1])[k]
+
+	vis=GridVisualizer(resolution=(500,600), layout=(4,1), xlabel="Time / s", ylabel="Inflow / Outflow / Reaction Rate")
+
+	function plot_flows!(k,vis)
+		scalarplot!(vis, solt.t[2:end], stack(inflow_rate, dims=1)[:,k], label="Inflow rate")
+		scalarplot!(vis, solt.t[2:end], stack(outflow_rate, dims=1)[:,k], label="Outflow rate", color=:red, clear=false)	
+		scalarplot!(vis, solt.t[2:end], stack(-reaction_rate, dims=1)[:,k], label="Reaction rate",  color=:blue, clear=false)
+		#scalarplot!(vis, solt.t[2:end], stack(stored_amount, dims=1)[:,k], label="Stored amount", color=:green, clear=false, )
+	end
+
+	plot_flows!(ip,vis[1,1])
+	plot_flows!(gni[:He],vis[2,1])
+	plot_flows!(gni[:Ar],vis[3,1])
+	plot_flows!(gni[:Kr],vis[4,1])
+	
+	reveal(vis)
+end
+
+# ╔═╡ cf1d3089-a0d2-445d-b004-571776f1c9a0
+if isa(solt, TransientSolution)
+	@bind t Slider(solt.t,show_value=true,default=solt.t[end])	
+end
+
+# ╔═╡ ad68e43e-df7e-4a06-a697-fa5824f54d3e
+if isa(solt, TransientSolution)
+	sol = solt(t)
+end;
+
+# ╔═╡ e4486776-8e7a-4590-b10d-1b797396dd39
+MultiComponentReactiveMixtureProject._checkinout(sol,sys,data)
+
+# ╔═╡ 728abf6f-3ff1-45c8-8b10-213f08b1b4dd
+let
+	(;iT, ip, gni, gn) = data
+	ng=ngas(data)
+	cs = [:black, :red, :blue]
+	vis=GridVisualizer(resolution=(600,400), layout=(3,1))
+	for i=1:ng
+		scalarplot!(vis[1,1], grid, sol[i,:], clear=false, label=gn[i], color=cs[i])
+	end
+	
+	scalarplot!(vis[2,1], grid, sol[iT,:], clear=false, label="Temperature / K")
+	scalarplot!(vis[3,1], grid, sol[ip,:], clear=false, label="Pressure / Pa")
+	reveal(vis)
+end
+
+# ╔═╡ 5a517383-c597-4fa5-b7dc-441e1952cb97
+plothistory(solt)
 
 # ╔═╡ 65dbb492-4795-44ca-afcb-fb2a2c925d92
 md"""
 # References
-1) Van‐Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599   .
+1) Van‐Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599     .
 1) Giovangigli, Vincent (2016): Solutions for Models of Chemically Reacting Mixtures. In: Yoshikazu Giga und Antonin Novotny (Hg.): Handbook of Mathematical Analysis in Mechanics of Viscous Fluids. Cham: Springer International Publishing, S. 1–52.
 """
 
@@ -215,8 +279,12 @@ md"""
 # ╟─94dd7674-751f-4128-b5eb-303fb9693c22
 # ╠═e7ca4902-0e14-48ca-bcc6-96b06c85a39d
 # ╠═7f1d9cf8-7785-48c1-853c-74680188121f
-# ╠═175b0dc1-3f13-4c5d-bdd1-d5530855180f
+# ╠═e4486776-8e7a-4590-b10d-1b797396dd39
+# ╠═c995a528-fa98-4860-9bf3-648af15693e9
 # ╠═728abf6f-3ff1-45c8-8b10-213f08b1b4dd
+# ╠═cf1d3089-a0d2-445d-b004-571776f1c9a0
+# ╠═ad68e43e-df7e-4a06-a697-fa5824f54d3e
+# ╠═5a517383-c597-4fa5-b7dc-441e1952cb97
 # ╠═035d4123-7092-4429-8cfd-1e5926e84493
 # ╠═93970c02-91c6-499a-9318-f7f632604bb5
 # ╠═1e51701d-a893-4056-8336-a3772b85abe4

@@ -229,12 +229,23 @@ function MassFrac!(X,W,data)
 	nothing
 end
 
+function ThermalDiffRatio!(TDR,X,A,D,data)
+	@inbounds for i=1:ngas(data)
+		for j=1:ngas(data)
+			if i != j
+				TDR[i] += X[j]*A[i,j]/D[i,j]
+			end
+		end
+	end
+	nothing
+end
+
 @doc raw"""
 Flux function definition for use with VoronoiFVM.jl for the Darcy-Maxwell-Stefan
     (DMS) model for Multi-component gas transport in porous media.
 """
 function DMS_flux(f,u,edge,data)
-	(;m,ip,iT,dt_hf_enth,solve_T_equation,Tamb,Fluids)=data
+	(;m,ip,iT,dt_hf_enth,solve_T_equation,Tamb,Fluids,include_Soret_Dufour)=data
 	ng=ngas(data)
 		
 	F = MVector{ng-1,eltype(u)}(undef)
@@ -242,6 +253,9 @@ function DMS_flux(f,u,edge,data)
 	W = MVector{ng,eltype(u)}(undef)
 	M = MMatrix{ng-1,ng-1,eltype(u)}(undef)
 	D = MMatrix{ng,ng,eltype(u)}(undef)
+	# Thermo-Diffusion: Soret and Dufour effects
+	A = MMatrix{ng,ng,eltype(u)}(undef)
+	TDR = MVector{ng,eltype(u)}(undef)
 
 	pm = 0.5*(u[ip,1]+u[ip,2])
     Tm = solve_T_equation ? 0.5*(u[iT,1]+u[iT,2]) : one(eltype(u))*Tamb
@@ -254,7 +268,9 @@ function DMS_flux(f,u,edge,data)
 	@inline MassFrac!(X,W,data)
 	
 	
-	@inline D_matrix!(D, Tm, pm, data)
+	# @inline D_matrix!(D, Tm, pm, data)
+	@inline D_A_matrices!(D, A, Tm, pm, data)
+	@inline ThermalDiffRatio!(TDR, X, A, D, data)
 	@inline mumix, lambdamix = dynvisc_thermcond_mix(data, Tm, X)
 		
 	rho = c*mmix
@@ -265,7 +281,11 @@ function DMS_flux(f,u,edge,data)
 	@inline M_matrix!(M, W, D, data)
 	
 	@inbounds for i=1:(ng-1)
-		F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm )*c/mmix
+		if include_Soret_Dufour
+			F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm + X[i]*TDR[i]*(u[iT,1]-u[iT,2])/Tm )*c/mmix
+		else
+			F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm )*c/mmix
+		end		
 	end				
 
 	@inline inplace_linsolve!(M,F)
