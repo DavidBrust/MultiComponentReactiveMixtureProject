@@ -231,6 +231,7 @@ end
 
 function ThermalDiffRatio!(TDR,X,A,D,data)
 	@inbounds for i=1:ngas(data)
+		TDR[i] = zero(eltype(X))		
 		for j=1:ngas(data)
 			if i != j
 				TDR[i] += X[j]*A[i,j]/D[i,j]

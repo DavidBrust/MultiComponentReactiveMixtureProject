@@ -131,7 +131,7 @@ data = ReactorData(
 	solve_T_equation = true,
 	is_reactive = false,
 	constant_properties = true,
-	#include_Soret_Dufour = true,
+	include_Soret_Dufour = true,
 	rhos=1.0*ufac"kg/m^3", # low value for solid density -> low thermal inertia
 	poros=0.1,
 	# 1) He, 2) Ar, 3) Kr
@@ -261,7 +261,7 @@ plothistory(solt)
 # ╔═╡ 65dbb492-4795-44ca-afcb-fb2a2c925d92
 md"""
 # References
-1) Van‐Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599     .
+1) Van‐Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599      .
 1) Giovangigli, Vincent (2016): Solutions for Models of Chemically Reacting Mixtures. In: Yoshikazu Giga und Antonin Novotny (Hg.): Handbook of Mathematical Analysis in Mechanics of Viscous Fluids. Cham: Springer International Publishing, S. 1–52.
 """
 
