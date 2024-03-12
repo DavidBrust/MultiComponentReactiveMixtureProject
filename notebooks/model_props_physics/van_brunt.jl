@@ -144,6 +144,17 @@ data = ReactorData(
 	
 )
 
+# ╔═╡ 0cc8d870-e13e-4ca0-99e9-48a374939c6b
+md"""
+Results from [1]:
+
+$(LocalResource("img/vanbrunt_result_xHe_2.png", :width=> 400))
+$(LocalResource("img/vanbrunt_result_xHe.png", :width=> 400))
+
+$(LocalResource("img/vanbrunt_result_xKr_2.png", :width=> 400))
+$(LocalResource("img/vanbrunt_result_xKr.png", :width=> 400))
+"""
+
 # ╔═╡ 93970c02-91c6-499a-9318-f7f632604bb5
 function bcondition(f,u,bnode,data)
 	(;p,ip,iT,Tamb)=data
@@ -261,7 +272,7 @@ plothistory(solt)
 # ╔═╡ 65dbb492-4795-44ca-afcb-fb2a2c925d92
 md"""
 # References
-1) Van‐Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599      .
+1) Van‐Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599       .
 1) Giovangigli, Vincent (2016): Solutions for Models of Chemically Reacting Mixtures. In: Yoshikazu Giga und Antonin Novotny (Hg.): Handbook of Mathematical Analysis in Mechanics of Viscous Fluids. Cham: Springer International Publishing, S. 1–52.
 """
 
@@ -280,7 +291,8 @@ md"""
 # ╠═e7ca4902-0e14-48ca-bcc6-96b06c85a39d
 # ╠═7f1d9cf8-7785-48c1-853c-74680188121f
 # ╠═e4486776-8e7a-4590-b10d-1b797396dd39
-# ╠═c995a528-fa98-4860-9bf3-648af15693e9
+# ╟─c995a528-fa98-4860-9bf3-648af15693e9
+# ╟─0cc8d870-e13e-4ca0-99e9-48a374939c6b
 # ╠═728abf6f-3ff1-45c8-8b10-213f08b1b4dd
 # ╠═cf1d3089-a0d2-445d-b004-571776f1c9a0
 # ╠═ad68e43e-df7e-4a06-a697-fa5824f54d3e
