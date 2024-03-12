@@ -556,13 +556,23 @@ function PTR_grid_boundaries_regions(dim;nref=0)
 
 		W=W/2 # axisymmetry, half domain is sufficient
 		nr=W*2^(nref)
-		R=(0:(W/nr):W)*ufac"cm"
+
+		efix = 1.0e-2
+		# R=(0:(W/nr):W)*ufac"cm"
+		R1=(0:(W/nr):(W-2))*ufac"cm"
+		R2=((W-2):efix:(W-2+efix))*ufac"cm"
+		R3=(W-2+efix:((2-efix)/2^(nref+1)):W)*ufac"cm"
+		R = glue(R1,R2)
+		R = glue(R,R3)
+
 		
 		grid=simplexgrid(R,Z)
 		circular_symmetric!(grid)
 	
-		cellmask!(grid,[0,0].*ufac"cm",[6/8*W,9/10*H].*ufac"cm",Ω_high_perm) # gas permeable region
-		cellmask!(grid,[0,9/10*H].*ufac"cm",[6/8*W,H].*ufac"cm",Ω_catalyst) # catalyst layer region
+		# cellmask!(grid,[0,0].*ufac"cm",[6/8*W,9/10*H].*ufac"cm",Ω_high_perm) # gas permeable region
+		# cellmask!(grid,[0,9/10*H].*ufac"cm",[6/8*W,H].*ufac"cm",Ω_catalyst) # catalyst layer region
+		
+		cellmask!(grid,[0,0].*ufac"cm",[6/8*W,H].*ufac"cm",Ω_catalyst) # catalyst layer region
 
 		bfacemask!(grid, [0,0].*ufac"cm",[W-2,0].*ufac"cm",Γ_bottom_permeable)
 		bfacemask!(grid, [0,H].*ufac"cm",[W-2,H].*ufac"cm",Γ_top_irradiated) 

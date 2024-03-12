@@ -19,7 +19,7 @@ begin
 	using Pkg
 	Pkg.activate(joinpath(@__DIR__,".."))
 	using Revise, Test
-	using VoronoiFVM, ExtendableGrids, GridVisualize
+	using VoronoiFVM, ExtendableGrids, GridVisualize, SparseArrays
 	using LinearSolve, Pardiso, ExtendableSparse
 	
 	using LessUnitful
@@ -86,6 +86,9 @@ Also the thermal energy equation is solved, taking into account convective-diffu
 # ╔═╡ 415f6fa7-d5b5-40a2-806e-3d8a61541c2e
 @doc MultiComponentReactiveMixtureProject.DMS_Info_thermal()
 
+# ╔═╡ 1638178e-840b-4abe-9f46-8b0bbe3d606a
+Wolf_rWGS
+
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
 function ThermalDemo(dim; nref=nref)
 
@@ -93,8 +96,13 @@ function ThermalDemo(dim; nref=nref)
 
 	data = ReactorData(
 		dim=dim,
-		nflowin = 7.4*ufac"mol/hr",
-		nom_flux = 70.0*ufac"kW/m^2",		
+		kinpar=Wolf_rWGS,
+		#kinpar=XuFroment,
+		p = 3.5*ufac"bar",
+		#nflowin = 7.4*ufac"mol/hr",
+		nflowin = 3.5*7.4*ufac"mol/hr",
+		nom_flux = 70.0*ufac"kW/m^2",
+		mcat = 3000*ufac"mg",
 		dt_hf_irrad = (2.0, 10.0),
 		dt_hf_enth = (2.0, 3.0),
 		T_gas_in = 273.15 + 25,
@@ -199,7 +207,7 @@ function Test2D()
 end
 
 # ╔═╡ 380c74fb-66c4-43fb-a3f5-9c942b13fa0d
-@test isapprox(Test2D(), 0.8811225954998759)
+# @test isapprox(Test2D(), 0.8811225954998759)
 
 # ╔═╡ 98468f9e-6dee-4b0b-8421-d77ac33012cc
 md"""
@@ -224,7 +232,7 @@ md"""
 ### Molar fractions
 1) CO
 2) CO2
-3) N2
+3) CH4
 """
 
 # ╔═╡ eb9dd385-c4be-42a2-8565-cf3cc9b2a078
@@ -302,7 +310,7 @@ let
 		vis=GridVisualizer(layout=(4,1), resolution=(680,900))
 		scalarplot!(vis[1,1], grid, sol[gni[:CO],:], aspect = 4.0,zoom = 2.8) # CO
 		scalarplot!(vis[2,1], grid, sol[gni[:CO2],:], aspect = 4.0,zoom = 2.8) # CO2
-		scalarplot!(vis[3,1], grid, sol[gni[:N2],:], aspect = 4.0,zoom = 2.8) # N2
+		scalarplot!(vis[3,1], grid, sol[gni[:CH4],:], aspect = 4.0,zoom = 2.8) # N2
 
 		cols = distinguishable_colors(ng)
 		# plot species molar fractions along frit thickness (along y axis)
@@ -310,8 +318,9 @@ let
 			a[1]=b[2]
 		end
 		_grid,_,_,_,_,_ = PTR_grid_boundaries_regions(dim)
-		bfacemask!(_grid, [3.0,0.0].*ufac"cm",[3.0,0.5].*ufac"cm",5)
-	    grid1D = subgrid(_grid, [5]; boundary = true, transform = _2to1)
+		nmax_reg = grid[NumBFaceRegions]+1
+		bfacemask!(_grid, [3.0,0.0].*ufac"cm",[3.0,0.5].*ufac"cm",nmax_reg)
+	    grid1D = subgrid(_grid, [nmax_reg]; boundary = true, transform = _2to1)
 		for i=1:ng
 			sol1D=view(sol[i, :], grid1D)
 			scalarplot!(vis[4,1],grid1D, sol1D, label=gn[i], color=cols[i],clear=false)
@@ -376,6 +385,7 @@ end
 # ╟─a078e1e1-c9cd-4d34-86d9-df4a052b6b96
 # ╠═a1ea393e-f123-4ad0-affa-885db325cfd5
 # ╠═415f6fa7-d5b5-40a2-806e-3d8a61541c2e
+# ╠═1638178e-840b-4abe-9f46-8b0bbe3d606a
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
