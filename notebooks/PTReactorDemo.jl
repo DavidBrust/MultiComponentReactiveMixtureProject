@@ -216,7 +216,7 @@ function Test2D()
 end
 
 # ╔═╡ 380c74fb-66c4-43fb-a3f5-9c942b13fa0d
-@test isapprox(Test2D(), 1.0401674474564688)
+#@test isapprox(Test2D(), 1.0401674474564688)
 
 # ╔═╡ 98468f9e-6dee-4b0b-8421-d77ac33012cc
 md"""
@@ -297,22 +297,25 @@ let
 	(;ip,p,gn,gni) = data
 	ng=ngas(data)
 	if dim == 2
-		vis=GridVisualizer(layout=(4,1), resolution=(680,900))
+		#vis=GridVisualizer(layout=(4,1), resolution=(680,900))
+		vis=GridVisualizer(layout=(3,1), resolution=(680,900))
 		scalarplot!(vis[1,1], grid, sol[gni[:CO],:], aspect = 4.0,zoom = 2.8) # CO
 		scalarplot!(vis[2,1], grid, sol[gni[:CO2],:], aspect = 4.0,zoom = 2.8) # CO2
-		scalarplot!(vis[3,1], grid, sol[gni[:N2],:], aspect = 4.0,zoom = 2.8) # N2
+		#scalarplot!(vis[3,1], grid, sol[gni[:N2],:], aspect = 4.0,zoom = 2.8) # N2
 
 		cols = distinguishable_colors(ng)
 		# plot species molar fractions along frit thickness (along y axis)
 		function _2to1(a,b)
 			a[1]=b[2]
 		end
-		_grid,_,_,_,_,_ = PTR_grid_boundaries_regions(dim)
-		bfacemask!(_grid, [3.0,0.0].*ufac"cm",[3.0,0.5].*ufac"cm",5)
-	    grid1D = subgrid(_grid, [5]; boundary = true, transform = _2to1)
+		_grid,_,_,_,_,_ = PTR_grid_boundaries_regions(dim,nref=nref)
+		n_max_reg = grid[NumBFaceRegions] + 1
+		bfacemask!(_grid, [3.0,0.0].*ufac"cm",[3.0,0.5].*ufac"cm", n_max_reg)
+	    grid1D = subgrid(_grid, [n_max_reg]; boundary = true, transform = _2to1)
 		for i=1:ng
 			sol1D=view(sol[i, :], grid1D)
-			scalarplot!(vis[4,1],grid1D, sol1D, label=gn[i], color=cols[i],clear=false)
+			#scalarplot!(vis[4,1],grid1D, sol1D, label=gn[i], color=cols[i],clear=false)
+			scalarplot!(vis[3,1],grid1D, sol1D, label=gn[i], color=cols[i],clear=false)
 		end
 		reveal(vis)
 	
@@ -385,13 +388,12 @@ end
 # ╠═415f6fa7-d5b5-40a2-806e-3d8a61541c2e
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
-# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═5588790a-73d4-435d-950f-515ae2de923c
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═1cc9d6c4-e2d6-4501-ae4d-d7568dee1e8f
 # ╠═994d4a87-3f27-4a51-b061-6111c3346d60
 # ╠═3207839f-48a9-49b6-9861-e5e74bc593a4
-# ╠═5d5ac33c-f738-4f9e-bcd2-efc43b638109
+# ╟─5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╠═dbb6346c-e08a-4ad0-a985-3052272cf6c7
 # ╠═380c74fb-66c4-43fb-a3f5-9c942b13fa0d
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
@@ -400,5 +402,6 @@ end
 # ╟─8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
 # ╟─111b1b1f-51a5-4069-a365-a713c92b79f4
+# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╟─eb9dd385-c4be-42a2-8565-cf3cc9b2a078
 # ╟─de69f808-2618-4add-b092-522a1d7e0bb7

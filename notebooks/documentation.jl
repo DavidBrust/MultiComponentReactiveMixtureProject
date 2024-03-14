@@ -308,7 +308,7 @@ The enthalpy balance equation including the Dufour effect thus takes the form:
 md"""
 # References
 1) Kuiken, Gerard D. C. (1994): Thermodynamics of irreversible processes. Applications to diffusion and rheology. New York, NY: Wiley (Wiley tutorial series in theoretical chemistry).
-1) Van‐Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599.
+1) Van‐Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599  .
 1) Giovangigli, Vincent (2016): Solutions for Models of Chemically Reacting Mixtures. In: Yoshikazu Giga und Antonin Novotny (Hg.): Handbook of Mathematical Analysis in Mechanics of Viscous Fluids. Cham: Springer International Publishing, S. 1–52.
 """
 
@@ -329,7 +329,7 @@ md"""
 # ╟─730348aa-3ff7-43bd-8c43-e9ba6823d318
 # ╟─3e53e30d-f601-4d78-9f93-037172e40504
 # ╟─f26fdd8c-2d66-49db-9ccd-17aa537925a1
-# ╠═b40f02e9-ec79-4122-9156-c469d90152f6
+# ╟─b40f02e9-ec79-4122-9156-c469d90152f6
 # ╟─aa68910a-f86f-4e33-894e-b3d3808473cc
 # ╟─60cf47bf-29d4-4bad-aeb4-88f254c94dce
 # ╟─f39f687b-1b4b-4ddd-864d-cb33e28d3c78

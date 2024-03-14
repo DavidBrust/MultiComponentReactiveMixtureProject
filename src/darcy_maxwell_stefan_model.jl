@@ -317,9 +317,11 @@ function DMS_flux(f,u,edge,data)
         # f[iT] = lambda_bed*(Bm*u[iT,1]-Bp*u[iT,2])
 
 		# !!! DEBUG !!!
-		f[iT] = lambda_bed*(u[iT,1]-u[iT,2]) + enthalpy_flux * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth) 
+		f[iT] = lambda_bed*(u[iT,1]-u[iT,2]) + enthalpy_flux * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth)
 		# f[iT] = lambda_bed*(u[iT,1]-u[iT,2]) + enthalpy_flux
 		# f[iT] = lambda_bed*(u[iT,1]-u[iT,2])
+		# f[iT] = u[iT,1]-u[iT,2] + enthalpy_flux * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth)
+		# f[iT] = u[iT,1]-u[iT,2]
 		# !!! DEBUG !!!
     end
 end
@@ -387,6 +389,7 @@ function DMS_storage(f,u,node,data)
         @inline MoleFrac!(X,u,data)
         @inline cpmix = heatcap_mix(data, T, X)
 		# !!! DEBUG !!!
+		# f[iT] = u[iT]
 		f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros)
 		# f[iT] = (u[iT]-Tref) * (rhos*cs*(1-poros) + cpmix*c*poros)
 		# !!! DEBUG !!!

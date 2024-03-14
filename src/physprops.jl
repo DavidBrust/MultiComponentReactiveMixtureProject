@@ -374,7 +374,7 @@ He=FluidProps(
 	),
 	# D3.1 Table 8
 	DynVisc=PropsCoeffs(
-	A=0.39223-5,
+	A=0.39223e-5,
 	B=0.61300e-7,
 	C=-0.31007e-10,
 	D=0.01479e-12,
@@ -411,7 +411,7 @@ Kr=FluidProps(
 	),
 	# D3.1 Table 8
 	DynVisc=PropsCoeffs(
-	A=-0.07920-5,
+	A=-0.07920e-5,
 	B=1.02624e-7,
 	C=-0.55428e-10,
 	D=0.02187e-12,
@@ -440,7 +440,7 @@ end
 function dynvisc_thermcond_mix(data, T, x)
     ng = ngas(data)
     # Fluid = data.Fluids
-    (;Fluids, constant_properties) = data
+    (;Fluids, constant_properties, constant_species_viscosities, constant_species_thermal_conductivities) = data
 
     #  !!!ALLOC for types stubility & correctness
     #  !!!ALLOC initialize with zero(eltype) instead of 0.0
@@ -448,30 +448,30 @@ function dynvisc_thermcond_mix(data, T, x)
     lambdamix=zero(eltype(x))
     
     if constant_properties
-        mumix += 2.0e-5*ufac"Pa*s"
-        lambdamix += 2.0e-2*ufac"W/(m*K)"
-    else
-        # !!!ALLOC Use MVectors with static size information instead of Vector
-        mu=MVector{ngas(data),eltype(x)}(undef)
-        lambda=MVector{ngas(data),eltype(x)}(undef)
-        M=MVector{ngas(data),eltype(x)}(undef)
+		mumix += 2.0e-5*ufac"Pa*s"
+		lambdamix += 2.0e-2*ufac"W/(m*K)"
+	else
+		# !!!ALLOC Use MVectors with static size information instead of Vector
+		mu=MVector{ngas(data),eltype(x)}(undef)
+		lambda=MVector{ngas(data),eltype(x)}(undef)
+		M=MVector{ngas(data),eltype(x)}(undef)
 
-        for i=1:ngas(data)
-            mu[i] = dynvisc_gas(Fluids[i], T)
-            lambda[i] = thermcond_gas(Fluids[i], T)
-            M[i] = Fluids[i].MW
-        end
-        for i=1:ng
-            sumyFij = zero(T)
-            for j=1:ng
-                Fij = (1+(mu[i]/mu[j])^0.5*(M[j]/M[i])^0.25)^2 / sqrt(8*(1+M[i]/M[j]))
-                sumyFij += x[j]*Fij
-            end
-            if x[i] > 0
-                mumix += x[i] * mu[i] / sumyFij
-                lambdamix += x[i] * lambda[i] / sumyFij
-            end
-        end
+		for i=1:ngas(data)
+			mu[i] = dynvisc_gas(Fluids[i], T)
+				lambda[i] = thermcond_gas(Fluids[i], T)
+			M[i] = Fluids[i].MW
+		end
+		for i=1:ng
+			sumyFij = zero(T)
+			for j=1:ng
+				Fij = (1+(mu[i]/mu[j])^0.5*(M[j]/M[i])^0.25)^2 / sqrt(8*(1+M[i]/M[j]))
+				sumyFij += x[j]*Fij
+			end
+			if x[i] > 0
+				mumix += x[i] * mu[i] / sumyFij
+				lambdamix += x[i] * lambda[i] / sumyFij
+			end
+		end
     end
 
     return  mumix, lambdamix

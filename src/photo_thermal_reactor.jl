@@ -259,8 +259,6 @@ function PTR_bstorage(f,u,bnode,data)
 end
 
 
-
-
 #"""
 #Effective thermal conductivity of porous filter frit according to:
 #
@@ -271,14 +269,17 @@ end
 # calculate fixed bed (porous material) effective thermal conductivity
 
 
-function kbed(data, lambdaf)
-	(;poros,lambdas) = data
-	B=1.25*((1.0-poros)/poros)^(10.0/9.0)
-	kp=lambdas/lambdaf
-	N=1.0-(B/kp)
-	kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
-	1.0-sqrt(1.0-poros)+sqrt(1.0-poros)*kc
-end
+# function kbed(data, lambdaf)
+# 	(;poros,lambdas) = data
+# 	# !!! regularize function to catch poros=1 (pure gas phase) !!!
+# 	ϵ_reg = 1.0e-12
+# 	B=1.25*((1.0-poros)/poros)^(10.0/9.0)
+# 	kp=lambdas/lambdaf
+# 	N=1.0-(B/kp)
+# 	#kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
+# 	kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/(B+ϵ_reg)) - (B+1.0)/2.0 - (B-1.0)/N)
+# 	1.0-sqrt(1.0-poros)+sqrt(1.0-poros)*kc
+# end
 
 # mostly equivalent to VDI Heat Atlas 2010, ch. D6.3 eqs. (5a-5e). with addition
 # of flattening coefficient ψ, that might be relevant for sintered materials
@@ -468,6 +469,8 @@ $(TYPEDFIELDS)
 	# Constant property storage
 	constant_binary_diff_coeffs::Vector{Float64} = ones(Float64, ng*(ng-1)÷2) * 0.2*ufac"cm^2/s"
 	constant_newman_soret_diff_coeffs::Vector{Float64} = ones(Float64, ng*(ng-1)÷2) * 0.1
+	constant_species_viscosities::Vector{Float64} = ones(Float64, ng) * 2.0e-5*ufac"Pa*s"
+	constant_species_thermal_conductivities::Vector{Float64} = ones(Float64, ng) * 0.02*ufac"W/(m*K)"
 
 	# Inflow properties
 	nflowin::Float64 = 7.4*ufac"mol/hr"
@@ -514,13 +517,60 @@ $(TYPEDFIELDS)
 	lambda_window::Float64=1.38*ufac"W/(m*K)"
 	lambda_Al::Float64=235.0*ufac"W/(m*K)"
 
-    function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,include_Soret_Dufour,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+	logreg::Float64=1.0e-20
+
+    function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,include_Soret_Dufour,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs,constant_species_viscosities,constant_species_thermal_conductivities,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,logreg)
         KP = MultiComponentReactiveMixtureProject.KinData{nreac(kinpar)}
 		# FluxIntp = flux_interpol(nom_flux)
 		# flux_inner, flux_outer = flux_inner_outer(nom_flux)
-        new{ng,KP}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,include_Soret_Dufour,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al)
+        new{ng,KP}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,include_Soret_Dufour,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs,constant_species_viscosities,constant_species_thermal_conductivities,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,logreg)
 
     end
+end
+
+
+"""
+Regularized logarithm:
+```
+   rlog(u,data)= log(u+electrolyte.logreg)
+```
+"""
+rlog(x,data::ReactorData)=rlog(x,data.logreg)
+
+function rlog(x,eps)
+    if x<eps
+        return log(eps)+(x-eps)/eps
+    else
+        return log(x)
+    end
+end
+
+"""
+    rexp(x;trunc=500.0)
+
+Regularized exponential. Linear continuation for `x>trunc`,  
+returns 1/rexp(-x) for `x<-trunc`.
+"""
+function rexp(x; trunc = 20.0)
+    if x < -trunc
+        1.0 / rexp(-x; trunc)
+    elseif x <= trunc
+        exp(x)
+    else
+        exp(trunc) * (x - trunc + 1)
+    end
+end
+
+function kbed(data, lambdaf)
+	(;poros,lambdas) = data
+	B=1.25*((1.0-poros)/poros)^(10/9)
+	kp=lambdas/lambdaf
+	N=1-(B/kp)
+	# !!! regularize function to catch poros=1 (pure gas phase) !!!
+	#kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
+	kc=2/N* (B/N^2 * (kp-1)/kp * (log(kp)-rlog(B,data)) - (B+1)/2 - (B-1)/N)
+	# !!! reglog
+	1-sqrt(1-poros)+sqrt(1-poros)*kc
 end
 
 ngas(::ReactorData{NG,KP}) where {NG,KP} = NG
