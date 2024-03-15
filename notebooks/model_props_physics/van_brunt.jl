@@ -22,7 +22,7 @@ begin
 	using LessUnitful
 	using VoronoiFVM
 	using ExtendableGrids, GridVisualize, PlutoVista
-	using StaticArrays
+	using StaticArrays, LinearAlgebra
 	using Revise
 	using Printf
 	using MultiComponentReactiveMixtureProject
@@ -35,16 +35,13 @@ TableOfContents(aside=true)
 # ╔═╡ f4286a46-ceb4-40b2-8ce5-7fcd231e3168
 md"""
 # Modelling Domain
-$(LocalResource("img/vanbrunt_domain.png"))
+$(LocalResource("img/vanbrunt_domain.png", :width=> 400))
 """
 
 # ╔═╡ 6939978d-9590-407b-80dc-54721c3f672d
 md"""
 Select problem dimension: $(@bind dim Select([1, 2], default=1))
 """
-
-# ╔═╡ b55537bf-9982-4997-8a2a-1972127bdd86
-#gridplot(grid_2D())
 
 # ╔═╡ ff501186-d8a0-4666-8991-fe576f8ff6ad
 function grid_2D()
@@ -78,6 +75,9 @@ elseif dim == 2
 	const Γ_right = 2
 end;
 
+# ╔═╡ b55537bf-9982-4997-8a2a-1972127bdd86
+gridplot(grid, resolution=(500,300), zoom=2)
+
 # ╔═╡ 9fde21eb-1112-40ec-8fe2-0c8a12c9926d
 md"""
 # M-S flux-force relationship
@@ -97,7 +97,7 @@ In a multi-component setting the thermal diffusion coefficients always appear in
 \mathcal{A}_{ij} &= \frac{D_i^{\text T}}{\rho_i} - \frac{D_j^{\text T}}{\rho_j} = \mathcal{D}_i^{\text T} - \mathcal{D}_j^{\text T} \\
 \end{align}
 ```
- $(LocalResource("img/vanbrunt_newman_soret_coeff_regularized.png"))
+ $(LocalResource("img/vanbrunt_newman_soret_coeff_regularized.png", :width=>500))
 
 The _thermal diffusion factors_ $\alpha_{ij}$ are commonly used which are related to the _Newman–Soret diffusivities_ via [1]:
 ```math
@@ -109,7 +109,7 @@ The _thermal diffusion factors_ $\alpha_{ij}$ are commonly used which are relate
 
 # ╔═╡ 2fcc681c-1b79-46cc-b96f-20143f8e331e
 md"""
-$(LocalResource("img/vanbrunt_thermo_diff_factors.png"))
+$(LocalResource("img/vanbrunt_thermo_diff_factors.png", :width=>500))
 """
 
 # ╔═╡ 3f9eea9d-7c2f-4d83-981a-a243fdf0531a
@@ -146,61 +146,33 @@ HeArKr = KinData{}(;
 
 # ╔═╡ 7f1d9cf8-7785-48c1-853c-74680188121f
 data = ReactorData(
-	#dim = dim,
-	dim = 1,
+	dim = dim,
+	#dim = 1,
 	kinpar = HeArKr,
 	X0 = [1,1,1] / 3,
 	Tamb = 300,
 	p = 1*ufac"bar",
-	γ_τ = 1.0,
-	#rhos=5.0*ufac"kg/m^3", # low value for solid density -> low thermal inertia
+	
 	solve_T_equation = true,
 	is_reactive = false,
-	constant_properties = true,
+	#constant_properties = true,
 	include_Soret_Dufour = true,
-	rhos=1.0*ufac"kg/m^3", # low value for solid density -> low thermal inertia
-	#poros=0.99,
-	#poros=1.0,
+	
+	#rhos=1.0*ufac"kg/m^3", # low value for solid density -> low thermal inertia
+
+	γ_τ = 1.0,
+	poros=1.0,
+	perm = 1.23e-10*ufac"m^2" * 1.0e6,
 	# 1) He, 2) Ar, 3) Kr
 	# D12:= He-Ar, D13:= He-Kr, D23:= Ar-Kr
 	constant_binary_diff_coeffs = [0.756, 0.6553, 0.1395] * ufac"cm^2/s",
 	constant_newman_soret_diff_coeffs = [-0.291, -0.2906, 0.004] * ufac"cm^2/s",
-	#constant_species_thermal_conductivities = [
-	#	thermcond_gas(He, 300),
-	#	thermcond_gas(Ar, 300),
-	#	thermcond_gas(Kr, 300)
-	#],
-	#constant_species_viscosities = [
-	#	dynvisc_gas(He, 300),
-	#	dynvisc_gas(Ar, 300),
-	#	dynvisc_gas(Kr, 300)
-	#],
-	#constant_newman_soret_diff_coeffs = [-0.3012, -0.2804, -0.0099] * ufac"cm^2/s"
-	#outlet_boundaries=[],
-	#inlet_boundaries=[]
-	outlet_boundaries=[Γ_left],
-	inlet_boundaries=[Γ_right]
+	
+	#outlet_boundaries=[Γ_left],
+	#inlet_boundaries=[Γ_right]
 	
 	
 )
-
-# ╔═╡ 0cc8d870-e13e-4ca0-99e9-48a374939c6b
-md"""
-Results from [1]:
-
-$(LocalResource("img/vanbrunt_result_xHe_2.png", :width=> 400))
-$(LocalResource("img/vanbrunt_result_xHe.png", :width=> 400))
-
-$(LocalResource("img/vanbrunt_result_xKr_2.png", :width=> 400))
-$(LocalResource("img/vanbrunt_result_xKr.png", :width=> 400))
-"""
-
-# ╔═╡ 5ae4d7c6-11b2-4f8f-8234-9b658afaa83b
-md"""
-Results from this work:
-1) __He__ molar fraction
-2) __Kr__ molar fraction
-""";
 
 # ╔═╡ 93970c02-91c6-499a-9318-f7f632604bb5
 function bcondition(f,u,bnode,data)
@@ -209,7 +181,7 @@ function bcondition(f,u,bnode,data)
 	boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_left,value=300)
 	boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_right,value=ramp(bnode.time; du=(300,400), dt=(0,5) ) )
 	
-	#heatflux_right = 135.0
+	#heatflux_right = 10.0
 	#boundary_neumann!(f,u,bnode, species=iT,region=Γ_right,value=ramp(bnode.time; du=(0,heatflux_right), dt=dt_hf_enth ) )
 end
 
@@ -243,49 +215,11 @@ function setup_run_sim(grid, data)
 	
 	times=[0,200]
 	sol=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="aen",log=true)
-	#sol=VoronoiFVM.solve(sys;inival=inival,verbose="an",log=true)
 	return (sol,sys)
 end
 
 # ╔═╡ 035d4123-7092-4429-8cfd-1e5926e84493
 solt, sys = setup_run_sim(grid, data);
-
-# ╔═╡ c995a528-fa98-4860-9bf3-648af15693e9
-let
-	inflow_rate, outflow_rate, reaction_rate, stored_amount, I_in, I_out, I_reac = BoundaryFlows_Integrals(solt, sys, data)
-	(;ng, gn, gni, iT, ip) = data
-
-	#k=gni[:H2]
-	#k=gni[:CO]
-	k=iT
-	#k=ip
-
-	if k in 1:ng
-		name = gn[k]
-	elseif k == ip
-		name = "Total Mass"
-	elseif k == iT
-		name = "Enthalpy Flow"
-	end
-	
-	@printf "%s In: %2.2e \t Out: %2.2e \t React: %2.2e \nIn - Out: %2.4e \nStorage tEnd -t0: %2.4e" name I_in[k] I_out[k] I_reac[k] (I_in+I_out-I_reac)[k] (stored_amount[end]-stored_amount[1])[k]
-
-	vis=GridVisualizer(resolution=(500,600), layout=(4,1), xlabel="Time / s", ylabel="Inflow / Outflow / Reaction Rate")
-
-	function plot_flows!(k,vis)
-		scalarplot!(vis, solt.t[2:end], stack(inflow_rate, dims=1)[:,k], label="Inflow rate")
-		scalarplot!(vis, solt.t[2:end], stack(outflow_rate, dims=1)[:,k], label="Outflow rate", color=:red, clear=false)	
-		scalarplot!(vis, solt.t[2:end], stack(-reaction_rate, dims=1)[:,k], label="Reaction rate",  color=:blue, clear=false)
-		#scalarplot!(vis, solt.t[2:end], stack(stored_amount, dims=1)[:,k], label="Stored amount", color=:green, clear=false, )
-	end
-
-	plot_flows!(ip,vis[1,1])
-	plot_flows!(gni[:He],vis[2,1])
-	plot_flows!(gni[:Ar],vis[3,1])
-	plot_flows!(gni[:Kr],vis[4,1])
-	
-	reveal(vis)
-end
 
 # ╔═╡ cf1d3089-a0d2-445d-b004-571776f1c9a0
 if isa(solt, TransientSolution)
@@ -297,38 +231,24 @@ if isa(solt, TransientSolution)
 	sol = solt(t)
 end;
 
-# ╔═╡ e4486776-8e7a-4590-b10d-1b797396dd39
-MultiComponentReactiveMixtureProject._checkinout(sol,sys,data)
+# ╔═╡ 07e97ba1-357a-4de8-ad5a-64e7a27b0cb8
+md"""
+| [1] | This work |
+|:----------:|:----------:|
+| $(LocalResource("img/vanbrunt_result_xHe_2.png", :width=> 250)) | __He__ molar fraction |
+| $(LocalResource("img/vanbrunt_result_xHe.png", :width=> 250)) 	| $((; gni) = data; scalarplot(grid, sol[gni[:He],:], resolution=(300,200), zoom=2.5) ) |
+| $(LocalResource("img/vanbrunt_result_xKr_2.png", :width=> 250))     | __Kr__ molar fraction |
+| $(LocalResource("img/vanbrunt_result_xKr.png", :width=> 250))  	| $((;gni) = data; scalarplot(grid, sol[gni[:Kr],:], resolution=(300,200), zoom=2.5) ) |
+| $(LocalResource("img/vanbrunt_result_T_2.png", :width=> 250))  	| __Temperature (K)__ |
+| $(LocalResource("img/vanbrunt_result_T.png", :width=> 250))  	| $((;iT) = data; scalarplot(grid, sol[iT,:], resolution=(300,200), zoom=2.5) ) |
+| | __Pressure (Pa)__ |
+| | $((;ip) = data; scalarplot(grid, sol[ip,:], resolution=(300,200), zoom=2.5) ) |
+"""
 
-# ╔═╡ 728abf6f-3ff1-45c8-8b10-213f08b1b4dd
+# ╔═╡ 828e433b-0b53-4bf9-bd17-0b57cda27ec5
 let
-	(;iT, ip, gni, gn) = data
-	ng=ngas(data)
-	if dim==1
-		cs = [:black, :red, :blue]
-		vis=GridVisualizer(resolution=(600,400), layout=(3,1))
-		for i=1:ng
-			scalarplot!(vis[1,1], grid, sol[i,:], clear=false, label=gn[i], color=cs[i])
-		end
-		
-		scalarplot!(vis[2,1], grid, sol[iT,:], clear=false, label="Temperature / K")
-		scalarplot!(vis[3,1], grid, sol[ip,:], clear=false, label="Pressure / Pa")
-	elseif dim==2
-		vis=GridVisualizer(resolution=(600,600), layout=(2,1), zoom=2)
-		scalarplot!(vis[1,1], grid, sol[gni[:He],:])
-		scalarplot!(vis[2,1], grid, sol[gni[:Kr],:])
-		
-	end
-	reveal(vis)
-end
-
-# ╔═╡ 7fdc10ec-2d72-4656-a094-e9b2b1c54ecf
-let
-	(;iT, ip, gni, gn) = data
-	vis=GridVisualizer(resolution=(600,600), layout=(2,1), zoom=2)
-	scalarplot!(vis[1,1], grid, sol[iT,:])
-	scalarplot!(vis[2,1], grid, sol[ip,:])
-	reveal(vis)
+	(;ip) = data
+	maximum(sol[ip,:]) / minimum(sol[ip,:])
 end
 
 # ╔═╡ 5a517383-c597-4fa5-b7dc-441e1952cb97
@@ -340,7 +260,7 @@ function run_ss(solt,sys)
 	
 	sol_steadystate = VoronoiFVM.solve(
 		sys;
-		time = 200.0,
+		time = 400.0,
 		inival=solt(solt.t[end]),
 		control,
 		verbose="na"
@@ -360,7 +280,13 @@ md"""
 1) He
 1) Kr
 1) Temperature
+1) Pressure: 
 """
+
+# ╔═╡ 1411d8ce-35c5-4fa2-b56e-6573b1d64c62
+let
+#$((;ip)=data;round(maximum(sol_ss[ip,:])/ufac"bar",digits=3)) bar
+end
 
 # ╔═╡ 25a57aa7-7b67-4733-b631-994af5118134
 let
@@ -376,10 +302,11 @@ let
 		scalarplot!(vis[2,1], grid, sol_ss[iT,:], clear=false, label="Temperature / K")
 		scalarplot!(vis[3,1], grid, sol_ss[ip,:], clear=false, label="Pressure / Pa")
 	elseif dim==2
-		vis=GridVisualizer(resolution=(600,600), layout=(3,1), zoom=2.5)
+		vis=GridVisualizer(resolution=(600,800), layout=(4,1), zoom=2.5,)
 		scalarplot!(vis[1,1], grid, sol_ss[gni[:He],:])
 		scalarplot!(vis[2,1], grid, sol_ss[gni[:Kr],:])
 		scalarplot!(vis[3,1], grid, sol_ss[iT,:])
+		scalarplot!(vis[4,1], grid, sol_ss[ip,:])
 		
 	end
 	reveal(vis)
@@ -388,7 +315,7 @@ end
 # ╔═╡ 65dbb492-4795-44ca-afcb-fb2a2c925d92
 md"""
 # References
-1) Van_Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599              .
+1) Van_Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599                .
 1) Giovangigli, Vincent (2016): Solutions for Models of Chemically Reacting Mixtures. In: Yoshikazu Giga und Antonin Novotny (Hg.): Handbook of Mathematical Analysis in Mechanics of Viscous Fluids. Cham: Springer International Publishing, S. 1–52.
 """
 
@@ -398,7 +325,7 @@ md"""
 # ╟─f4286a46-ceb4-40b2-8ce5-7fcd231e3168
 # ╟─6939978d-9590-407b-80dc-54721c3f672d
 # ╠═138b4d12-af0f-4a1c-a4aa-4f55e6038664
-# ╠═b55537bf-9982-4997-8a2a-1972127bdd86
+# ╟─b55537bf-9982-4997-8a2a-1972127bdd86
 # ╠═ff501186-d8a0-4666-8991-fe576f8ff6ad
 # ╠═bfebc943-28ef-477b-bc15-6cab9d398d92
 # ╟─9fde21eb-1112-40ec-8fe2-0c8a12c9926d
@@ -407,14 +334,10 @@ md"""
 # ╟─3f9eea9d-7c2f-4d83-981a-a243fdf0531a
 # ╟─94dd7674-751f-4128-b5eb-303fb9693c22
 # ╠═e7ca4902-0e14-48ca-bcc6-96b06c85a39d
-# ╟─7f1d9cf8-7785-48c1-853c-74680188121f
-# ╠═e4486776-8e7a-4590-b10d-1b797396dd39
-# ╠═c995a528-fa98-4860-9bf3-648af15693e9
-# ╟─0cc8d870-e13e-4ca0-99e9-48a374939c6b
-# ╟─5ae4d7c6-11b2-4f8f-8234-9b658afaa83b
-# ╠═728abf6f-3ff1-45c8-8b10-213f08b1b4dd
-# ╠═7fdc10ec-2d72-4656-a094-e9b2b1c54ecf
-# ╠═cf1d3089-a0d2-445d-b004-571776f1c9a0
+# ╠═7f1d9cf8-7785-48c1-853c-74680188121f
+# ╟─07e97ba1-357a-4de8-ad5a-64e7a27b0cb8
+# ╟─828e433b-0b53-4bf9-bd17-0b57cda27ec5
+# ╟─cf1d3089-a0d2-445d-b004-571776f1c9a0
 # ╠═ad68e43e-df7e-4a06-a697-fa5824f54d3e
 # ╠═5a517383-c597-4fa5-b7dc-441e1952cb97
 # ╠═035d4123-7092-4429-8cfd-1e5926e84493
@@ -422,7 +345,8 @@ md"""
 # ╠═1e51701d-a893-4056-8336-a3772b85abe4
 # ╠═56b18561-2d4e-42a8-a363-98c783d0f991
 # ╟─8c53810e-330f-4eef-9402-62d31fb5d753
-# ╠═4296aa28-9f52-4d40-a968-ee583ffc7d3c
+# ╟─4296aa28-9f52-4d40-a968-ee583ffc7d3c
 # ╟─206c143d-0af5-4e48-9fd9-f6e7a15e5083
+# ╠═1411d8ce-35c5-4fa2-b56e-6573b1d64c62
 # ╟─25a57aa7-7b67-4733-b631-994af5118134
 # ╟─65dbb492-4795-44ca-afcb-fb2a2c925d92

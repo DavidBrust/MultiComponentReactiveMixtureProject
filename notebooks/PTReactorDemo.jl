@@ -134,12 +134,6 @@ if RunSim
 	solt,grid,sys,data=ThermalDemo(dim);
 end;
 
-# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-@bind t Slider(solt.t,show_value=true,default=solt.t[end])
-
-# ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
-sol = solt(t);
-
 # ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
 md"""
 # Initialisation and Solve
@@ -154,9 +148,6 @@ The mass flow boundary condition into the reactor domain is "ramped up" starting
 
 # ╔═╡ 1cc9d6c4-e2d6-4501-ae4d-d7568dee1e8f
 plothistory(solt)
-
-# ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
-MultiComponentReactiveMixtureProject.Print_summary(sol,grid,sys,data)
 
 # ╔═╡ 3207839f-48a9-49b6-9861-e5e74bc593a4
 # ╠═╡ skip_as_script = true
@@ -216,7 +207,7 @@ function Test2D()
 end
 
 # ╔═╡ 380c74fb-66c4-43fb-a3f5-9c942b13fa0d
-#@test isapprox(Test2D(), 1.0401674474564688)
+@test isapprox(Test2D(), 1.0401674474564688)
 
 # ╔═╡ 98468f9e-6dee-4b0b-8421-d77ac33012cc
 md"""
@@ -225,6 +216,32 @@ md"""
 2) Window inner surface
 3) Bottom plate
 """
+
+# ╔═╡ 58c0b05d-bb0e-4a3f-af05-71782040c8b9
+if dim == 2
+md"""
+- (1,1): T-profile at r=0
+- (2,1): T-profile at z=0
+- (1,2): Window T-profile
+- (2,2): Bottom Plate T-profile
+"""
+end
+
+# ╔═╡ c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
+md"""
+### Molar fractions
+1) CO
+2) CO2
+"""
+
+# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
+@bind t Slider(solt.t,show_value=true,default=solt.t[end])
+
+# ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
+sol = solt(t);
+
+# ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
+MultiComponentReactiveMixtureProject.Print_summary(sol,grid,sys,data)
 
 # ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
 # ╠═╡ show_logs = false
@@ -237,16 +254,6 @@ let
 	scalarplot!(vis[1,1],grid, sol[iT,:] .- 273.15, zoom = 2.8, aspect=4.0, show=true)
 end
   ╠═╡ =#
-
-# ╔═╡ 58c0b05d-bb0e-4a3f-af05-71782040c8b9
-if dim == 2
-md"""
-- (1,1): T-profile at r=0
-- (2,1): T-profile at z=0
-- (1,2): Window T-profile
-- (2,2): Bottom Plate T-profile
-"""
-end
 
 # ╔═╡ 8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╠═╡ show_logs = false
@@ -281,13 +288,6 @@ let
 		scalarplot!(vis[2,2],bgridp, bsolp.-273.15,show=true)
 	end
 end
-
-# ╔═╡ c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
-md"""
-### Molar fractions
-1) CO
-2) CO2
-"""
 
 # ╔═╡ 111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╠═╡ show_logs = false

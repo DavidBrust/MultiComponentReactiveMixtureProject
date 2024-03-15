@@ -164,16 +164,16 @@ function D_A_matrices!(D, A, T, p, data)
 	ind = 1
 	@inbounds for i=1:(ng-1) # i: row index
 		for j=(i+1):ng # j: col index
-            if !constant_properties
-			    Dij = binary_diff_coeff_gas(data.Fluids[i], data.Fluids[j], T, p)
-			    # Dij *= m[i]*m[j]*γ_τ # eff. diffusivity
-				Aij = constant_newman_soret_diff_coeffs[ind] # in absence of calculation methods use constant values
-            else
+            # if !constant_properties
+			# Dij = binary_diff_coeff_gas(data.Fluids[i], data.Fluids[j], T, p)
+			# # Dij *= m[i]*m[j]*γ_τ # eff. diffusivity
+			# Aij = constant_newman_soret_diff_coeffs[ind] # in absence of calculation methods use constant values
+            # else
                 # Dij = 2.0e-5*m[i]*m[j]
 				Dij = constant_binary_diff_coeffs[ind]
 				# Dij *= m[i]*m[j]
 				Aij = constant_newman_soret_diff_coeffs[ind]
-            end
+            # end
 			# Dij *= m[i]*m[j]*γ_τ # eff. diffusivity
 			Dij *= γ_τ # eff. diffusivity
 			D[i,j] = Dij
@@ -254,7 +254,7 @@ function DMS_flux(f,u,edge,data)
 	W = MVector{ng,eltype(u)}(undef)
 	M = MMatrix{ng-1,ng-1,eltype(u)}(undef)
 	D = MMatrix{ng,ng,eltype(u)}(undef)
-	# Thermo-Diffusion: Soret and Dufour effects
+	# allocate storage for Thermo-Diffusion parameters
 	A = MMatrix{ng,ng,eltype(u)}(undef)
 	TDR = MVector{ng,eltype(u)}(undef)
 
@@ -268,10 +268,12 @@ function DMS_flux(f,u,edge,data)
 	@inline mmix = molarweight_mix(X,data)
 	@inline MassFrac!(X,W,data)
 	
-	
-	# @inline D_matrix!(D, Tm, pm, data)
-	@inline D_A_matrices!(D, A, Tm, pm, data)
-	@inline ThermalDiffRatio!(TDR, X, A, D, data)
+	if include_Soret_Dufour
+		@inline D_A_matrices!(D, A, Tm, pm, data)
+		@inline ThermalDiffRatio!(TDR, X, A, D, data)	
+	else
+		@inline D_matrix!(D, Tm, pm, data)	
+	end
 	@inline mumix, lambdamix = dynvisc_thermcond_mix(data, Tm, X)
 		
 	rho = c*mmix
@@ -282,11 +284,15 @@ function DMS_flux(f,u,edge,data)
 	@inline M_matrix!(M, W, D, data)
 	
 	@inbounds for i=1:(ng-1)
+		F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm )*c/mmix
 		if include_Soret_Dufour
-			F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm + X[i]*TDR[i]*(u[iT,1]-u[iT,2])/Tm )*c/mmix
-		else
-			F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm )*c/mmix
-		end		
+			F[i] += (X[i]*TDR[i]*(u[iT,1]-u[iT,2])/Tm )*c/mmix # Soret effect
+		end
+		# if include_Soret_Dufour
+		# 	F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm + X[i]*TDR[i]*(u[iT,1]-u[iT,2])/Tm )*c/mmix
+		# else
+		# 	F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm )*c/mmix
+		# end		
 	end				
 
 	@inline inplace_linsolve!(M,F)
@@ -301,6 +307,10 @@ function DMS_flux(f,u,edge,data)
 			# enthalpy_flux += f[i] * enthalpy_gas(Fluids[i], Tm) / m[i]
 			# enthalpy_flux += f[i] * heatcap_gas(Fluids[i], Tm) / m[i] * (Tm - Tref)
 			enthalpy_flux += f[i] * enthalpy_gas_thermal(Fluids[i], Tm) / m[i]
+			if include_Soret_Dufour
+				enthalpy_flux += (-F[i])*ph"R"*Tm*TDR[i]/m[i] # Dufour effect
+			end
+
 			# !!! DEBUG !!!
 		end
 	end	
@@ -310,6 +320,10 @@ function DMS_flux(f,u,edge,data)
 		# enthalpy_flux += (f[ip] - mass_flux) * enthalpy_gas(Fluids[ng], Tm) / m[ng]# species n
 		# enthalpy_flux += (f[ip] - mass_flux) * heatcap_gas(Fluids[ng], Tm) / m[ng] * (Tm - Tref)# species n
 		enthalpy_flux += (f[ip] - mass_flux) * enthalpy_gas_thermal(Fluids[ng], Tm) / m[ng] # species n
+
+		if include_Soret_Dufour
+			enthalpy_flux += (f[ip] - mass_flux) *ph"R"*Tm*TDR[ng]/m[ng] # Dufour effect species n
+		end
 		# !!! DEBUG !!!
         lambda_bed=kbed(data,lambdamix)*lambdamix
         # @inline hf_conv = f[ip] * enthalpy_mix(data, Tm, X) / mmix * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth) 
@@ -317,10 +331,11 @@ function DMS_flux(f,u,edge,data)
         # f[iT] = lambda_bed*(Bm*u[iT,1]-Bp*u[iT,2])
 
 		# !!! DEBUG !!!
-		f[iT] = lambda_bed*(u[iT,1]-u[iT,2]) + enthalpy_flux * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth)
+		# f[iT] = lambda_bed*(u[iT,1]-u[iT,2]) + enthalpy_flux * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth)
 		# f[iT] = lambda_bed*(u[iT,1]-u[iT,2]) + enthalpy_flux
-		# f[iT] = lambda_bed*(u[iT,1]-u[iT,2])
-		# f[iT] = u[iT,1]-u[iT,2] + enthalpy_flux * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth)
+		f[iT] = lambda_bed*(u[iT,1]-u[iT,2]) + enthalpy_flux * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth)
+		# f[iT] = lambdamix*(u[iT,1]-u[iT,2]) + enthalpy_flux
+		# f[iT] = lambdamix*(u[iT,1]-u[iT,2])
 		# f[iT] = u[iT,1]-u[iT,2]
 		# !!! DEBUG !!!
     end
@@ -370,27 +385,35 @@ Storage function definition for use with VoronoiFVM.jl for the Darcy-Maxwell-Ste
     (DMS) model for Multi-component gas transport in porous media.
 """
 function DMS_storage(f,u,node,data)
-	(;ip,iT,Tamb,m,poros,rhos,cs,solve_T_equation)=data
+	(;ip,iT,Tamb,m,poros,rhos,cs,solve_T_equation,Fluids)=data
 	ng=ngas(data)
 
     T = solve_T_equation ? u[iT] : one(eltype(u))*Tamb
     c = u[ip]/(ph"R"*T)
     mmix = zero(eltype(u))
+	enthalpy_gas = zero(eltype(u))
 	for i=1:ng
 		f[i]=c*u[i]*m[i]*poros
         mmix += u[i]*m[i]
+		if solve_T_equation
+			enthalpy_gas += c*u[i]*enthalpy_gas_thermal(Fluids[i], T)
+		end
 	end
 	
 	# total pressure
 	f[ip] = mmix*c*poros
 
     if solve_T_equation
-        X=MVector{ng,eltype(u)}(undef)
-        @inline MoleFrac!(X,u,data)
-        @inline cpmix = heatcap_mix(data, T, X)
+        # X=MVector{ng,eltype(u)}(undef)
+        # @inline MoleFrac!(X,u,data)
+        # @inline cpmix = heatcap_mix(data, T, X)
 		# !!! DEBUG !!!
 		# f[iT] = u[iT]
-		f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros)
+		# f[iT] = enthalpy_gas
+		f[iT] = u[iT] * rhos*cs*(1-poros) + poros * enthalpy_gas
+		
+		# f[iT] = u[iT] * cpmix*c
+		# f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros)
 		# f[iT] = (u[iT]-Tref) * (rhos*cs*(1-poros) + cpmix*c*poros)
 		# !!! DEBUG !!!
     end
