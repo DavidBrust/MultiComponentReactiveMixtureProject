@@ -21,7 +21,7 @@ begin
 	using PlutoUI
 	using LessUnitful
 	using VoronoiFVM
-	using ExtendableGrids, GridVisualize, PlutoVista
+	using ExtendableGrids, GridVisualize, PlutoVista, ColorSchemes
 	using StaticArrays, LinearAlgebra
 	using Revise
 	using Printf
@@ -212,6 +212,7 @@ function setup_run_sim(grid, data)
 	control = SolverControl(nothing, sys;)
 	control.handle_exceptions=true
 	control.Δu_opt=100
+	#control.Δt_max=100
 	
 	times=[0,200]
 	sol=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="aen",log=true)
@@ -236,20 +237,14 @@ md"""
 | [1] | This work |
 |:----------:|:----------:|
 | $(LocalResource("img/vanbrunt_result_xHe_2.png", :width=> 250)) | __He__ molar fraction |
-| $(LocalResource("img/vanbrunt_result_xHe.png", :width=> 250)) 	| $((; gni) = data; scalarplot(grid, sol[gni[:He],:], resolution=(300,200), zoom=2.5) ) |
+| $(LocalResource("img/vanbrunt_result_xHe.png", :width=> 250)) 	| $((; gni) = data; scalarplot(grid, sol[gni[:He],:], resolution=(300,200), colormap=:coolwarm, zoom=2.5) ) |
 | $(LocalResource("img/vanbrunt_result_xKr_2.png", :width=> 250))     | __Kr__ molar fraction |
-| $(LocalResource("img/vanbrunt_result_xKr.png", :width=> 250))  	| $((;gni) = data; scalarplot(grid, sol[gni[:Kr],:], resolution=(300,200), zoom=2.5) ) |
+| $(LocalResource("img/vanbrunt_result_xKr.png", :width=> 250))  	| $((;gni) = data; scalarplot(grid, sol[gni[:Kr],:], resolution=(300,200), colormap=:coolwarm, zoom=2.5) ) |
 | $(LocalResource("img/vanbrunt_result_T_2.png", :width=> 250))  	| __Temperature (K)__ |
-| $(LocalResource("img/vanbrunt_result_T.png", :width=> 250))  	| $((;iT) = data; scalarplot(grid, sol[iT,:], resolution=(300,200), zoom=2.5) ) |
+| $(LocalResource("img/vanbrunt_result_T.png", :width=> 250))  	| $((;iT) = data; scalarplot(grid, sol[iT,:], resolution=(300,200), colormap=:gist_heat, zoom=2.5) ) |
 | | __Pressure (Pa)__ |
 | | $((;ip) = data; scalarplot(grid, sol[ip,:], resolution=(300,200), zoom=2.5) ) |
 """
-
-# ╔═╡ 828e433b-0b53-4bf9-bd17-0b57cda27ec5
-let
-	(;ip) = data
-	maximum(sol[ip,:]) / minimum(sol[ip,:])
-end
 
 # ╔═╡ 5a517383-c597-4fa5-b7dc-441e1952cb97
 plothistory(solt)
@@ -260,7 +255,7 @@ function run_ss(solt,sys)
 	
 	sol_steadystate = VoronoiFVM.solve(
 		sys;
-		time = 400.0,
+		time = 200.0,
 		inival=solt(solt.t[end]),
 		control,
 		verbose="na"
@@ -336,7 +331,6 @@ md"""
 # ╠═e7ca4902-0e14-48ca-bcc6-96b06c85a39d
 # ╠═7f1d9cf8-7785-48c1-853c-74680188121f
 # ╟─07e97ba1-357a-4de8-ad5a-64e7a27b0cb8
-# ╟─828e433b-0b53-4bf9-bd17-0b57cda27ec5
 # ╟─cf1d3089-a0d2-445d-b004-571776f1c9a0
 # ╠═ad68e43e-df7e-4a06-a697-fa5824f54d3e
 # ╠═5a517383-c597-4fa5-b7dc-441e1952cb97

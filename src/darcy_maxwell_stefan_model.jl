@@ -300,7 +300,10 @@ function DMS_flux(f,u,edge,data)
 	enthalpy_flux = zero(eltype(u))
 	mass_flux = zero(eltype(u))
 	@inbounds for i=1:(ng-1)
+
+		# convective -diffusive species mass flux
 		f[i] = -(F[i] + c*X[i]*m[i]*v)
+
 		if solve_T_equation
 			mass_flux += f[i]
 			# !!! DEBUG !!!
@@ -334,8 +337,7 @@ function DMS_flux(f,u,edge,data)
 		# f[iT] = lambda_bed*(u[iT,1]-u[iT,2]) + enthalpy_flux * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth)
 		# f[iT] = lambda_bed*(u[iT,1]-u[iT,2]) + enthalpy_flux
 		f[iT] = lambda_bed*(u[iT,1]-u[iT,2]) + enthalpy_flux * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth)
-		# f[iT] = lambdamix*(u[iT,1]-u[iT,2]) + enthalpy_flux
-		# f[iT] = lambdamix*(u[iT,1]-u[iT,2])
+		
 		# f[iT] = u[iT,1]-u[iT,2]
 		# !!! DEBUG !!!
     end
