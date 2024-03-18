@@ -284,15 +284,11 @@ function DMS_flux(f,u,edge,data)
 	@inline M_matrix!(M, W, D, data)
 	
 	@inbounds for i=1:(ng-1)
+
 		F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm )*c/mmix
 		if include_Soret_Dufour
 			F[i] += (X[i]*TDR[i]*(u[iT,1]-u[iT,2])/Tm )*c/mmix # Soret effect
-		end
-		# if include_Soret_Dufour
-		# 	F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm + X[i]*TDR[i]*(u[iT,1]-u[iT,2])/Tm )*c/mmix
-		# else
-		# 	F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm )*c/mmix
-		# end		
+		end	
 	end				
 
 	@inline inplace_linsolve!(M,F)
@@ -305,41 +301,30 @@ function DMS_flux(f,u,edge,data)
 		f[i] = -(F[i] + c*X[i]*m[i]*v)
 
 		if solve_T_equation
+
 			mass_flux += f[i]
-			# !!! DEBUG !!!
-			# enthalpy_flux += f[i] * enthalpy_gas(Fluids[i], Tm) / m[i]
-			# enthalpy_flux += f[i] * heatcap_gas(Fluids[i], Tm) / m[i] * (Tm - Tref)
+
 			enthalpy_flux += f[i] * enthalpy_gas_thermal(Fluids[i], Tm) / m[i]
+
 			if include_Soret_Dufour
 				enthalpy_flux += (-F[i])*ph"R"*Tm*TDR[i]/m[i] # Dufour effect
 			end
 
-			# !!! DEBUG !!!
+			
 		end
 	end	
 	
     if solve_T_equation
-		# !!! DEBUG !!!
-		# enthalpy_flux += (f[ip] - mass_flux) * enthalpy_gas(Fluids[ng], Tm) / m[ng]# species n
-		# enthalpy_flux += (f[ip] - mass_flux) * heatcap_gas(Fluids[ng], Tm) / m[ng] * (Tm - Tref)# species n
+
 		enthalpy_flux += (f[ip] - mass_flux) * enthalpy_gas_thermal(Fluids[ng], Tm) / m[ng] # species n
 
 		if include_Soret_Dufour
 			enthalpy_flux += (f[ip] - mass_flux) *ph"R"*Tm*TDR[ng]/m[ng] # Dufour effect species n
 		end
-		# !!! DEBUG !!!
-        lambda_bed=kbed(data,lambdamix)*lambdamix
-        # @inline hf_conv = f[ip] * enthalpy_mix(data, Tm, X) / mmix * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth) 
-        # Bp,Bm = fbernoulli_pm(hf_conv/lambda_bed/Tm)
-        # f[iT] = lambda_bed*(Bm*u[iT,1]-Bp*u[iT,2])
 
-		# !!! DEBUG !!!
-		# f[iT] = lambda_bed*(u[iT,1]-u[iT,2]) + enthalpy_flux * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth)
-		# f[iT] = lambda_bed*(u[iT,1]-u[iT,2]) + enthalpy_flux
+        lambda_bed=kbed(data,lambdamix)*lambdamix
+
 		f[iT] = lambda_bed*(u[iT,1]-u[iT,2]) + enthalpy_flux * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth)
-		
-		# f[iT] = u[iT,1]-u[iT,2]
-		# !!! DEBUG !!!
     end
 end
 
@@ -402,22 +387,14 @@ function DMS_storage(f,u,node,data)
 		end
 	end
 	
-	# total pressure
+	# total density / total pressure
 	f[ip] = mmix*c*poros
 
-    if solve_T_equation
-        # X=MVector{ng,eltype(u)}(undef)
-        # @inline MoleFrac!(X,u,data)
-        # @inline cpmix = heatcap_mix(data, T, X)
-		# !!! DEBUG !!!
-		# f[iT] = u[iT]
-		# f[iT] = enthalpy_gas
-		f[iT] = u[iT] * rhos*cs*(1-poros) + poros * enthalpy_gas
-		
-		# f[iT] = u[iT] * cpmix*c
-		# f[iT] = u[iT] * (rhos*cs*(1-poros) + cpmix*c*poros)
-		# f[iT] = (u[iT]-Tref) * (rhos*cs*(1-poros) + cpmix*c*poros)
-		# !!! DEBUG !!!
+    if solve_T_equation       
+
+		# f[iT] = u[iT] * rhos*cs*(1-poros) + poros * enthalpy_gas
+		f[iT] = (u[iT]-298.15) * rhos*cs*(1-poros) + poros * enthalpy_gas
+
     end
 	
 end
@@ -449,20 +426,15 @@ function DMS_boutflow(f,u,edge,data)
 	end
 
     if solve_T_equation
-        # @inline r_hf_enth = v *cout * enthalpy_mix(data, Tout, X) * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth) # enthalpy heat flux
-		# !!! DEBUG !!!
 		
 		hout = zero(eltype(u))
         @inbounds for i=1:ng
             hout += X[i] * enthalpy_gas_thermal(Fluids[i], Tout)
         end
 
-		#@inline hout = heatcap_mix(data, Tout, X) * (Tout - Tref)
 		r_hf_enth = v * cout * hout
         # f[iT] = r_hf_enth
 		f[iT] = r_hf_enth * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth)
-		# f[iT] = zero(eltype(u))
-		# !!! DEBUG !!!
     end
 end
 

@@ -40,14 +40,14 @@ $(LocalResource("img/vanbrunt_domain.png", :width=> 400))
 
 # ╔═╡ 6939978d-9590-407b-80dc-54721c3f672d
 md"""
-Select problem dimension: $(@bind dim Select([1, 2], default=1))
+Select problem dimension: $(@bind dim Select([1, 2], default=2))
 """
 
 # ╔═╡ ff501186-d8a0-4666-8991-fe576f8ff6ad
-function grid_2D()
+function grid_2D(;nref=0)
     #X = collect(0:0.5:18)*ufac"cm"
-	X = collect(0:1:18)*ufac"cm"
-    Y = collect(0:0.5:8)*ufac"cm"
+	X = collect(0:(1/2^nref):18)*ufac"cm"
+    Y = collect(0:(0.5/2^nref):8)*ufac"cm"
     grid = simplexgrid(X, Y)
     
 	rect!(grid, [4, 0]*ufac"cm", [14, 2.5]*ufac"cm"; region = 2)
@@ -144,13 +144,19 @@ HeArKr = KinData{}(;
 	rnames = [],
 )
 
+# ╔═╡ e9cb07eb-cfbb-4802-bc7f-6de7a6ad8ac6
+md"""
+# Specify Sim Data
+"""
+
 # ╔═╡ 7f1d9cf8-7785-48c1-853c-74680188121f
 data = ReactorData(
 	dim = dim,
-	#dim = 1,
+
+	#dt_hf_enth = (0, 200),
 	kinpar = HeArKr,
 	X0 = [1,1,1] / 3,
-	Tamb = 300,
+	Tamb = 300.0,
 	p = 1*ufac"bar",
 	
 	solve_T_equation = true,
@@ -158,36 +164,46 @@ data = ReactorData(
 	#constant_properties = true,
 	include_Soret_Dufour = true,
 	
-	#rhos=1.0*ufac"kg/m^3", # low value for solid density -> low thermal inertia
-
 	γ_τ = 1.0,
 	poros=1.0,
+
 	perm = 1.23e-10*ufac"m^2" * 1.0e6,
 	# 1) He, 2) Ar, 3) Kr
 	# D12:= He-Ar, D13:= He-Kr, D23:= Ar-Kr
 	constant_binary_diff_coeffs = [0.756, 0.6553, 0.1395] * ufac"cm^2/s",
 	constant_newman_soret_diff_coeffs = [-0.291, -0.2906, 0.004] * ufac"cm^2/s",
 	
-	#outlet_boundaries=[Γ_left],
-	#inlet_boundaries=[Γ_right]
-	
-	
+	outlet_boundaries=[Γ_left],
+	inlet_boundaries=[Γ_right]	
 )
+
+# ╔═╡ 7b0a84b5-60d3-4dd9-89e9-29c88282cb25
+md"""
+# Transient Solution
+"""
 
 # ╔═╡ 93970c02-91c6-499a-9318-f7f632604bb5
 function bcondition(f,u,bnode,data)
 	(;p,ip,iT,Tamb,inlet_boundaries,dt_hf_enth)=data
 
-	boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_left,value=300)
-	boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_right,value=ramp(bnode.time; du=(300,400), dt=(0,5) ) )
+	#boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_left,value=Tamb)
+	eps_=1/1e-4
+	boundary_robin!(f,u,bnode, species=iT,region=Γ_left,value=Tamb*eps_,factor=eps_)
 	
-	#heatflux_right = 10.0
-	#boundary_neumann!(f,u,bnode, species=iT,region=Γ_right,value=ramp(bnode.time; du=(0,heatflux_right), dt=dt_hf_enth ) )
+	#boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_right,value=ramp(bnode.time; du=(Tamb,Tamb+100), dt=(0,5) ) )
+
+	if dim==2
+		heatflux_right = 11.35*ufac"W/m^2"
+	elseif dim==1
+		heatflux_right = 25*ufac"W/m^2"
+	end
+	boundary_neumann!(f,u,bnode, species=iT, region=Γ_right, 
+		value=ramp(bnode.time; du=(0,heatflux_right), dt=dt_hf_enth) )
 end
 
 # ╔═╡ 1e51701d-a893-4056-8336-a3772b85abe4
 function setup_run_sim(grid, data)
-	(;ng, ip, iT, Tamb, p, X0) = data
+	(;ng, ip, iT, Tamb, p, X0, outlet_boundaries) = data
 	sys=VoronoiFVM.System(
 		grid;
 		data=data,
@@ -211,10 +227,18 @@ function setup_run_sim(grid, data)
 
 	control = SolverControl(nothing, sys;)
 	control.handle_exceptions=true
-	control.Δu_opt=100
-	#control.Δt_max=100
+	if dim == 2
+		control.Δu_opt=1000
+		control.Δt_max=100.0
+		times=[0,3000.0]
+	elseif dim == 1
+		control.Δu_opt=10
+		control.Δt_max=10.0		
+		times=[0,3000.0]
+	end
+		
+
 	
-	times=[0,200]
 	sol=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="aen",log=true)
 	return (sol,sys)
 end
@@ -250,17 +274,17 @@ md"""
 plothistory(solt)
 
 # ╔═╡ 56b18561-2d4e-42a8-a363-98c783d0f991
-function run_ss(solt,sys)
-	control = SolverControl(nothing, sys)
-	
+function run_ss(solt,sys)	
 	sol_steadystate = VoronoiFVM.solve(
 		sys;
-		time = 200.0,
+		time = solt.t[end],
 		inival=solt(solt.t[end]),
-		control,
 		verbose="na"
 	)
 end
+
+# ╔═╡ a31d1583-8b59-4f30-9fae-cc4c3ceea1cd
+sol
 
 # ╔═╡ 8c53810e-330f-4eef-9402-62d31fb5d753
 md"""
@@ -270,47 +294,24 @@ md"""
 # ╔═╡ 4296aa28-9f52-4d40-a968-ee583ffc7d3c
 sol_ss = run_ss(solt,sys)
 
-# ╔═╡ 206c143d-0af5-4e48-9fd9-f6e7a15e5083
+# ╔═╡ b0007963-cf73-49b5-92a7-5a2ef1bbd2f5
 md"""
-1) He
-1) Kr
-1) Temperature
-1) Pressure: 
+| [1] | This work |
+|:----------:|:----------:|
+| $(LocalResource("img/vanbrunt_result_xHe_2.png", :width=> 250)) | __He__ molar fraction |
+| $(LocalResource("img/vanbrunt_result_xHe.png", :width=> 250)) 	| $(scalarplot(grid, sol_ss[gni[:He],:], resolution=(300,200), colormap=:coolwarm, zoom=2.5) ) |
+| $(LocalResource("img/vanbrunt_result_xKr_2.png", :width=> 250))     | __Kr__ molar fraction |
+| $(LocalResource("img/vanbrunt_result_xKr.png", :width=> 250))  	| $( scalarplot(grid, sol_ss[gni[:Kr],:], resolution=(300,200), colormap=:coolwarm, zoom=2.5) ) |
+| $(LocalResource("img/vanbrunt_result_T_2.png", :width=> 250))  	| __Temperature (K)__ |
+| $(LocalResource("img/vanbrunt_result_T.png", :width=> 250))  	| $(scalarplot(grid, sol_ss[iT,:], resolution=(300,200), colormap=:gist_heat, zoom=2.5) ) |
+| | __Pressure (Pa)__ |
+| | $(scalarplot(grid, sol_ss[ip,:], resolution=(300,200), zoom=2.5) ) |
 """
-
-# ╔═╡ 1411d8ce-35c5-4fa2-b56e-6573b1d64c62
-let
-#$((;ip)=data;round(maximum(sol_ss[ip,:])/ufac"bar",digits=3)) bar
-end
-
-# ╔═╡ 25a57aa7-7b67-4733-b631-994af5118134
-let
-	(;iT, ip, gni, gn) = data
-	ng=ngas(data)
-	if dim==1
-		cs = [:black, :red, :blue]
-		vis=GridVisualizer(resolution=(600,400), layout=(3,1))
-		for i=1:ng
-			scalarplot!(vis[1,1], grid, sol_ss[i,:], clear=false, label=gn[i], color=cs[i])
-		end
-		
-		scalarplot!(vis[2,1], grid, sol_ss[iT,:], clear=false, label="Temperature / K")
-		scalarplot!(vis[3,1], grid, sol_ss[ip,:], clear=false, label="Pressure / Pa")
-	elseif dim==2
-		vis=GridVisualizer(resolution=(600,800), layout=(4,1), zoom=2.5,)
-		scalarplot!(vis[1,1], grid, sol_ss[gni[:He],:])
-		scalarplot!(vis[2,1], grid, sol_ss[gni[:Kr],:])
-		scalarplot!(vis[3,1], grid, sol_ss[iT,:])
-		scalarplot!(vis[4,1], grid, sol_ss[ip,:])
-		
-	end
-	reveal(vis)
-end
 
 # ╔═╡ 65dbb492-4795-44ca-afcb-fb2a2c925d92
 md"""
 # References
-1) Van_Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599                .
+1) Van_Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599                     .
 1) Giovangigli, Vincent (2016): Solutions for Models of Chemically Reacting Mixtures. In: Yoshikazu Giga und Antonin Novotny (Hg.): Handbook of Mathematical Analysis in Mechanics of Viscous Fluids. Cham: Springer International Publishing, S. 1–52.
 """
 
@@ -329,18 +330,19 @@ md"""
 # ╟─3f9eea9d-7c2f-4d83-981a-a243fdf0531a
 # ╟─94dd7674-751f-4128-b5eb-303fb9693c22
 # ╠═e7ca4902-0e14-48ca-bcc6-96b06c85a39d
+# ╟─e9cb07eb-cfbb-4802-bc7f-6de7a6ad8ac6
 # ╠═7f1d9cf8-7785-48c1-853c-74680188121f
 # ╟─07e97ba1-357a-4de8-ad5a-64e7a27b0cb8
 # ╟─cf1d3089-a0d2-445d-b004-571776f1c9a0
 # ╠═ad68e43e-df7e-4a06-a697-fa5824f54d3e
 # ╠═5a517383-c597-4fa5-b7dc-441e1952cb97
+# ╟─7b0a84b5-60d3-4dd9-89e9-29c88282cb25
 # ╠═035d4123-7092-4429-8cfd-1e5926e84493
 # ╠═93970c02-91c6-499a-9318-f7f632604bb5
 # ╠═1e51701d-a893-4056-8336-a3772b85abe4
 # ╠═56b18561-2d4e-42a8-a363-98c783d0f991
+# ╠═a31d1583-8b59-4f30-9fae-cc4c3ceea1cd
 # ╟─8c53810e-330f-4eef-9402-62d31fb5d753
 # ╟─4296aa28-9f52-4d40-a968-ee583ffc7d3c
-# ╟─206c143d-0af5-4e48-9fd9-f6e7a15e5083
-# ╠═1411d8ce-35c5-4fa2-b56e-6573b1d64c62
-# ╟─25a57aa7-7b67-4733-b631-994af5118134
+# ╟─b0007963-cf73-49b5-92a7-5a2ef1bbd2f5
 # ╟─65dbb492-4795-44ca-afcb-fb2a2c925d92
