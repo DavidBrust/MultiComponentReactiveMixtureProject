@@ -1,5 +1,6 @@
 using Test
 using MultiComponentReactiveMixtureProject
+using Pluto
 using ExampleJuggler
 
 ExampleJuggler.verbose!(true)
