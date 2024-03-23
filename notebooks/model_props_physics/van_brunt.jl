@@ -178,9 +178,6 @@ data = ReactorData(
 	inlet_boundaries=[Γ_right]	
 )
 
-# ╔═╡ 049e37bf-5956-454b-a513-913c4563c0af
-"$( @sprintf "%04i" 1)"
-
 # ╔═╡ 7b0a84b5-60d3-4dd9-89e9-29c88282cb25
 md"""
 # Transient Solution
@@ -329,7 +326,7 @@ md"""
 # ╔═╡ 65dbb492-4795-44ca-afcb-fb2a2c925d92
 md"""
 # References
-1) Van_Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599                      .
+1) Van_Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599                       .
 1) Giovangigli, Vincent (2016): Solutions for Models of Chemically Reacting Mixtures. In: Yoshikazu Giga und Antonin Novotny (Hg.): Handbook of Mathematical Analysis in Mechanics of Viscous Fluids. Cham: Springer International Publishing, S. 1–52.
 """
 
@@ -410,7 +407,6 @@ plotting_movie(filename="Soret_demo_transient.mp4")
 # ╠═7f1d9cf8-7785-48c1-853c-74680188121f
 # ╟─07e97ba1-357a-4de8-ad5a-64e7a27b0cb8
 # ╠═9ba456c7-f6ed-49c5-9878-d9e0deb96384
-# ╠═049e37bf-5956-454b-a513-913c4563c0af
 # ╠═8b30f68c-9111-4803-b3dc-16e4c440865b
 # ╠═cf1d3089-a0d2-445d-b004-571776f1c9a0
 # ╠═ad68e43e-df7e-4a06-a697-fa5824f54d3e
