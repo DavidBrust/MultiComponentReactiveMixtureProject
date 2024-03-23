@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.38
+# v0.19.40
 
 using Markdown
 using InteractiveUtils
@@ -21,12 +21,13 @@ begin
 	using PlutoUI
 	using LessUnitful
 	using VoronoiFVM
-	using ExtendableGrids, GridVisualize, PlutoVista, ColorSchemes
+	using ExtendableGrids, GridVisualize, PlutoVista, ColorSchemes, CairoMakie
 	using StaticArrays, LinearAlgebra
 	using Revise
 	using Printf
 	using MultiComponentReactiveMixtureProject
-	GridVisualize.default_plotter!(PlutoVista)
+	#GridVisualize.default_plotter!(PlutoVista)
+	GridVisualize.default_plotter!(CairoMakie)	
 end;
 
 # ╔═╡ 0f102f06-3ff3-4bcc-8892-8d9190a87849
@@ -177,6 +178,9 @@ data = ReactorData(
 	inlet_boundaries=[Γ_right]	
 )
 
+# ╔═╡ 049e37bf-5956-454b-a513-913c4563c0af
+"$( @sprintf "%04i" 1)"
+
 # ╔═╡ 7b0a84b5-60d3-4dd9-89e9-29c88282cb25
 md"""
 # Transient Solution
@@ -229,7 +233,7 @@ function setup_run_sim(grid, data)
 	control.handle_exceptions=true
 	if dim == 2
 		control.Δu_opt=1000
-		control.Δt_max=100.0
+		control.Δt_max=20.0
 		times=[0,3000.0]
 	elseif dim == 1
 		control.Δu_opt=10
@@ -248,7 +252,7 @@ solt, sys = setup_run_sim(grid, data);
 
 # ╔═╡ cf1d3089-a0d2-445d-b004-571776f1c9a0
 if isa(solt, TransientSolution)
-	@bind t Slider(solt.t,show_value=true,default=solt.t[end])	
+	@bind t PlutoUI.Slider(solt.t,show_value=true,default=solt.t[end])	
 end
 
 # ╔═╡ ad68e43e-df7e-4a06-a697-fa5824f54d3e
@@ -266,12 +270,26 @@ md"""
 | $(LocalResource("img/vanbrunt_result_xKr.png", :width=> 250))  	| $((;gni) = data; scalarplot(grid, sol[gni[:Kr],:], resolution=(300,200), colormap=:coolwarm, zoom=2.5) ) |
 | $(LocalResource("img/vanbrunt_result_T_2.png", :width=> 250))  	| __Temperature (K)__ |
 | $(LocalResource("img/vanbrunt_result_T.png", :width=> 250))  	| $((;iT) = data; scalarplot(grid, sol[iT,:], resolution=(300,200), colormap=:gist_heat, zoom=2.5) ) |
-| | __Pressure (Pa)__ |
-| | $((;ip) = data; scalarplot(grid, sol[ip,:], resolution=(300,200), zoom=2.5) ) |
 """
 
+# ╔═╡ 9ba456c7-f6ed-49c5-9878-d9e0deb96384
+let
+	(; gni,iT,ip) = data;
+	
+	vis =GridVisualizer(layout=(2,2), resolution=(1000,600))
+	scalarplot!(vis[1,1], grid, sol[gni[:He],:], colormap=:coolwarm, title = "He molar fraction",)
+	scalarplot!(vis[1,2], grid, sol[gni[:Kr],:], colormap=:coolwarm, title = "Kr molar fraction",)
+	scalarplot!(vis[2,1], grid, sol[iT,:], colormap=:gist_heat, title = "Temperature (K)",)
+
+	#f = map((x, y) -> maximum(sol[ip,:]), grid)
+	pmax = round(maximum(sol[ip,:]))
+	f = map((x, y) -> pmax, grid)
+	scalarplot!(vis[2,2], grid, f, title = "Pressure (Pa)",)
+	reveal(vis)
+end
+
 # ╔═╡ 5a517383-c597-4fa5-b7dc-441e1952cb97
-plothistory(solt)
+plothistory(solt, Plotter=PlutoVista)
 
 # ╔═╡ 56b18561-2d4e-42a8-a363-98c783d0f991
 function run_ss(solt,sys)	
@@ -299,13 +317,13 @@ md"""
 | [1] | This work |
 |:----------:|:----------:|
 | $(LocalResource("img/vanbrunt_result_xHe_2.png", :width=> 250)) | __He__ molar fraction |
-| $(LocalResource("img/vanbrunt_result_xHe.png", :width=> 250)) 	| $(scalarplot(grid, sol_ss[gni[:He],:], resolution=(300,200), colormap=:coolwarm, zoom=2.5) ) |
+| $(LocalResource("img/vanbrunt_result_xHe.png", :width=> 250)) 	| $(scalarplot(grid, sol_ss[gni[:He],:], resolution=(400,300), colormap=:coolwarm, zoom=2.5) ) |
 | $(LocalResource("img/vanbrunt_result_xKr_2.png", :width=> 250))     | __Kr__ molar fraction |
-| $(LocalResource("img/vanbrunt_result_xKr.png", :width=> 250))  	| $( scalarplot(grid, sol_ss[gni[:Kr],:], resolution=(300,200), colormap=:coolwarm, zoom=2.5) ) |
+| $(LocalResource("img/vanbrunt_result_xKr.png", :width=> 250))  	| $( scalarplot(grid, sol_ss[gni[:Kr],:], resolution=(400,300), colormap=:coolwarm, zoom=2.5) ) |
 | $(LocalResource("img/vanbrunt_result_T_2.png", :width=> 250))  	| __Temperature (K)__ |
-| $(LocalResource("img/vanbrunt_result_T.png", :width=> 250))  	| $(scalarplot(grid, sol_ss[iT,:], resolution=(300,200), colormap=:gist_heat, zoom=2.5) ) |
+| $(LocalResource("img/vanbrunt_result_T.png", :width=> 250))  	| $(scalarplot(grid, sol_ss[iT,:], resolution=(400,300), colormap=:gist_heat, zoom=2.5) ) |
 | | __Pressure (Pa)__ |
-| | $(scalarplot(grid, sol_ss[ip,:], resolution=(300,200), zoom=2.5) ) |
+| | $((;ip) = data; scalarplot(grid, sol_ss[ip,:], resolution=(400,300), zoom=2.5) ) |
 """
 
 # ╔═╡ 65dbb492-4795-44ca-afcb-fb2a2c925d92
@@ -315,13 +333,71 @@ md"""
 1) Giovangigli, Vincent (2016): Solutions for Models of Chemically Reacting Mixtures. In: Yoshikazu Giga und Antonin Novotny (Hg.): Handbook of Mathematical Analysis in Mechanics of Viscous Fluids. Cham: Springer International Publishing, S. 1–52.
 """
 
+# ╔═╡ e8425c71-666a-462e-9c4d-fc480810f922
+md"""
+# Auxiliary functions
+"""
+
+# ╔═╡ 3c4ae416-a47b-451d-b870-fa10166d97de
+function plotting_movie(; filename = "plotting_video.gif", Plotter = default_plotter())
+    vis =GridVisualizer(layout=(2,2), resolution=(1000,600))
+
+	(; gni,iT,ip) = data;
+    movie(vis; file = filename) do vis
+        for t in solt.t
+            #f = map((x, y) -> sin(x - t) * cos(y - t), grid)
+            #g = map((x, y) -> sin(t) * sin(x) * cos(y), grid)
+            scalarplot!(vis[1, 1],
+                        grid,
+                        solt(t)[gni[:He],:];
+                        clear = true,
+                        title = "He molar fraction, t=$(Integer(round(t))) s",
+                        limits = (0.32,0.345),
+                        levels = 7,
+                        colormap = :coolwarm)
+            scalarplot!(vis[1, 2],
+                        grid,
+                        solt(t)[gni[:Kr],:];
+                        clear = true,
+                        title = "Kr molar fraction, t=$(Integer(round(t))) s",
+                        limits = (0.325,0.34),
+                        levels = 7,
+                        colormap = :coolwarm)
+			scalarplot!(vis[2, 1],
+                        grid,
+                        solt(t)[iT,:];
+                        clear = true,
+                        title = "Temperature (K), t=$(Integer(round(t))) s",
+                        limits = (300.0,400.0),
+                        levels = 7,
+                        colormap = :gist_heat)
+
+			t0, tend = solt.t[1], solt.t[end]
+			pmax = round(maximum(solt(t)[ip,:]))
+			f = map((x, y) -> pmax, grid)
+			scalarplot!(vis[2, 2],
+                        grid,
+                        f;
+                        clear = true,
+                        title = "Pressure (Pa), t=$(Integer(round(t))) s",
+                        limits = (solt(t0)[ip,1],solt(tend)[ip,1]),
+                        levels = 7,
+                        colormap = :viridis)
+            reveal(vis)
+        end
+    end
+end
+
+# ╔═╡ 8b30f68c-9111-4803-b3dc-16e4c440865b
+plotting_movie(filename="Soret_demo_transient.mp4")
+
 # ╔═╡ Cell order:
 # ╠═349e7220-dc69-11ee-13d2-8f95e6ee5c96
 # ╠═0f102f06-3ff3-4bcc-8892-8d9190a87849
 # ╟─f4286a46-ceb4-40b2-8ce5-7fcd231e3168
 # ╟─6939978d-9590-407b-80dc-54721c3f672d
 # ╠═138b4d12-af0f-4a1c-a4aa-4f55e6038664
-# ╟─b55537bf-9982-4997-8a2a-1972127bdd86
+# ╠═b55537bf-9982-4997-8a2a-1972127bdd86
 # ╠═ff501186-d8a0-4666-8991-fe576f8ff6ad
 # ╠═bfebc943-28ef-477b-bc15-6cab9d398d92
 # ╟─9fde21eb-1112-40ec-8fe2-0c8a12c9926d
@@ -333,7 +409,10 @@ md"""
 # ╟─e9cb07eb-cfbb-4802-bc7f-6de7a6ad8ac6
 # ╠═7f1d9cf8-7785-48c1-853c-74680188121f
 # ╟─07e97ba1-357a-4de8-ad5a-64e7a27b0cb8
-# ╟─cf1d3089-a0d2-445d-b004-571776f1c9a0
+# ╠═9ba456c7-f6ed-49c5-9878-d9e0deb96384
+# ╠═049e37bf-5956-454b-a513-913c4563c0af
+# ╠═8b30f68c-9111-4803-b3dc-16e4c440865b
+# ╠═cf1d3089-a0d2-445d-b004-571776f1c9a0
 # ╠═ad68e43e-df7e-4a06-a697-fa5824f54d3e
 # ╠═5a517383-c597-4fa5-b7dc-441e1952cb97
 # ╟─7b0a84b5-60d3-4dd9-89e9-29c88282cb25
@@ -346,3 +425,5 @@ md"""
 # ╟─4296aa28-9f52-4d40-a968-ee583ffc7d3c
 # ╟─b0007963-cf73-49b5-92a7-5a2ef1bbd2f5
 # ╟─65dbb492-4795-44ca-afcb-fb2a2c925d92
+# ╟─e8425c71-666a-462e-9c4d-fc480810f922
+# ╠═3c4ae416-a47b-451d-b870-fa10166d97de

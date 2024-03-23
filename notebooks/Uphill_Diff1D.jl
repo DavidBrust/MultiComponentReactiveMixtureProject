@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.38
+# v0.19.40
 
 using Markdown
 using InteractiveUtils
@@ -23,7 +23,7 @@ begin
 	using GridVisualize, ExtendableGrids
 
 	using LessUnitful	
-	using PlutoUI, PlutoVista, Plots
+	using PlutoUI, PlutoVista, Plots, CairoMakie, Printf
 	using MultiComponentReactiveMixtureProject
 	
 	GridVisualize.default_plotter!(PlutoVista)
@@ -52,7 +52,7 @@ function grid1D(nref=0)
 end
 
 # ╔═╡ a995f83c-6ff7-4b95-a798-ea636ccb1d88
-gridplot(grid1D(), resolution=(600,200))
+gridplot(grid1D(1), resolution=(600,200))
 
 # ╔═╡ 832f3c15-b75a-4afe-8cc5-75ff3b4704d6
 begin
@@ -84,7 +84,7 @@ Select flowrate: $(@bind flowrate Select([:high, :low], default=:high))
 """
 
 # ╔═╡ cc7e137e-8e7c-4d7e-ba70-517c3da0a42d
-nflowin = flowrate == :high ? 0.005 : 0.0001
+nflowin(flowrate) = flowrate == :high ? 0.005 : 0.0001
 
 # ╔═╡ a56afd30-76ad-404a-9510-5f2d1b5dcf5d
 data = ReactorData(
@@ -93,7 +93,7 @@ data = ReactorData(
 		irradiated_boundaries=[],
 		side_boundaries=[],
 		solve_T_equation=false,
-		nflowin=nflowin,
+		nflowin=nflowin(flowrate),
 		Treac = 273.15+650
 )
 
@@ -156,6 +156,80 @@ let
 	reveal(vis)
 end
 
+# ╔═╡ 70cb642a-e21f-45b7-ae84-ba2bcf0066b6
+function plotting_movie(
+						solt,
+						grid,
+						data,
+						flowrate;
+						filename = "plotting_video.gif",
+						Plotter = CairoMakie)
+	(;gn,ng) = data
+	vis =GridVisualizer(resolution=(600,300), Plotter=Plotter)
+
+	cols = distinguishable_colors(ng, [RGB(1,1,1), RGB(0,0,0)], dropseed=true)
+	pcols = map(col -> (red(col), green(col), blue(col)), cols)	
+
+	movie(vis; file = filename) do vis
+        for t in solt.t
+			for i=1:ng
+				clear = i==1 ? true : false
+				title = @sprintf "Molar fractions %s flowrate, t= %.2f s" flowrate t
+				scalarplot!(vis,
+					grid,
+					solt(t)[i,:],
+					clear=clear,
+					color=pcols[i],
+					label="$(gn[i])",
+					title = title,
+					legend=:rt,
+					xlabel="X coordinate (m)",
+					ylabel="Molar fractions",
+					limits = (0.0,0.6)
+				)	
+			end
+			
+			reveal(vis)
+        end
+    end
+end
+
+# ╔═╡ 4965daa3-7545-4255-80d2-bc686feebec1
+let
+	flowrate = :high
+	
+	data = ReactorData(
+		inlet_boundaries=[Γ_left],
+		outlet_boundaries=[Γ_right],
+		irradiated_boundaries=[],
+		side_boundaries=[],
+		solve_T_equation=false,
+		nflowin=nflowin(flowrate),
+		Treac = 273.15+650
+)
+	(;ip,p,ng,gn) = data
+	
+	grid = grid1D(2)
+	inival, sys = PTR_init_system(1, grid, data)
+	
+	control = SolverControl(nothing, sys;)
+		control.handle_exceptions=true
+		control.Δu_opt=100.0
+		control.Δt_max=0.01
+		control.Δt=0.01
+
+	times = [0,2]
+	tstep = 0.01
+	solt = solve(sys;inival=inival,times,tstep=tstep,control,verbose="a")
+	#solt = tsol(tsol.t[end])
+
+	filename = @sprintf "Uphill_diff_demo_%s.mp4" flowrate
+	plotting_movie(solt,grid,data,flowrate,filename=filename)
+end
+
+# ╔═╡ 06bfd278-22d9-4d8d-87c5-536864546738
+@printf "Molar fractions, t= %.2f s" 2.006 
+
 # ╔═╡ 05e5e167-7c1c-43f4-8a8d-e173f2fb7029
 md"""
 ## Grid Refinement
@@ -187,6 +261,9 @@ end
 # ╠═bb2ef3c0-96fc-4a90-a714-a0cfa08ac178
 # ╠═5da2971b-8d60-4ccf-b4e7-a3696b111e32
 # ╠═abedcbf9-c99c-4969-b97a-3bc0295061bb
+# ╠═4965daa3-7545-4255-80d2-bc686feebec1
+# ╠═70cb642a-e21f-45b7-ae84-ba2bcf0066b6
+# ╠═06bfd278-22d9-4d8d-87c5-536864546738
 # ╟─05e5e167-7c1c-43f4-8a8d-e173f2fb7029
 # ╠═c5190db5-ed3d-4084-ba16-496cc825fa9d
 # ╠═49033775-2358-4463-a5dd-cb5629f35142

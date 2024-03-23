@@ -1,3 +1,5 @@
+using LinearAlgebra
+
 # G0_bot, IR/vis : surface radiosities of glass underside
 function flux_window_underside(f,u,bnode,data)
     (;iT,irradiated_boundaries)=data
@@ -379,4 +381,122 @@ function WriteSolution3D(sol,grid,data;desc="")
 	if dim == 3
 		VoronoiFVM.writeVTK("$(path)/$(tm)_3D_irradiation_flux_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[ibf,:])
 	end
+end
+
+function WriteSolution3D(solt::TransientSolution,grid,data;desc="")
+    (;dim,ip,iT,ibf,gn,nflowin,solve_T_equation) = data
+    ng=ngas(data)
+    _t = now()
+    tm = "$(hour(_t))_$(minute(_t))_$(second(_t))"
+    desc = isempty(desc) ? desc : "_"*desc
+    path = "../data/out/$(Date(_t))/$(tm)$(desc)"
+    try
+        mkpath(path)
+    catch e
+        println("Directory " * path * " already exists.")
+    end
+
+    
+    for (i,t) in enumerate(solt.t)
+                
+        # pressure
+        VoronoiFVM.writeVTK("$(path)/3D_ptot_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr")_$(i).vtu", grid; point_data = solt(t)[ip,:])
+
+        # temperature
+        if solve_T_equation            
+            VoronoiFVM.writeVTK("$(path)/3D_T_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr")_$(i).vtu", grid; point_data = solt(t)[iT,:] .-273.15)
+        end
+
+        # species molar fractions
+        for j=1:ng
+            VoronoiFVM.writeVTK("$(path)/3D_x$(gn[j])_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr")_$(i).vtu", grid; point_data = solt(t)[j,:])           
+        end
+
+        # irradiation boundary flux
+        if dim == 3
+            VoronoiFVM.writeVTK("$(path)/3D_irradiation_flux_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr")_$(i).vtu", grid; point_data = solt(t)[ibf,:])
+        end
+
+    end
+    
+end
+
+function getIndices(grid)
+    d1 = 0.025*sqrt(2)/2
+    d2 = 0.05*sqrt(2)/2
+    
+    # coordinate origin in lower right corner
+    #               ^ x
+    #               |
+    #               |
+    #       <-------o
+    #       y
+
+    # uc
+    T_03 = [0.08,0.08,0.005] # y,x,z
+    T_04 = T_03 .+ [d2, -d2, 0]
+    T_05 = T_03 .+ [-d1, d1, 0]
+    T_06 = T_03 .+ [d1, -d1, 0]
+    T_07 = T_03 .+ [-d2, -d2, 0]
+    # lc
+    T_12 = [0.08,0.08,0.0] # y,x,z
+    T_13 = T_12 .+ [-d1, d1, 0]
+    T_14 = T_12 .+ [-d2, -d2, 0]	
+    
+    
+    function index(c, coords)
+        cols = eachcol(coords)
+        findmin(norm.([c - col for col in cols]))[2]
+    end
+
+    [index(c,grid[Coordinates]) for c in [T_03,T_04,T_05,T_06,T_07,T_12,T_13,T_14]]
+    # [index(c,grid[Coordinates]) for c in [T_03]] # only get center temperature
+end
+
+function probe_Temps(solt,grid,data)
+
+    sol = solt(solt.t[end])
+    (;iT,dim) = data
+
+    if dim == 2
+        return sol[iT,91] - 273.15
+    elseif dim == 3
+        # return sol[iT,3035] .- 273.15
+        return sol[iT,getIndices(grid)] .- 273.15
+    end
+    
+end
+
+function WriteTemperatures(solt,grid,data;desc="")
+
+    (;nom_flux, nflowin) = data
+    T_03,T_04,T_05,T_06,T_07,T_12,T_13,T_14 = probe_Temps(solt,grid,data)
+              
+    df = DataFrame()
+    df[!, :nom_flux] = [nom_flux/ufac"kW/m^2"]
+    df[!, :nflowin]  = [nflowin/ufac"mol/hr"]
+    df[!, :T_03] .= T_03
+    df[!, :T_04] .= T_04
+    df[!, :T_05] .= T_05
+    df[!, :T_06] .= T_06
+    df[!, :T_07] .= T_07
+    df[!, :T_03_Uc] .= 33.5 # average value of standard uncertainty in calculation of cat. surface T
+    
+    # df[!, :T_12] .= T_12
+    # df[!, :T_13] .= T_13
+    # df[!, :T_14] .= T_14
+
+    _t = now()
+    tm = "$(hour(_t))_$(minute(_t))_$(second(_t))"
+    desc = isempty(desc) ? desc : "_"*desc
+    path = "../data/out/$(Date(_t))/$(tm)$(desc)"
+    try
+        mkpath(path)
+    catch e
+        println("Directory " * path * " already exists.")
+    end
+
+    # CSV.write("data/out/2024-01-26/Tc_Uc.csv", df)
+    CSV.write("$(path)/Sim_T_probe_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").csv", df)
+    # "$(path)/Sim_T_probe_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").csv"
 end

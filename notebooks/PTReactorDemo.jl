@@ -155,6 +155,36 @@ plothistory(solt)
 MultiComponentReactiveMixtureProject.Print_summary_ext(solt,grid,sys,data)
   ╠═╡ =#
 
+# ╔═╡ b519541f-9ccd-4032-bc51-9a1abaecadba
+md"""
+### Peclet Number
+Describes the ratio of advective transport to diffusive transport. Can be formulated  for mass- and heat transfer, $\text{Pe}^{\text m}$ and $\text{Pe}^{\text h}$, respectively.
+
+```math
+	\text{Pe}^{\text m}= \frac{L \vec v}{D}
+```
+
+```math
+	\text{Pe}^{\text h}= \frac{L \vec v \rho c_p}{\lambda}
+```
+
+"""
+
+
+# ╔═╡ 57b8f297-7616-41f3-bef3-5237c6cfded6
+md"""
+### Knudsen Number
+```math
+\text{Kn} = \frac{\lambda}{l} = \frac{k_{\text B}T}{\sqrt 2 \pi \sigma^2pl}
+```
+where $\lambda$ is the mean free path length of the fluid, ideal gas in this case and $l$ is the pore diameter of the porous medium. Determine the mean free path length for ideal gas from kinetic gas theory and kinetic collision cross-sections (diameter).
+
+-  $\text{Kn} < 0.01$: Continuum flow
+-  $0.01 <\text{Kn} < 0.1$: Slip flow
+-  $0.1 < \text{Kn} < 10$: Transitional flow
+-  $\text{Kn} > 10$: Free molecular flow
+"""
+
 # ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╠═╡ skip_as_script = true
 #=╠═╡
@@ -377,6 +407,42 @@ let
 end
   ╠═╡ =#
 
+# ╔═╡ eaaf24b5-fabd-4363-8dbf-ebcc1e6416d1
+function RePrPeKn(T, p, data)
+
+	(;mfluxin, T_gas_in, mmix0, Fluids, X0, dp) = data
+	ng = ngas(data)
+
+	#T = T_gas_in
+    dens = p*mmix0/(ph"R"*T)
+	
+	#ρf = density_idealgas(Fluids, T, p, x)
+	dyn_visc, therm_cond = dynvisc_thermcond_mix(data, T, X0)
+
+	u0 = mfluxin/dens
+    heat_cap = heatcap_mix(Fluids, T, X0)
+	
+	Re = u0*dens*dp/dyn_visc # Reynolds number
+	Pr = heat_cap*dyn_visc/(therm_cond*mmix0) # Prandtl number
+
+	L = 5*ufac"mm" # length scale of reactor in main flow direction
+	Pe_h = L*u0*dens*heat_cap/(mmix0*therm_cond) # Peclet heat transport
+
+	D = zeros(Float64,ng,ng,)
+	D_matrix!(D, T, p, data)	
+	
+	Pe_m = L*u0/maximum(D)
+	
+	σs = Dict(:H2 => 289*ufac"pm", :CH4 => 380*ufac"pm", :H2O => 265*ufac"pm", :N2 => 364*ufac"pm", :CO => 376*ufac"pm", :CO2 => 330*ufac"pm")
+	Kn = ph"k_B"*T/(sqrt(2)*pi*σs[:H2O]^2*p*dp)
+
+	
+	Re, Pr, Pe_h, Pe_m, Kn	
+end
+
+# ╔═╡ 1196e9ed-024a-4469-95cf-a8622ecaf413
+Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
+
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─d3278ac7-db94-4119-8efd-4dd18107e248
@@ -393,6 +459,9 @@ end
 # ╠═1cc9d6c4-e2d6-4501-ae4d-d7568dee1e8f
 # ╠═994d4a87-3f27-4a51-b061-6111c3346d60
 # ╠═3207839f-48a9-49b6-9861-e5e74bc593a4
+# ╟─b519541f-9ccd-4032-bc51-9a1abaecadba
+# ╟─57b8f297-7616-41f3-bef3-5237c6cfded6
+# ╠═1196e9ed-024a-4469-95cf-a8622ecaf413
 # ╟─5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╠═dbb6346c-e08a-4ad0-a985-3052272cf6c7
 # ╠═380c74fb-66c4-43fb-a3f5-9c942b13fa0d
@@ -405,3 +474,4 @@ end
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╟─eb9dd385-c4be-42a2-8565-cf3cc9b2a078
 # ╟─de69f808-2618-4add-b092-522a1d7e0bb7
+# ╠═eaaf24b5-fabd-4363-8dbf-ebcc1e6416d1

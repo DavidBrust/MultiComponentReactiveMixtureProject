@@ -9,7 +9,7 @@ function run(;dim=3, times=[0,20.0], nref=0)
     data=ReactorData(
         dim=dim,
         nflowin = 7.4*ufac"mol/hr",
-		nom_flux = 100.0*ufac"kW/m^2",		
+		nom_flux = 70.0*ufac"kW/m^2",		
 		dt_hf_irrad = (2.0, 10.0),
 		dt_hf_enth = (2.0, 3.0),
 		T_gas_in = 273.15 + 25,
@@ -32,6 +32,7 @@ function run(;dim=3, times=[0,20.0], nref=0)
     end
     control.handle_exceptions=true
     control.Δu_opt = 100
+    control.Δt_max = 0.5
     solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="nae",log=true)
 
     return solt,grid,sys,data
