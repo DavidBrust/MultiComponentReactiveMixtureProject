@@ -24,7 +24,7 @@ begin
 	
 	using LessUnitful
 	using PlutoUI, PlutoVista, Plots
-	using Printf
+	using CSV, Tables, Dates, Printf
 	using StaticArrays
 	using MultiComponentReactiveMixtureProject
 	
@@ -82,6 +82,7 @@ function ThermalDemo(dim; nref=nref)
 
 	grid, inb, irrb, outb, sb, catr =  PTR_grid_boundaries_regions(dim, nref=nref)
 
+
 	data = ReactorData(
 		dim=dim,
 		nflowin = 7.4*ufac"mol/hr",
@@ -89,14 +90,15 @@ function ThermalDemo(dim; nref=nref)
 		dt_hf_irrad = (2.0, 10.0),
 		dt_hf_enth = (2.0, 3.0),
 		T_gas_in = 273.15 + 25,
-		#Nu = 0.0,
+		
 		X0 = [0,0.5,0,0,0.5,0.0], # H2 / CO2 = 1/1
 		inlet_boundaries=inb,
 		irradiated_boundaries=irrb,
 		outlet_boundaries=outb,
 		side_boundaries=sb,
 		catalyst_regions=catr,
-		#rhos=5.0*ufac"kg/m^3" # low value for solid density -> low thermal inertia
+
+		#include_dpdt=true
 	)
 	
 	inival,sys = PTR_init_system(dim, grid, data)
@@ -192,20 +194,40 @@ md"""
 
 # ╔═╡ 70cdb28c-4b23-4ea4-8cd4-5eb97a3b930a
 function run_ss(solt,sys)	
-	sol_steadystate = VoronoiFVM.solve(
+	VoronoiFVM.solve(
 		sys;
 		time = solt.t[end],
 		inival=solt(solt.t[end]),
-		#verbose="na"
 	)
 end
+
+# ╔═╡ e148f083-4d4e-4fe8-960d-bccd00689c9b
+sol_ss = run_ss(solt,sys);
+
+# ╔═╡ e6828f65-fc35-4e2e-aedd-324ccfe4a22c
+function write_sol(sol; desc="")
+	
+	_t = now()
+	tm = "$(hour(_t))_$(minute(_t))_$(second(_t))"
+	path = "../../data/out/$(Date(_t))/"
+	fn = tm*"_sol_$(desc).csv"
+	try
+        mkpath(path)
+    catch e
+        println("Directory " * path * " already exists.")
+    end
+	CSV.write(path*fn, Tables.table(sol), decimal=',', delim=";")
+end
+
+# ╔═╡ f99203e7-e53e-4109-b6ff-7fb87d290324
+write_sol(solt(3.0), desc="include_dpdt=$(data.include_dpdt)")
 
 # ╔═╡ dbb6346c-e08a-4ad0-a985-3052272cf6c7
 # 2D
 function Test2D(solt, grid, sys, data)
 	(;gni, m) = data
-	sol = run_ss(solt,sys)
-	inflow_rate, outflow_rate, reaction_rate, = BoundaryFlows_Integrals(sol, sys, data)
+	
+	inflow_rate, outflow_rate, reaction_rate, = BoundaryFlows_Integrals(sol_ss, sys, data)
 
 	return -reaction_rate[gni[:CO]] / m[gni[:CO]] / ufac"mol/hr"
 end
@@ -238,10 +260,30 @@ md"""
 2) CO2
 """
 
+# ╔═╡ eb9dd385-c4be-42a2-8565-cf3cc9b2a078
+md"""
+### Flow field
+1. Pressure
+2. Density
+3. Velocity X
+4. Velocity Y
+"""
+
+# ╔═╡ 107b390f-f9e6-4879-89a7-ec1373bafb52
+md"""
+### Source term in Enthalpy Eq
+Visualize distribution of magnitude of source term from $\partial p / \partial t$ [W/m³]:
+"""
+
+# ╔═╡ f41be4f2-a8f4-4ff7-a5ca-9b323d9865e8
+let
+	
+end
+
 # ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 @bind t Slider(solt.t,show_value=true,default=solt.t[end])
 
-# ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
+# ╔═╡ b42ce84e-9f97-488a-9311-24c809437623
 sol = solt(t);
 
 # ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
@@ -333,14 +375,12 @@ let
 end
   ╠═╡ =#
 
-# ╔═╡ eb9dd385-c4be-42a2-8565-cf3cc9b2a078
-md"""
-### Flow field
-1. Pressure
-2. Density
-3. Velocity X
-4. Velocity Y
-"""
+# ╔═╡ 5547b97e-5adf-48ec-9fb9-55d54c1503a4
+let
+	(;idpdt)=data
+	vis=GridVisualizer(resolution=(680,300))
+	scalarplot!(vis,grid, sol[idpdt,:], zoom = 1.5, aspect=4.0, show=true)
+end
 
 # ╔═╡ de69f808-2618-4add-b092-522a1d7e0bb7
 # ╠═╡ show_logs = false
@@ -462,7 +502,7 @@ Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 # ╠═415f6fa7-d5b5-40a2-806e-3d8a61541c2e
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
-# ╠═5588790a-73d4-435d-950f-515ae2de923c
+# ╠═b42ce84e-9f97-488a-9311-24c809437623
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═1cc9d6c4-e2d6-4501-ae4d-d7568dee1e8f
 # ╠═994d4a87-3f27-4a51-b061-6111c3346d60
@@ -470,16 +510,22 @@ Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 # ╟─5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╟─560ad300-42fc-4528-a3ec-95bcd66cdbce
 # ╠═70cdb28c-4b23-4ea4-8cd4-5eb97a3b930a
+# ╠═e148f083-4d4e-4fe8-960d-bccd00689c9b
+# ╠═e6828f65-fc35-4e2e-aedd-324ccfe4a22c
+# ╠═f99203e7-e53e-4109-b6ff-7fb87d290324
 # ╠═dbb6346c-e08a-4ad0-a985-3052272cf6c7
 # ╠═380c74fb-66c4-43fb-a3f5-9c942b13fa0d
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
-# ╟─99b59260-7651-45d0-b364-4f86db9927f8
+# ╠═99b59260-7651-45d0-b364-4f86db9927f8
 # ╟─58c0b05d-bb0e-4a3f-af05-71782040c8b9
 # ╟─8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
 # ╟─111b1b1f-51a5-4069-a365-a713c92b79f4
-# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╟─eb9dd385-c4be-42a2-8565-cf3cc9b2a078
+# ╟─107b390f-f9e6-4879-89a7-ec1373bafb52
+# ╠═5547b97e-5adf-48ec-9fb9-55d54c1503a4
+# ╠═f41be4f2-a8f4-4ff7-a5ca-9b323d9865e8
+# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╟─de69f808-2618-4add-b092-522a1d7e0bb7
 # ╟─bcaae53b-d58b-4e36-9b79-471b02acaea6
 # ╠═1196e9ed-024a-4469-95cf-a8622ecaf413

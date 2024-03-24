@@ -333,11 +333,12 @@ Reaction function definition for use with VoronoiFVM.jl for the Darcy-Maxwell-St
     (DMS) model for Multi-component gas transport in porous media.
 """
 function DMS_reaction(f,u,node,data)
-	(;m,ip,iT,is_reactive,catalyst_regions)=data
+	(;m,ip,iT,idpdt,is_reactive,solve_T_equation,include_dpdt,catalyst_regions)=data
 	ng=ngas(data)
 
+	f[iT] = zero(eltype(u))
 	if node.region in catalyst_regions && is_reactive # catalyst layer
-		(;lcat,kinpar,iT,Treac,solve_T_equation)=data
+		(;lcat,kinpar,Treac,)=data
 		(;nuij)=kinpar
 		
 		pi = MVector{ng,eltype(u)}(undef)
@@ -349,6 +350,7 @@ function DMS_reaction(f,u,node,data)
         RR = @inline -lcat*ri(data,T,pi)
         #RR = @inline -lcat*ri(data,u[iT],pi)
 		
+
 		for i=1:ng
 			f[i] = zero(eltype(u))
 			for j=1:nreac(kinpar)
@@ -361,6 +363,12 @@ function DMS_reaction(f,u,node,data)
 		end
 	end
 
+	if solve_T_equation && include_dpdt
+		f[idpdt] = -u[idpdt]
+		f[iT] += u[idpdt] # dpdt source term in enthalpy eq.		
+	end
+
+	f[ng] = zero(eltype(u))
 	for i=1:ng
 		f[ng] += u[i]
 	end
@@ -372,7 +380,7 @@ Storage function definition for use with VoronoiFVM.jl for the Darcy-Maxwell-Ste
     (DMS) model for Multi-component gas transport in porous media.
 """
 function DMS_storage(f,u,node,data)
-	(;ip,iT,Tamb,m,poros,rhos,cs,solve_T_equation,Fluids)=data
+	(;ip,iT,idpdt,Tamb,m,poros,rhos,cs,solve_T_equation,include_dpdt,Fluids)=data
 	ng=ngas(data)
 
     T = solve_T_equation ? u[iT] : one(eltype(u))*Tamb
@@ -395,7 +403,12 @@ function DMS_storage(f,u,node,data)
 		# f[iT] = u[iT] * rhos*cs*(1-poros) + poros * enthalpy_gas
 		f[iT] = (u[iT]-298.15) * rhos*cs*(1-poros) + poros * enthalpy_gas
 
+		if include_dpdt
+			f[idpdt] = u[ip]
+		end
+
     end
+
 	
 end
 

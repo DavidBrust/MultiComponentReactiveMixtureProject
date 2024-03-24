@@ -429,6 +429,7 @@ $(TYPEDFIELDS)
     solve_T_equation::Bool = true
     constant_properties::Bool = false
 	include_Soret_Dufour::Bool = false
+	include_dpdt::Bool = false
 
 	#ip::Int64 = NG+1
     ip::Int64 = ng+1
@@ -438,6 +439,8 @@ $(TYPEDFIELDS)
 	iTp::Int64=iTw+1 # index of plate Temperature (lower chamber)
 	
 	ibf::Int64=iTp+1 # index of boundary flux species, workaround to include spatially varying boundary flux
+
+	idpdt::Int64=ibf+1 # index of auxiliary variable holding dp/dt for use in enthalpy equation
 	
 	p::Float64 = 1.0*ufac"bar"
 	Tamb::Float64 = 298.15*ufac"K"
@@ -519,11 +522,11 @@ $(TYPEDFIELDS)
 
 	logreg::Float64=1.0e-20
 
-    function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,include_Soret_Dufour,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs,constant_species_viscosities,constant_species_thermal_conductivities,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,logreg)
+    function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,include_Soret_Dufour,include_dpdt,ip,iT,iTw,iTp,ibf,idpdt,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs,constant_species_viscosities,constant_species_thermal_conductivities,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,logreg)
         KP = MultiComponentReactiveMixtureProject.KinData{nreac(kinpar)}
 		# FluxIntp = flux_interpol(nom_flux)
 		# flux_inner, flux_outer = flux_inner_outer(nom_flux)
-        new{ng,KP}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,include_Soret_Dufour,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs,constant_species_viscosities,constant_species_thermal_conductivities,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,logreg)
+        new{ng,KP}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,include_Soret_Dufour,include_dpdt,ip,iT,iTw,iTp,ibf,idpdt,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs,constant_species_viscosities,constant_species_thermal_conductivities,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,logreg)
 
     end
 end
@@ -639,7 +642,12 @@ end
 
 function PTR_init_system(dim, grid, data::ReactorData)
 
-	(;p,ip,Tamb,iT,iTw,iTp,ibf,inlet_boundaries,irradiated_boundaries,outlet_boundaries,catalyst_regions,X0,solve_T_equation,nom_flux)=data
+	# handling of optional auxiliary variables: for dim == 2, ibf does not exist, reduce idptp by 1
+	if dim == 2
+		data.idpdt -= 1 
+	end
+
+	(;p,ip,Tamb,iT,iTw,iTp,ibf,idpdt,inlet_boundaries,irradiated_boundaries,outlet_boundaries,catalyst_regions,X0,solve_T_equation,include_dpdt,nom_flux) = data
 	ng=ngas(data)
 
 	sys=VoronoiFVM.System( 	grid;
@@ -659,13 +667,17 @@ function PTR_init_system(dim, grid, data::ReactorData)
 	if solve_T_equation
 		enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
 		enable_boundary_species!(sys, iTw, irradiated_boundaries) # window temperature as boundary species in upper chamber
+		enable_boundary_species!(sys, iTp, outlet_boundaries) # plate temperature as boundary species in lower chamber
 
 		# for 3 dimensional domain, apply measured irradiation flux density as boundary condition
 		if dim == 3
 			# boundary flux species, workaround to implement spatially varying irradiation
 			enable_boundary_species!(sys, ibf, irradiated_boundaries)
 		end
-		enable_boundary_species!(sys, iTp, outlet_boundaries) # plate temperature as boundary species in lower chamber
+		if include_dpdt
+			enable_species!(sys; species=idpdt) # auxiliary variable holding dpdt term
+		end
+		
 	else
 		enable_species!(sys; species=collect(1:(ng+1))) # gas phase species xi, ptotal
 	end
@@ -686,7 +698,7 @@ function PTR_init_system(dim, grid, data::ReactorData)
 				a[1]=b[1]
 				a[2]=b[2]
 			end
-			inival[ibf,:] .= 0.0
+			inival[ibf,:] .= zero(eltype(inival))
 			sub=ExtendableGrids.subgrid(grid,irradiated_boundaries,boundary=true, transform=d3tod2 )
 				
 			for inode in sub[CellNodes]
@@ -694,6 +706,9 @@ function PTR_init_system(dim, grid, data::ReactorData)
 				inodeip = sub[ExtendableGrids.NodeParents][inode]
 				inival[ibf,inodeip] = FluxIntp(c[1]-0.02, c[2]-0.02)
 			end
+		end
+		if include_dpdt
+			inival[idpdt,:] .= zero(eltype(inival))
 		end
 	end
 

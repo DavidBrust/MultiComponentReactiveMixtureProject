@@ -34,7 +34,7 @@ Mixture mass averaged velocity is calculated from Darcy equation. The void fract
 ```math
 \begin{align}
 	\frac{\partial \epsilon \rho_i}{\partial t} + \nabla \cdot \left( \vec J_i + \rho_i \vec v \right ) - r_i(\varrho) &= 0 ~, \qquad i = 1 ... n \\
-		\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} \right) &= -\sum_{j=1 \atop j \neq i}^{n} \frac{w_j \vec J_i-w_i \vec \PhJ{D_{ij} M_i M_j} \\
+		\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} \right) &= -\sum_{j=1 \atop j \neq i}^{n} \frac{w_j \vec J_i - w_i \vec J_j} {D_{ij} M_i M_j} \\
 		\sum_{i=1}^n x_i &= 1
 \end{align}
 ```
@@ -120,7 +120,7 @@ TODO: Check what happens when also considering the presence of the porous medium
 md"""
 ```math
 \begin{align}
-\frac{\partial \rho h}{\partial t} + \nabla \cdot ( \rho h \vec v ) + \nabla \cdot \left(  \sum_i^n h_i \vec J_i \right) + \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
+\frac{\partial \rho h}{\partial t} + \nabla \cdot ( \rho h \vec v ) + \nabla \cdot \left(  \sum_i^n h_i \vec J_i \right) + \nabla \cdot \vec q - \frac{\partial p}{\partial t} &= 0 \\
 \end{align}
 ```
 """
@@ -129,7 +129,7 @@ md"""
 md"""
 ```math
 \begin{align}
-\frac{\partial (\sum \rho_i h_i )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i \vec v \right) + \nabla \cdot \left ( \sum_i^n h_i \vec J_i \right )+ \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
+\frac{\partial (\sum \rho_i h_i )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i \vec v \right) + \nabla \cdot \left ( \sum_i^n h_i \vec J_i \right )+ \nabla \cdot \vec q - \frac{\partial p}{\partial t} &= 0 \\
 \end{align}
 ```
 """
@@ -147,7 +147,7 @@ md"""
 \begin{align}
 \frac{\partial (\sum \rho_i h_i^0 )}{\partial t} + \frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i^0 \vec v \right) + \nabla \cdot \left( \sum \rho_i h_i^{\text{th}}(T) \vec v \right) + \dots \\
 
-+ \nabla \cdot \left ( \sum h_i^0 \vec J_i \right ) + \nabla \cdot \left ( \sum h_i^{\text{th}}(T) \vec J_i \right ) + \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
++ \nabla \cdot \left ( \sum h_i^0 \vec J_i \right ) + \nabla \cdot \left ( \sum h_i^{\text{th}}(T) \vec J_i \right ) + \nabla \cdot \vec q - \frac{\partial p}{\partial t} &= 0 \\
 \end{align}
 ```
 """
@@ -170,7 +170,7 @@ md"""
 \sum \left( \frac{\partial (\rho_i h_i^0 )}{\partial t} + \nabla \cdot \left(  \rho_i h_i^0 \vec v \right) + \nabla \cdot \left ( h_i^0 \vec J_i \right ) \right) + \dots\\
  + \frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i^{\text{th}}(T) \vec v \right) 
 
-+ \nabla \cdot \left ( \sum h_i^{\text{th}}(T) \vec J_i \right ) + \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
++ \nabla \cdot \left ( \sum h_i^{\text{th}}(T) \vec J_i \right ) + \nabla \cdot \vec q - \frac{\partial p}{\partial t} &= 0 \\
 \end{align}
 ```
 """
@@ -184,7 +184,7 @@ Multiply the species mass balance with $h_i^0$:
 h_i^0 \frac{\partial \rho_i}{\partial t} + h_i^0 \left( \nabla \cdot \left( \rho_i \vec v \right ) \right) + h_i^0 \left( \nabla \cdot \vec J_i \right )= h_i^0 r_i
 \end{align}
 ```
-After defining a fixed reference temperature $T_{\text{ref}}$ for all following calculations, $h_i^0(T_{\text{ref}})$ are constant:
+After defining a fixed reference temperature $T_{\text{ref}}$ for all following calculations the $h_i^0(T_{\text{ref}})$ are constant:
 ```math
 \begin{align}
 \frac{\partial (\rho_i h_i^0 )}{\partial t} + \nabla \cdot \left(  \rho_i h_i^0 \vec v \right) + \nabla \cdot \left ( h_i^0 \vec J_i \right ) = h_i^0 r_i
@@ -199,10 +199,10 @@ Summing over both sides:
 
 \end{align}
 ```
-Leading to the finally implemented form of the enthalpy equation:
+Leads to the finally implemented form of the enthalpy equation:
 ```math
 \begin{align}
-\frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i^{\text{th}}(T) \vec v \right) + \nabla \cdot \left ( \sum h_i^{\text{th}}(T) \vec J_i \right ) + \nabla \cdot \vec q + \sum h_i^0 r_i &= \frac{\partial p}{\partial t} \\
+\frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i^{\text{th}}(T) \vec v \right) + \nabla \cdot \left ( \sum h_i^{\text{th}}(T) \vec J_i \right ) + \nabla \cdot \vec q + \sum h_i^0 r_i - \frac{\partial p}{\partial t}&= 0 \\
 \end{align}
 ```
 Or simplifying with $\frac{\partial p}{\partial t} = 0$ for the case of constant pressure:
@@ -308,7 +308,7 @@ The enthalpy balance equation including the Dufour effect thus takes the form:
 md"""
 # References
 1) Kuiken, Gerard D. C. (1994): Thermodynamics of irreversible processes. Applications to diffusion and rheology. New York, NY: Wiley (Wiley tutorial series in theoretical chemistry).
-1) Van‐Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599       .
+1) Van‐Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599        .
 1) Giovangigli, Vincent (2016): Solutions for Models of Chemically Reacting Mixtures. In: Yoshikazu Giga und Antonin Novotny (Hg.): Handbook of Mathematical Analysis in Mechanics of Viscous Fluids. Cham: Springer International Publishing, S. 1–52.
 """
 
