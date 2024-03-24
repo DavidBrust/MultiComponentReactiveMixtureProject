@@ -13,7 +13,7 @@ begin
 end;
 
 # ╔═╡ 7011d5ff-58f2-4ba9-a64c-96fb4df689f4
-TableOfContents(aside=false)
+TableOfContents(aside=true)
 
 # ╔═╡ ceb22984-3af0-4d76-8e27-b5cba9c4e51c
 md"""
@@ -33,15 +33,15 @@ Mixture mass averaged velocity is calculated from Darcy equation. The void fract
 ## Species Mass Continuity and Transport
 ```math
 \begin{align}
-	\frac{\partial \epsilon \rho_i}{\partial t} + \nabla \cdot \left( \vec \Phi_i + \rho_i \vec v \right ) - r_i(\varrho) &= 0 ~, \qquad i = 1 ... n \\
-		\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} \right) &= -\sum_{j=1 \atop j \neq i}^{n} \frac{w_j \vec \Phi_i-w_i \vec \Phi_j}{D_{ij} M_i M_j} \\
+	\frac{\partial \epsilon \rho_i}{\partial t} + \nabla \cdot \left( \vec J_i + \rho_i \vec v \right ) - r_i(\varrho) &= 0 ~, \qquad i = 1 ... n \\
+		\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} \right) &= -\sum_{j=1 \atop j \neq i}^{n} \frac{w_j \vec J_i-w_i \vec \PhJ{D_{ij} M_i M_j} \\
 		\sum_{i=1}^n x_i &= 1
 \end{align}
 ```
 
 where $\rho$ is the (total) mixture density, $\vec v$ is the mass-averaged (barycentric)  mixture velocity calculated with the Darcy equation,
 $x_i$, $w_i$ and $M_i$ are the molar fraction, mass fraction and molar mass of species $i$ respectively,
-$\vec \Phi_i$ is the __diffusive__ mass flux of species $i$ ($\frac{\text{kg}}{\text{m}^2 \text{s}}$)
+$\vec J_i$ is the __diffusive__ mass flux of species $i$ ($\frac{\text{kg}}{\text{m}^2 \text{s}}$)
 and $r_i$ is the species mass volumetric source/sink ($\frac{\text{kg}}{\text{m}^3 \text{s}}$) of gas phase species $i$.
 The __convective__ mass flux of species $i$ is the product of the superficial mean velocity with the partial mass density $\rho_i \vec v$.
 """
@@ -52,12 +52,12 @@ md"""
 
 Enthalpy equation for __gas phase only__.
 Considers convective-diffusive transport of thermal energy,
-including "thermal drift" from convective-diffusive species fluxes $\vec \Phi_i + \rho_i \vec v$ carrying enthalpy.
+including "thermal drift" from convective-diffusive species fluxes $\vec J_i + \rho_i \vec v$ carrying enthalpy.
 
 Formulation based on separation of "reference  enthalpy" and "thermal enthalpy".  See section "Derivation of Separated Formulation".
 ```math
 \begin{align}
-\frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec \Phi_i \right) + \vec q \right ) + \sum h_i^0 r_i &= 0
+\frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec J_i \right) + \vec q \right ) + \sum h_i^0 r_i &= 0
 \end{align}
 ```
 
@@ -75,7 +75,7 @@ Formulation based on separation of "reference  enthalpy" and "thermal enthalpy".
 
 ```math
 \begin{align}
-\frac{\partial (\varepsilon \sum (\rho_i h_i^{\text{th}}(T))  + [1-\varepsilon] \rho_{\text s} h_{\text s}) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec \Phi_i \right) + \vec q_{\text{eff}} \right ) + \sum h_i^0 r_i &= 0
+\frac{\partial (\varepsilon \sum (\rho_i h_i^{\text{th}}(T))  + [1-\varepsilon] \rho_{\text s} h_{\text s}) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec J_i \right) + \vec q_{\text{eff}} \right ) + \sum h_i^0 r_i &= 0
 
 \end{align}
 ```
@@ -120,7 +120,7 @@ TODO: Check what happens when also considering the presence of the porous medium
 md"""
 ```math
 \begin{align}
-\frac{\partial \rho h}{\partial t} + \nabla \cdot ( \rho h \vec v ) + \nabla \cdot \left(  \sum_i^n h_i \vec \Phi_i \right) + \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
+\frac{\partial \rho h}{\partial t} + \nabla \cdot ( \rho h \vec v ) + \nabla \cdot \left(  \sum_i^n h_i \vec J_i \right) + \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
 \end{align}
 ```
 """
@@ -129,7 +129,7 @@ md"""
 md"""
 ```math
 \begin{align}
-\frac{\partial (\sum \rho_i h_i )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i \vec v \right) + \nabla \cdot \left ( \sum_i^n h_i \vec \Phi_i \right )+ \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
+\frac{\partial (\sum \rho_i h_i )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i \vec v \right) + \nabla \cdot \left ( \sum_i^n h_i \vec J_i \right )+ \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
 \end{align}
 ```
 """
@@ -137,7 +137,7 @@ md"""
 # ╔═╡ cf75ad38-c5d6-4258-ab39-710ece3b7663
 md"""
 ```math
-h_i = h_i^0 + \int_{T_{\text{ref}}}^T c_{p,i}(\widetilde{T}) d\widetilde{T} = h_i^0 + h_i^{\text{th}}(T)
+h_i = h_i^0(T_{\text{ref}}) + \int_{T_{\text{ref}}}^T c_{p,i}(\widetilde{T}) d\widetilde{T} = h_i^0 + h_i^{\text{th}}(T)
 ```
 """
 
@@ -147,7 +147,7 @@ md"""
 \begin{align}
 \frac{\partial (\sum \rho_i h_i^0 )}{\partial t} + \frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i^0 \vec v \right) + \nabla \cdot \left( \sum \rho_i h_i^{\text{th}}(T) \vec v \right) + \dots \\
 
-+ \nabla \cdot \left ( \sum h_i^0 \vec \Phi_i \right ) + \nabla \cdot \left ( \sum h_i^{\text{th}}(T) \vec \Phi_i \right ) + \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
++ \nabla \cdot \left ( \sum h_i^0 \vec J_i \right ) + \nabla \cdot \left ( \sum h_i^{\text{th}}(T) \vec J_i \right ) + \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
 \end{align}
 ```
 """
@@ -158,7 +158,7 @@ md"""
 \begin{align}
 \frac{\partial (\sum \rho_i h_i^0 )}{\partial t} = \sum \left[ \frac{\partial (\rho_i h_i^0 )}{\partial t} \right ] \\
 \nabla \cdot \left( \sum \rho_i h_i^0 \vec v \right) = \sum \left[ \nabla \cdot \left(  \rho_i h_i^0 \vec v \right) \right] \\
-\nabla \cdot \left ( \sum h_i^0 \vec \Phi_i \right ) = \sum \left[ \nabla \cdot \left ( h_i^0 \vec \Phi_i \right ) \right ]
+\nabla \cdot \left ( \sum h_i^0 \vec J_i \right ) = \sum \left[ \nabla \cdot \left ( h_i^0 \vec J_i \right ) \right ]
 \end{align}
 ```
 """
@@ -167,10 +167,10 @@ md"""
 md"""
 ```math
 \begin{align}
-\sum \left( \frac{\partial (\rho_i h_i^0 )}{\partial t} + \nabla \cdot \left(  \rho_i h_i^0 \vec v \right) + \nabla \cdot \left ( h_i^0 \vec \Phi_i \right ) \right) + \dots\\
+\sum \left( \frac{\partial (\rho_i h_i^0 )}{\partial t} + \nabla \cdot \left(  \rho_i h_i^0 \vec v \right) + \nabla \cdot \left ( h_i^0 \vec J_i \right ) \right) + \dots\\
  + \frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i^{\text{th}}(T) \vec v \right) 
 
-+ \nabla \cdot \left ( \sum h_i^{\text{th}}(T) \vec \Phi_i \right ) + \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
++ \nabla \cdot \left ( \sum h_i^{\text{th}}(T) \vec J_i \right ) + \nabla \cdot \vec q  &= \frac{\partial p}{\partial t} \\
 \end{align}
 ```
 """
@@ -180,21 +180,21 @@ md"""
 Multiply the species mass balance with $h_i^0$:
 ```math
 \begin{align}
-\frac{\partial \rho_i}{\partial t} + \nabla \cdot \left( \rho_i \vec v \right ) + \nabla \cdot \vec \Phi_i = r_i \\
-h_i^0 \frac{\partial \rho_i}{\partial t} + h_i^0 \left( \nabla \cdot \left( \rho_i \vec v \right ) \right) + h_i^0 \left( \nabla \cdot \vec \Phi_i \right )= h_i^0 r_i
+\frac{\partial \rho_i}{\partial t} + \nabla \cdot \left( \rho_i \vec v \right ) + \nabla \cdot \vec J_i = r_i \\
+h_i^0 \frac{\partial \rho_i}{\partial t} + h_i^0 \left( \nabla \cdot \left( \rho_i \vec v \right ) \right) + h_i^0 \left( \nabla \cdot \vec J_i \right )= h_i^0 r_i
 \end{align}
 ```
-Because $h_i^0$ are constant:
+After defining a fixed reference temperature $T_{\text{ref}}$ for all following calculations, $h_i^0(T_{\text{ref}})$ are constant:
 ```math
 \begin{align}
-\frac{\partial (\rho_i h_i^0 )}{\partial t} + \nabla \cdot \left(  \rho_i h_i^0 \vec v \right) + \nabla \cdot \left ( h_i^0 \vec \Phi_i \right ) = h_i^0 r_i
+\frac{\partial (\rho_i h_i^0 )}{\partial t} + \nabla \cdot \left(  \rho_i h_i^0 \vec v \right) + \nabla \cdot \left ( h_i^0 \vec J_i \right ) = h_i^0 r_i
 \end{align}
 ```
 Summing over both sides: 
 
 ```math
 \begin{align}
-\sum \left( \frac{\partial (\rho_i h_i^0 )}{\partial t} + \nabla \cdot \left(  \rho_i h_i^0 \vec v \right) + \nabla \cdot \left ( h_i^0 \vec \Phi_i \right ) \right) = \sum h_i^0 r_i
+\sum \left( \frac{\partial (\rho_i h_i^0 )}{\partial t} + \nabla \cdot \left(  \rho_i h_i^0 \vec v \right) + \nabla \cdot \left ( h_i^0 \vec J_i \right ) \right) = \sum h_i^0 r_i
 
 
 \end{align}
@@ -202,13 +202,13 @@ Summing over both sides:
 Leading to the finally implemented form of the enthalpy equation:
 ```math
 \begin{align}
-\frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i^{\text{th}}(T) \vec v \right) + \nabla \cdot \left ( \sum h_i^{\text{th}}(T) \vec \Phi_i \right ) + \nabla \cdot \vec q + \sum h_i^0 r_i &= \frac{\partial p}{\partial t} \\
+\frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i^{\text{th}}(T) \vec v \right) + \nabla \cdot \left ( \sum h_i^{\text{th}}(T) \vec J_i \right ) + \nabla \cdot \vec q + \sum h_i^0 r_i &= \frac{\partial p}{\partial t} \\
 \end{align}
 ```
 Or simplifying with $\frac{\partial p}{\partial t} = 0$ for the case of constant pressure:
 ```math
 \begin{align}
-\frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec \Phi_i \right) + \vec q \right ) + \sum h_i^0 r_i &= 0
+\frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec J_i \right) + \vec q \right ) + \sum h_i^0 r_i &= 0
 \end{align}
 ```
 
@@ -227,7 +227,7 @@ The thermo-diffusion or Soret effect leads to a separation of mixture components
 Including the Soret effect in the model leads to an additional driving force proportional to the temperature gradient in the force-flux formulation for the Maxwell-Stefan species diffusion fluxes [1,2]:
 ```math
 \begin{align}
-	\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} + x_i \sum_{j=1}^{n} \frac{x_j}{D_{ij}} (\mathcal{D}_i^{\text T} - \mathcal{D}_j^{\text T}) \frac{\nabla T}{T} \right) &= -\sum_{j=1 \atop j \neq i}^{n} \frac{w_j \vec \Phi_i-w_i \vec \Phi_j}{D_{ij} M_i M_j} \\
+	\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} + x_i \sum_{j=1}^{n} \frac{x_j}{D_{ij}} (\mathcal{D}_i^{\text T} - \mathcal{D}_j^{\text T}) \frac{\nabla T}{T} \right) &= -\sum_{j=1 \atop j \neq i}^{n} \frac{w_j \vec J_i-w_i \vec \PhJ{D_{ij} M_i M_j} \\
 \end{align}
 ```
 
@@ -263,7 +263,7 @@ Where $\widetilde{\mathcal{X}_i}$ correspond to the _rescaled thermal diffusion 
 
 ```math
 \begin{align}
-	\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} + x_i \widetilde{\mathcal{X}_i} \frac{\nabla T}{T} \right) &= -\sum_{j=1 \atop j \neq i}^{n} \frac{w_j \vec \Phi_i-w_i \vec \Phi_j}{D_{ij} M_i M_j} \\
+	\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} + x_i \widetilde{\mathcal{X}_i} \frac{\nabla T}{T} \right) &= -\sum_{j=1 \atop j \neq i}^{n} \frac{w_j \vec J_i-w_i \vec \PhJ{D_{ij} M_i M_j} \\
 \end{align}
 ```
 
@@ -278,18 +278,18 @@ The Dufor effect is the "counterpart" to the Soret effect and describes the heat
 \vec q = -\lambda \nabla T + p \sum_{i=1}^{n} x_i \left( \sum_{j=1}^{n} \frac{x_j}{D_{ij}} (\mathcal{D}_i^{\text T} - \mathcal{D}_j^{\text T}) \right) \vec v_i
 \end{align}
 ```
-Using the rescaled thermal diffusion ratios $\widetilde{\mathcal{X}_i}$ and the species diffusice mass flux $\vec \Phi_i$ instead of the diffusive species velocity $\vec v_i$ leads to:
+Using the rescaled thermal diffusion ratios $\widetilde{\mathcal{X}_i}$ and the species diffusice mass flux $\vec J_i$ instead of the diffusive species velocity $\vec v_i$ leads to:
 ```math
 \begin{align}
 \vec q &= -\lambda \nabla T + \sum_{i=1}^{n} p x_i \widetilde{\mathcal{X}_i} \vec v_i \\ 
-&= -\lambda \nabla T + \sum_{i=1}^{n} RT \frac{\widetilde{\mathcal{X}_i}}{M_i} \vec \Phi_i \\
+&= -\lambda \nabla T + \sum_{i=1}^{n} RT \frac{\widetilde{\mathcal{X}_i}}{M_i} \vec J_i \\
 \end{align}
 ```
 which corresponds to the form in [3].
 For the pseudo-homogeneous discription of the enthalpy balance of gas phase in the porous medium using effective thermal conductivity we get:
 ```math
 \begin{align}
-\vec q_{\text{eff}} &= -\lambda_{\text{eff}} \nabla T + \sum_{i=1}^{n} RT \frac{\widetilde{\mathcal{X}_i}}{M_i} \vec \Phi_i
+\vec q_{\text{eff}} &= -\lambda_{\text{eff}} \nabla T + \sum_{i=1}^{n} RT \frac{\widetilde{\mathcal{X}_i}}{M_i} \vec J_i
 \end{align}
 ```
 
@@ -297,7 +297,7 @@ The enthalpy balance equation including the Dufour effect thus takes the form:
 ```math
 \begin{align}
 \frac{\partial (\varepsilon \sum (\rho_i h_i^{\text{th}}(T)) + [1-\varepsilon] \rho_{\text s} h_{\text s}) )}{\partial t} \\ 
-+ \nabla \cdot \left( \sum (h_i^{\text{th}}(T) \rho_i \vec v ) + \sum \left( h_i^{\text{th}}(T) + RT \widetilde{\mathcal{X}_i}/M_i \right) \vec \Phi_i + ( -\lambda_{\text{eff}} \nabla T) \right ) \\ 
++ \nabla \cdot \left( \sum (h_i^{\text{th}}(T) \rho_i \vec v ) + \sum \left( h_i^{\text{th}}(T) + RT \widetilde{\mathcal{X}_i}/M_i \right) \vec J_i + ( -\lambda_{\text{eff}} \nabla T) \right ) \\ 
 + \sum h_i^0 r_i \\
 = 0
 \end{align}
@@ -308,7 +308,7 @@ The enthalpy balance equation including the Dufour effect thus takes the form:
 md"""
 # References
 1) Kuiken, Gerard D. C. (1994): Thermodynamics of irreversible processes. Applications to diffusion and rheology. New York, NY: Wiley (Wiley tutorial series in theoretical chemistry).
-1) Van‐Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599     .
+1) Van‐Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599       .
 1) Giovangigli, Vincent (2016): Solutions for Models of Chemically Reacting Mixtures. In: Yoshikazu Giga und Antonin Novotny (Hg.): Handbook of Mathematical Analysis in Mechanics of Viscous Fluids. Cham: Springer International Publishing, S. 1–52.
 """
 
@@ -327,9 +327,9 @@ md"""
 # ╟─70fbdc66-fefc-432e-abeb-05a322b34e00
 # ╟─cb64283a-4c74-43ea-be69-a0ee293491fd
 # ╟─730348aa-3ff7-43bd-8c43-e9ba6823d318
-# ╟─3e53e30d-f601-4d78-9f93-037172e40504
+# ╠═3e53e30d-f601-4d78-9f93-037172e40504
 # ╟─f26fdd8c-2d66-49db-9ccd-17aa537925a1
-# ╠═b40f02e9-ec79-4122-9156-c469d90152f6
-# ╠═aa68910a-f86f-4e33-894e-b3d3808473cc
+# ╟─b40f02e9-ec79-4122-9156-c469d90152f6
+# ╟─aa68910a-f86f-4e33-894e-b3d3808473cc
 # ╟─60cf47bf-29d4-4bad-aeb4-88f254c94dce
 # ╟─f39f687b-1b4b-4ddd-864d-cb33e28d3c78

@@ -42,6 +42,9 @@ $(LocalResource("img/vanbrunt_domain.png", :width=> 400))
 # ╔═╡ 6939978d-9590-407b-80dc-54721c3f672d
 md"""
 Select problem dimension: $(@bind dim Select([1, 2], default=2))
+
+Select grid refinement level: $(@bind nref Select([0,1,2,3], default=0))
+
 """
 
 # ╔═╡ ff501186-d8a0-4666-8991-fe576f8ff6ad
@@ -71,7 +74,7 @@ if dim == 1
 	const Γ_left = 1
 	const Γ_right = 2
 elseif dim == 2
-	grid = grid_2D()
+	grid = grid_2D(nref=nref)
 	const Γ_left = 4
 	const Γ_right = 2
 end;
@@ -84,7 +87,7 @@ md"""
 # M-S flux-force relationship
 ```math
 \begin{align}
-	\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} + x_i \sum_{j=1}^{n} \frac{x_j}{D_{ij}} (\mathcal{D}_i^{\text T} - \mathcal{D}_j^{\text T}) \frac{\nabla T}{T} \right) &= -\sum_{j=1 \atop j \neq i}^{n} \frac{w_j \vec \Phi_i-w_i \vec \Phi_j}{D_{ij} M_i M_j} \\
+	\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} + x_i \sum_{j=1}^{n} \frac{x_j}{D_{ij}} (\mathcal{D}_i^{\text T} - \mathcal{D}_j^{\text T}) \frac{\nabla T}{T} \right) &= -\sum_{j=1 \atop j \neq i}^{n} \frac{w_j \vec J_i-w_i \vec \PhJ{D_{ij} M_i M_j} \\
 \end{align}
 ```
 """
@@ -129,7 +132,7 @@ The Maxwell-Stefan flux-force relationship including the Soret effect thus reads
 
 ```math
 \begin{align}
-	\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} + x_i \widetilde{\mathcal{X}_i} \frac{\nabla T}{T} \right) &= -\sum_{j=1 \atop j \neq i}^{n} \frac{w_j \vec \Phi_i-w_i \vec \Phi_j}{D_{ij} M_i M_j} \\
+	\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} + x_i \widetilde{\mathcal{X}_i} \frac{\nabla T}{T} \right) &= -\sum_{j=1 \atop j \neq i}^{n} \frac{w_j \vec J_i-w_i \vec \PhJ{D_{ij} M_i M_j} \\
 \end{align}
 ```
 """
@@ -178,6 +181,9 @@ data = ReactorData(
 	inlet_boundaries=[Γ_right]	
 )
 
+# ╔═╡ 8b30f68c-9111-4803-b3dc-16e4c440865b
+#plotting_movie(filename="Soret_demo_transient.mp4")
+
 # ╔═╡ 7b0a84b5-60d3-4dd9-89e9-29c88282cb25
 md"""
 # Transient Solution
@@ -194,7 +200,7 @@ function bcondition(f,u,bnode,data)
 	#boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_right,value=ramp(bnode.time; du=(Tamb,Tamb+100), dt=(0,5) ) )
 
 	if dim==2
-		heatflux_right = 11.35*ufac"W/m^2"
+		heatflux_right = 11.3*ufac"W/m^2"
 	elseif dim==1
 		heatflux_right = 25*ufac"W/m^2"
 	end
@@ -314,19 +320,17 @@ md"""
 | [1] | This work |
 |:----------:|:----------:|
 | $(LocalResource("img/vanbrunt_result_xHe_2.png", :width=> 250)) | __He__ molar fraction |
-| $(LocalResource("img/vanbrunt_result_xHe.png", :width=> 250)) 	| $(scalarplot(grid, sol_ss[gni[:He],:], resolution=(400,300), colormap=:coolwarm, zoom=2.5) ) |
+| $(LocalResource("img/vanbrunt_result_xHe.png", :width=> 250)) 	| $(scalarplot(grid, sol_ss[gni[:He],:], limits=(0.32, 0.345), levels=51, linewidth=1, colorbarticks=[0.32,0.325,0.33,0.335,0.34,0.345], resolution=(400,300), colormap=:coolwarm, zoom=2.5) ) |
 | $(LocalResource("img/vanbrunt_result_xKr_2.png", :width=> 250))     | __Kr__ molar fraction |
-| $(LocalResource("img/vanbrunt_result_xKr.png", :width=> 250))  	| $( scalarplot(grid, sol_ss[gni[:Kr],:], resolution=(400,300), colormap=:coolwarm, zoom=2.5) ) |
+| $(LocalResource("img/vanbrunt_result_xKr.png", :width=> 250))  	| $( scalarplot(grid, sol_ss[gni[:Kr],:], limits=(0.325, 0.34), levels=28, linewidth=1, colorbarticks=[0.325,0.33,0.335,0.34], resolution=(400,300), colormap=:coolwarm, zoom=2.5) ) |
 | $(LocalResource("img/vanbrunt_result_T_2.png", :width=> 250))  	| __Temperature (K)__ |
-| $(LocalResource("img/vanbrunt_result_T.png", :width=> 250))  	| $(scalarplot(grid, sol_ss[iT,:], resolution=(400,300), colormap=:gist_heat, zoom=2.5) ) |
-| | __Pressure (Pa)__ |
-| | $((;ip) = data; scalarplot(grid, sol_ss[ip,:], resolution=(400,300), zoom=2.5) ) |
+| $(LocalResource("img/vanbrunt_result_T.png", :width=> 250))  	| $(scalarplot(grid, sol_ss[iT,:], limits=(300, 400), levels=51, linewidth=1, colorbarticks=[300,320,340,360,380,400], resolution=(400,300), colormap=:gist_heat, zoom=2.5) ) |
 """
 
 # ╔═╡ 65dbb492-4795-44ca-afcb-fb2a2c925d92
 md"""
 # References
-1) Van_Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599                       .
+1) Van_Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599                         .
 1) Giovangigli, Vincent (2016): Solutions for Models of Chemically Reacting Mixtures. In: Yoshikazu Giga und Antonin Novotny (Hg.): Handbook of Mathematical Analysis in Mechanics of Viscous Fluids. Cham: Springer International Publishing, S. 1–52.
 """
 
@@ -385,9 +389,6 @@ function plotting_movie(; filename = "plotting_video.gif", Plotter = default_plo
     end
 end
 
-# ╔═╡ 8b30f68c-9111-4803-b3dc-16e4c440865b
-plotting_movie(filename="Soret_demo_transient.mp4")
-
 # ╔═╡ Cell order:
 # ╠═349e7220-dc69-11ee-13d2-8f95e6ee5c96
 # ╠═0f102f06-3ff3-4bcc-8892-8d9190a87849
@@ -406,7 +407,7 @@ plotting_movie(filename="Soret_demo_transient.mp4")
 # ╟─e9cb07eb-cfbb-4802-bc7f-6de7a6ad8ac6
 # ╠═7f1d9cf8-7785-48c1-853c-74680188121f
 # ╟─07e97ba1-357a-4de8-ad5a-64e7a27b0cb8
-# ╠═9ba456c7-f6ed-49c5-9878-d9e0deb96384
+# ╟─9ba456c7-f6ed-49c5-9878-d9e0deb96384
 # ╠═8b30f68c-9111-4803-b3dc-16e4c440865b
 # ╠═cf1d3089-a0d2-445d-b004-571776f1c9a0
 # ╠═ad68e43e-df7e-4a06-a697-fa5824f54d3e

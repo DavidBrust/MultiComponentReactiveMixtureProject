@@ -209,7 +209,63 @@ function HeatFluxes_EB_I(t,solt,grid,sys,data)
 
 end
 
-function BoundaryFlows_Integrals(solt, sys, data)
+function BoundaryFlows_Integrals(sol, sys, data) 
+	(;outlet_boundaries,inlet_boundaries)=data
+	
+	tfact=TestFunctionFactory(sys)	
+	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
+	tf_in=testfunction(tfact,outlet_boundaries,inlet_boundaries)
+		
+	# inflow_rate=Vector{Float64}[]
+	# outflow_rate=Vector{Float64}[]
+	# reaction_rate=Vector{Float64}[]
+	# stored_amount=Vector{Float64}[]
+
+	# for i=2:length(solt)
+		
+    inflow_rate = integrate(sys, tf_in, sol)
+    outflow_rate = integrate(sys, tf_out, sol)
+
+		# push!(inflow_rate,ifr)
+		# push!(outflow_rate,ofr)
+
+		# rr = vec(sum(integrate(sys,sys.physics.reaction,solt[i]), dims=2))
+    reaction_rate = sum(integrate(sys, sys.physics.reaction, sol), dims=2)
+		
+
+		# push!(reaction_rate, rr)
+		# push!(stored_amount, amount)
+
+   	# end
+
+	# integrals
+	# I_in=zeros(num_species(sys))
+	# I_out=zeros(num_species(sys))
+	# I_reac=zeros(num_species(sys))
+	# for i=1:length(solt)-1
+	# 	I_in .+= inflow_rate[i]*(solt.t[i+1]-solt.t[i])
+	# 	I_out .+= outflow_rate[i]*(solt.t[i+1]-solt.t[i])
+	# 	I_reac .+= reaction_rate[i]*(solt.t[i+1]-solt.t[i])
+	# end
+
+    return (
+        inflow_rate,
+        outflow_rate,
+        reaction_rate
+    )
+	# return (
+	# 	inflow_rate=inflow_rate,
+	# 	outflow_rate=outflow_rate,
+	# 	reaction_rate=reaction_rate, 
+	# 	stored_amount=stored_amount,
+	# 	I_in=I_in,
+	# 	I_out=I_out,
+	# 	I_reac=I_reac
+	# )
+
+end
+
+function BoundaryFlows_Integrals(solt::TransientSolution, sys, data)
 	(;outlet_boundaries,inlet_boundaries)=data
 	
 	tfact=TestFunctionFactory(sys)	

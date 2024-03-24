@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.38
+# v0.19.40
 
 using Markdown
 using InteractiveUtils
@@ -71,16 +71,6 @@ let
 end
   ╠═╡ =#
 
-# ╔═╡ a078e1e1-c9cd-4d34-86d9-df4a052b6b96
-md"""
-# Introduction
-Reactor Simulation of PC reactor for cylindrical symmetrical geometry (2D).
-
-This notebook covers overall mass transport through porous material based on Darcy equation, multicomponent species transport based on Maxwell-Stefan equations for diffusion and superimposed by convective (bulk) transport with the velocity field obtained by Darcy equation.
-
-Also the thermal energy equation is solved, taking into account convective-diffusive heat fluxes and irradiation boundary conditions.
-"""
-
 # ╔═╡ a1ea393e-f123-4ad0-affa-885db325cfd5
 @doc MultiComponentReactiveMixtureProject.DMS_Info_isothermal()
 
@@ -99,20 +89,20 @@ function ThermalDemo(dim; nref=nref)
 		dt_hf_irrad = (2.0, 10.0),
 		dt_hf_enth = (2.0, 3.0),
 		T_gas_in = 273.15 + 25,
-		Nu = 0.0,
+		#Nu = 0.0,
 		X0 = [0,0.5,0,0,0.5,0.0], # H2 / CO2 = 1/1
 		inlet_boundaries=inb,
 		irradiated_boundaries=irrb,
 		outlet_boundaries=outb,
 		side_boundaries=sb,
 		catalyst_regions=catr,
-		rhos=5.0*ufac"kg/m^3" # low value for solid density -> low thermal inertia
+		#rhos=5.0*ufac"kg/m^3" # low value for solid density -> low thermal inertia
 	)
 	
 	inival,sys = PTR_init_system(dim, grid, data)
 
 	if dim == 2
-		times = [0,50.0]
+		times = [0,1000.0]
 		control = SolverControl(nothing, sys;)
 	elseif dim == 3
 		times = [0,20.0]
@@ -123,6 +113,7 @@ function ThermalDemo(dim; nref=nref)
 	end
 	control.handle_exceptions=true
 	control.Δu_opt=100
+	control.Δt_max=100
 		
 	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="a",log=true)
 	
@@ -154,36 +145,6 @@ plothistory(solt)
 #=╠═╡
 MultiComponentReactiveMixtureProject.Print_summary_ext(solt,grid,sys,data)
   ╠═╡ =#
-
-# ╔═╡ b519541f-9ccd-4032-bc51-9a1abaecadba
-md"""
-### Peclet Number
-Describes the ratio of advective transport to diffusive transport. Can be formulated  for mass- and heat transfer, $\text{Pe}^{\text m}$ and $\text{Pe}^{\text h}$, respectively.
-
-```math
-	\text{Pe}^{\text m}= \frac{L \vec v}{D}
-```
-
-```math
-	\text{Pe}^{\text h}= \frac{L \vec v \rho c_p}{\lambda}
-```
-
-"""
-
-
-# ╔═╡ 57b8f297-7616-41f3-bef3-5237c6cfded6
-md"""
-### Knudsen Number
-```math
-\text{Kn} = \frac{\lambda}{l} = \frac{k_{\text B}T}{\sqrt 2 \pi \sigma^2pl}
-```
-where $\lambda$ is the mean free path length of the fluid, ideal gas in this case and $l$ is the pore diameter of the porous medium. Determine the mean free path length for ideal gas from kinetic gas theory and kinetic collision cross-sections (diameter).
-
--  $\text{Kn} < 0.01$: Continuum flow
--  $0.01 <\text{Kn} < 0.1$: Slip flow
--  $0.1 < \text{Kn} < 10$: Transitional flow
--  $\text{Kn} > 10$: Free molecular flow
-"""
 
 # ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╠═╡ skip_as_script = true
@@ -224,20 +185,33 @@ let
 end
   ╠═╡ =#
 
+# ╔═╡ 560ad300-42fc-4528-a3ec-95bcd66cdbce
+md"""
+# Stationary solution
+"""
+
+# ╔═╡ 70cdb28c-4b23-4ea4-8cd4-5eb97a3b930a
+function run_ss(solt,sys)	
+	sol_steadystate = VoronoiFVM.solve(
+		sys;
+		time = solt.t[end],
+		inival=solt(solt.t[end]),
+		#verbose="na"
+	)
+end
+
 # ╔═╡ dbb6346c-e08a-4ad0-a985-3052272cf6c7
 # 2D
-function Test2D()
-	solt,grid,sys,data=ThermalDemo(2);
-	
-	inflow_rate, outflow_rate, reaction_rate, stored_amount, I_in, I_out, I_reac = BoundaryFlows_Integrals(solt, sys, data)
+function Test2D(solt, grid, sys, data)
 	(;gni, m) = data
+	sol = run_ss(solt,sys)
+	inflow_rate, outflow_rate, reaction_rate, = BoundaryFlows_Integrals(sol, sys, data)
 
-	RR = stack(-reaction_rate, dims=1)[end, gni[:CO]] / m[gni[:CO]] / ufac"mol/hr"
-	return RR
+	return -reaction_rate[gni[:CO]] / m[gni[:CO]] / ufac"mol/hr"
 end
 
 # ╔═╡ 380c74fb-66c4-43fb-a3f5-9c942b13fa0d
-@test isapprox(Test2D(), 1.0401674474564688)
+@test isapprox(Test2D(solt, grid, sys, data), 1.0401674474564733)
 
 # ╔═╡ 98468f9e-6dee-4b0b-8421-d77ac33012cc
 md"""
@@ -407,6 +381,41 @@ let
 end
   ╠═╡ =#
 
+# ╔═╡ bcaae53b-d58b-4e36-9b79-471b02acaea6
+md"""
+# Auxiliary
+"""
+
+# ╔═╡ b519541f-9ccd-4032-bc51-9a1abaecadba
+md"""
+### Peclet Number
+Describes the ratio of advective transport to diffusive transport. Can be formulated  for mass- and heat transfer, $\text{Pe}^{\text m}$ and $\text{Pe}^{\text h}$, respectively.
+
+```math
+	\text{Pe}^{\text m}= \frac{L \vec v}{D}
+```
+
+```math
+	\text{Pe}^{\text h}= \frac{L \vec v \rho c_p}{\lambda}
+```
+
+"""
+
+
+# ╔═╡ 57b8f297-7616-41f3-bef3-5237c6cfded6
+md"""
+### Knudsen Number
+```math
+\text{Kn} = \frac{\lambda}{l} = \frac{k_{\text B}T}{\sqrt 2 \pi \sigma^2pl}
+```
+where $\lambda$ is the mean free path length of the fluid, ideal gas in this case and $l$ is the pore diameter of the porous medium. Determine the mean free path length for ideal gas from kinetic gas theory and kinetic collision cross-sections (diameter).
+
+-  $\text{Kn} < 0.01$: Continuum flow
+-  $0.01 <\text{Kn} < 0.1$: Slip flow
+-  $0.1 < \text{Kn} < 10$: Transitional flow
+-  $\text{Kn} > 10$: Free molecular flow
+"""
+
 # ╔═╡ eaaf24b5-fabd-4363-8dbf-ebcc1e6416d1
 function RePrPeKn(T, p, data)
 
@@ -449,7 +458,6 @@ Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 # ╟─b2791860-ae0f-412d-9082-bb2e27f990bc
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
-# ╟─a078e1e1-c9cd-4d34-86d9-df4a052b6b96
 # ╠═a1ea393e-f123-4ad0-affa-885db325cfd5
 # ╠═415f6fa7-d5b5-40a2-806e-3d8a61541c2e
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
@@ -459,10 +467,9 @@ Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 # ╠═1cc9d6c4-e2d6-4501-ae4d-d7568dee1e8f
 # ╠═994d4a87-3f27-4a51-b061-6111c3346d60
 # ╠═3207839f-48a9-49b6-9861-e5e74bc593a4
-# ╟─b519541f-9ccd-4032-bc51-9a1abaecadba
-# ╟─57b8f297-7616-41f3-bef3-5237c6cfded6
-# ╠═1196e9ed-024a-4469-95cf-a8622ecaf413
 # ╟─5d5ac33c-f738-4f9e-bcd2-efc43b638109
+# ╟─560ad300-42fc-4528-a3ec-95bcd66cdbce
+# ╠═70cdb28c-4b23-4ea4-8cd4-5eb97a3b930a
 # ╠═dbb6346c-e08a-4ad0-a985-3052272cf6c7
 # ╠═380c74fb-66c4-43fb-a3f5-9c942b13fa0d
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
@@ -474,4 +481,8 @@ Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╟─eb9dd385-c4be-42a2-8565-cf3cc9b2a078
 # ╟─de69f808-2618-4add-b092-522a1d7e0bb7
+# ╟─bcaae53b-d58b-4e36-9b79-471b02acaea6
+# ╠═1196e9ed-024a-4469-95cf-a8622ecaf413
+# ╟─b519541f-9ccd-4032-bc51-9a1abaecadba
+# ╟─57b8f297-7616-41f3-bef3-5237c6cfded6
 # ╠═eaaf24b5-fabd-4363-8dbf-ebcc1e6416d1
