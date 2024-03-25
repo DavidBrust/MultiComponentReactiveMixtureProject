@@ -579,10 +579,11 @@ end
 
 ngas(::ReactorData{NG,KP}) where {NG,KP} = NG
 
-function PTR_grid_boundaries_regions(dim;nref=0)
+#function PTR_grid_boundaries_regions(dim;nref=0)
+function PTR_grid_boundaries_regions(dim;nref=0,H=0.5,W=16)
 	Ω_catalyst = 2
-	W=16
-	H=0.5
+	# W=16
+	# H=0.5
 
 	nz = 10*2^(nref)
 	Z=(0:(H/nz):H)*ufac"cm"

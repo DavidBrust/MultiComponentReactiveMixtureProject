@@ -32,7 +32,8 @@ function run(;dim=3, times=[0,20.0], nref=0)
     end
     control.handle_exceptions=true
     control.Δu_opt = 100
-    control.Δt_max = 0.5
+    #control.Δt_max = 0.5
+    control.Δt_max = 2.0
     solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="nae",log=true)
 
     return solt,grid,sys,data
@@ -51,8 +52,8 @@ function run_steadystate(solt,sys,grid,data)
 
     sol_steadystate = VoronoiFVM.solve(
 		sys;
-		time = 100.0,
-		inival=solt(solt.t[end]),
+		time = solt.t[end],
+		inival = solt(solt.t[end]),
         control,
 		verbose="na"
 	)
