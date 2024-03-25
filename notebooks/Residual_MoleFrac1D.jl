@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.38
+# v0.19.40
 
 using Markdown
 using InteractiveUtils
@@ -57,7 +57,7 @@ __Run Sim__ $(@bind RunSim PlutoUI.CheckBox(default=true))
 PlutoUI.TableOfContents(title="Demo")
 
 # ╔═╡ 83fa22fa-451d-4c30-a4b7-834974245996
-function grid1D(nref=0)
+function grid1D(;nref=0)
 	nx = (10.0)*2^(nref)
     h=1/nx
 	X=(0:h:1)*ufac"cm"
@@ -68,7 +68,7 @@ function grid1D(nref=0)
 end
 
 # ╔═╡ a995f83c-6ff7-4b95-a798-ea636ccb1d88
-gridplot(grid1D(1), resolution=(600,200))
+gridplot(grid1D(nref=1), resolution=(600,200))
 
 # ╔═╡ 832f3c15-b75a-4afe-8cc5-75ff3b4704d6
 begin
@@ -95,7 +95,7 @@ $X_2 \rightarrow 3 X_1$
 # ╔═╡ 3f56ffca-8ab8-4c32-b2b1-f2ec28ccf8b7
 function calce(data,nref=0)
 	
-	grid = grid1D(nref)
+	grid = grid1D(nref=nref)
 	inival,sys = PTR_init_system(1, grid, data)
 	
 	control = SolverControl(nothing, sys;)
@@ -147,6 +147,7 @@ function make_data()
 	)
 	
 	data = ReactorData(;
+		dim = 1,
 		inlet_boundaries = [Γ_left],
 		outlet_boundaries = [Γ_right],
 		irradiated_boundaries = [],
@@ -168,7 +169,7 @@ end
 # ╔═╡ bb2ef3c0-96fc-4a90-a714-a0cfa08ac178
 # ╠═╡ skip_as_script = true
 #=╠═╡
-	begin
+begin
 	refmax = 6
 	ae = []
 	an = []
@@ -177,14 +178,14 @@ end
 	asys = []
 
 	data_res = make_data()
-
+	
 	for nref=0:refmax
-		sol,grid,sys,e,n = calce(data_res,nref)
-		push!(ae, e)
-		push!(an, n)
-		push!(asol, sol)
-		push!(agrid, grid)
-		push!(asys, sys)
+	 	sol,grid,sys,e,n = calce(data_res,nref)
+	 	push!(ae, e)
+	 	push!(an, n)
+	 	push!(asol, sol)
+	 	push!(agrid, grid)
+	 	push!(asys, sys)
 	end	 	
 end
   ╠═╡ =#
@@ -207,7 +208,7 @@ end
 
 # ╔═╡ 7dd363bf-d6e0-4dfb-b29f-85aa1fb62429
 md"""
-## Grid Refinement
+## Grid refinement
 """
 
 # ╔═╡ c5190db5-ed3d-4084-ba16-496cc825fa9d
@@ -223,7 +224,7 @@ end
 # ╔═╡ 6f02c9cf-7670-4224-9239-b825d8331174
 function runtests()
 	sol,grid,sys,err,n = calce(make_data(),6)
-    @test isapprox(err, 1.715081074957735e-7)	
+    @test isapprox(err, 1.8146659931244213e-7)	
 end;
 
 # ╔═╡ Cell order:

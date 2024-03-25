@@ -29,6 +29,9 @@ begin
 	GridVisualize.default_plotter!(PlutoVista)
 end;
 
+# ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
+PlutoUI.TableOfContents(title="Uphill diffusion 1D", aside=false)
+
 # ╔═╡ 2c4b16ab-8f60-467b-b608-2fea9fbc741c
 md"""
 # Introduction
@@ -37,9 +40,6 @@ Demo Notebook to investigate the isothermal 1D multi-component transport problem
 For high convective flowrates a "hump" in CO2 molar fraction occurs upstream of the reaction zone.
 A grid study is performed to assess if that "hump" corresponds to "uphill diffusion" or is a numerical artifact.
 """
-
-# ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
-PlutoUI.TableOfContents(title="Uphill Diffusion 1D")
 
 # ╔═╡ 83fa22fa-451d-4c30-a4b7-834974245996
 function grid1D(nref=0)
@@ -156,6 +156,61 @@ let
 	reveal(vis)
 end
 
+# ╔═╡ 05e5e167-7c1c-43f4-8a8d-e173f2fb7029
+md"""
+## Grid refinement
+"""
+
+# ╔═╡ c5190db5-ed3d-4084-ba16-496cc825fa9d
+let
+	p=Plots.plot(xlabel="Number of gridpoints (1D)",ylabel="Delta xCO2")
+	Plots.plot!(p,an,aDeltaCO2, m=:circle,label="$(flowrate) flow rate",ylim=(0,1.25*maximum(aDeltaCO2)))
+end
+
+# ╔═╡ 49033775-2358-4463-a5dd-cb5629f35142
+@test isapprox(aDeltaCO2[end], 0.01702152459555617)
+
+# ╔═╡ e0d8740f-b9ff-4776-aef7-083be31895d9
+md"""
+# Auxiliary
+"""
+
+# ╔═╡ 4965daa3-7545-4255-80d2-bc686feebec1
+# ╠═╡ skip_as_script = true
+#=╠═╡
+let
+	flowrate = :high
+	
+	data = ReactorData(
+		inlet_boundaries=[Γ_left],
+		outlet_boundaries=[Γ_right],
+		irradiated_boundaries=[],
+		side_boundaries=[],
+		solve_T_equation=false,
+		nflowin=nflowin(flowrate),
+		Treac = 273.15+650
+)
+	(;ip,p,ng,gn) = data
+	
+	grid = grid1D(2)
+	inival, sys = PTR_init_system(1, grid, data)
+	
+	control = SolverControl(nothing, sys;)
+		control.handle_exceptions=true
+		control.Δu_opt=100.0
+		control.Δt_max=0.01
+		control.Δt=0.01
+
+	times = [0,2]
+	tstep = 0.01
+	solt = solve(sys;inival=inival,times,tstep=tstep,control,verbose="a")
+	
+	filename = @sprintf "Uphill_diff_demo_%s.mp4" flowrate
+	# uncomment the following line to export the time evolution of the solution as an animation
+	#plotting_movie(solt,grid,data,flowrate,filename=filename)
+end;
+  ╠═╡ =#
+
 # ╔═╡ 70cb642a-e21f-45b7-ae84-ba2bcf0066b6
 function plotting_movie(
 						solt,
@@ -194,60 +249,10 @@ function plotting_movie(
     end
 end
 
-# ╔═╡ 4965daa3-7545-4255-80d2-bc686feebec1
-let
-	flowrate = :high
-	
-	data = ReactorData(
-		inlet_boundaries=[Γ_left],
-		outlet_boundaries=[Γ_right],
-		irradiated_boundaries=[],
-		side_boundaries=[],
-		solve_T_equation=false,
-		nflowin=nflowin(flowrate),
-		Treac = 273.15+650
-)
-	(;ip,p,ng,gn) = data
-	
-	grid = grid1D(2)
-	inival, sys = PTR_init_system(1, grid, data)
-	
-	control = SolverControl(nothing, sys;)
-		control.handle_exceptions=true
-		control.Δu_opt=100.0
-		control.Δt_max=0.01
-		control.Δt=0.01
-
-	times = [0,2]
-	tstep = 0.01
-	solt = solve(sys;inival=inival,times,tstep=tstep,control,verbose="a")
-	#solt = tsol(tsol.t[end])
-
-	filename = @sprintf "Uphill_diff_demo_%s.mp4" flowrate
-	plotting_movie(solt,grid,data,flowrate,filename=filename)
-end
-
-# ╔═╡ 06bfd278-22d9-4d8d-87c5-536864546738
-@printf "Molar fractions, t= %.2f s" 2.006 
-
-# ╔═╡ 05e5e167-7c1c-43f4-8a8d-e173f2fb7029
-md"""
-## Grid Refinement
-"""
-
-# ╔═╡ c5190db5-ed3d-4084-ba16-496cc825fa9d
-let
-	p=Plots.plot(xlabel="Number of gridpoints (1D)",ylabel="Delta xCO2")
-	Plots.plot!(p,an,aDeltaCO2, m=:circle,label="$(flowrate) flow rate",ylim=(0,1.25*maximum(aDeltaCO2)))
-end
-
-# ╔═╡ 49033775-2358-4463-a5dd-cb5629f35142
-@test isapprox(aDeltaCO2[end], 0.01702152459555617)
-
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
-# ╟─2c4b16ab-8f60-467b-b608-2fea9fbc741c
 # ╟─d3278ac7-db94-4119-8efd-4dd18107e248
+# ╟─2c4b16ab-8f60-467b-b608-2fea9fbc741c
 # ╠═83fa22fa-451d-4c30-a4b7-834974245996
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
 # ╠═832f3c15-b75a-4afe-8cc5-75ff3b4704d6
@@ -261,9 +266,9 @@ end
 # ╠═bb2ef3c0-96fc-4a90-a714-a0cfa08ac178
 # ╠═5da2971b-8d60-4ccf-b4e7-a3696b111e32
 # ╠═abedcbf9-c99c-4969-b97a-3bc0295061bb
-# ╠═4965daa3-7545-4255-80d2-bc686feebec1
-# ╠═70cb642a-e21f-45b7-ae84-ba2bcf0066b6
-# ╠═06bfd278-22d9-4d8d-87c5-536864546738
 # ╟─05e5e167-7c1c-43f4-8a8d-e173f2fb7029
 # ╠═c5190db5-ed3d-4084-ba16-496cc825fa9d
 # ╠═49033775-2358-4463-a5dd-cb5629f35142
+# ╟─e0d8740f-b9ff-4776-aef7-083be31895d9
+# ╠═4965daa3-7545-4255-80d2-bc686feebec1
+# ╠═70cb642a-e21f-45b7-ae84-ba2bcf0066b6

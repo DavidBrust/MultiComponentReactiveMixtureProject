@@ -42,7 +42,7 @@ md"""
 # Introduction
 Demonstration notebook for the photo thermal catalytic reactor (PTR) model. Solve energy equation alongside multicomponent species transport. Include reactive gas mixture (CO2,H2,CO,CH4,H2O,N2) with variable physical properties and a Ni based catalyst described with kinetics from published literature.
 
-Select problem dimension: $(@bind dim Select([2, 3], default=2))
+Select problem dimension: $(@bind dim Select([2,3], default=2))
 
 Select grid refinement level: $(@bind nref Select([0,1,2,3], default=0))
 
@@ -98,7 +98,7 @@ function ThermalDemo(dim; nref=nref)
 		side_boundaries=sb,
 		catalyst_regions=catr,
 
-		#include_dpdt=true
+		include_dpdt=true
 	)
 	
 	inival,sys = PTR_init_system(dim, grid, data)
@@ -107,7 +107,7 @@ function ThermalDemo(dim; nref=nref)
 		times = [0,1000.0]
 		control = SolverControl(nothing, sys;)
 	elseif dim == 3
-		times = [0,20.0]
+		times = [0,200.0]
 		control = SolverControl(
 			GMRESIteration(MKLPardisoLU(), EquationBlock()),
 			sys
@@ -220,11 +220,10 @@ function write_sol(sol; desc="")
 end
 
 # ╔═╡ f99203e7-e53e-4109-b6ff-7fb87d290324
-write_sol(solt(3.0), desc="include_dpdt=$(data.include_dpdt)")
+#write_sol(solt(3.0), desc="include_dpdt=$(data.include_dpdt)")
 
 # ╔═╡ dbb6346c-e08a-4ad0-a985-3052272cf6c7
-# 2D
-function Test2D(solt, grid, sys, data)
+function Test_RR(sol_ss, sys, data)
 	(;gni, m) = data
 	
 	inflow_rate, outflow_rate, reaction_rate, = BoundaryFlows_Integrals(sol_ss, sys, data)
@@ -233,7 +232,11 @@ function Test2D(solt, grid, sys, data)
 end
 
 # ╔═╡ 380c74fb-66c4-43fb-a3f5-9c942b13fa0d
-@test isapprox(Test2D(solt, grid, sys, data), 1.0401674474564733)
+if dim == 2
+	@test isapprox(Test_RR(sol_ss, sys, data), 1.0401674474564733)
+elseif dim == 3
+	@test isapprox(Test_RR(sol_ss, sys, data), 0.7774951984340692)
+end
 
 # ╔═╡ 98468f9e-6dee-4b0b-8421-d77ac33012cc
 md"""
@@ -242,6 +245,18 @@ md"""
 2) Window inner surface
 3) Bottom plate
 """
+
+# ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
+# ╠═╡ show_logs = false
+# ╠═╡ skip_as_script = true
+#=╠═╡
+let
+	(;iT,iTw,iTp,irradiated_boundaries,outlet_boundaries)=data
+	#vis=GridVisualizer(layout=(3,1), resolution=(680,900))
+	vis=GridVisualizer(layout=(1,1), resolution=(680,300))
+	scalarplot!(vis[1,1],grid, sol_ss[iT,:] .- 273.15, zoom = 2.8, aspect=4.0, show=true)
+end
+  ╠═╡ =#
 
 # ╔═╡ 58c0b05d-bb0e-4a3f-af05-71782040c8b9
 if dim == 2
@@ -275,11 +290,6 @@ md"""
 Visualize distribution of magnitude of source term from $\partial p / \partial t$ [W/m³]:
 """
 
-# ╔═╡ f41be4f2-a8f4-4ff7-a5ca-9b323d9865e8
-let
-	
-end
-
 # ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 @bind t Slider(solt.t,show_value=true,default=solt.t[end])
 
@@ -288,18 +298,6 @@ sol = solt(t);
 
 # ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
 MultiComponentReactiveMixtureProject.Print_summary(sol,grid,sys,data)
-
-# ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
-# ╠═╡ show_logs = false
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	(;iT,iTw,iTp,irradiated_boundaries,outlet_boundaries)=data
-	#vis=GridVisualizer(layout=(3,1), resolution=(680,900))
-	vis=GridVisualizer(layout=(1,1), resolution=(680,300))
-	scalarplot!(vis[1,1],grid, sol[iT,:] .- 273.15, zoom = 2.8, aspect=4.0, show=true)
-end
-  ╠═╡ =#
 
 # ╔═╡ 8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╠═╡ show_logs = false
@@ -377,9 +375,11 @@ end
 
 # ╔═╡ 5547b97e-5adf-48ec-9fb9-55d54c1503a4
 let
-	(;idpdt)=data
-	vis=GridVisualizer(resolution=(680,300))
-	scalarplot!(vis,grid, sol[idpdt,:], zoom = 1.5, aspect=4.0, show=true)
+	(;idpdt, include_dpdt) = data
+	if include_dpdt
+		vis=GridVisualizer(resolution=(680,300))
+		scalarplot!(vis,grid, sol[idpdt,:], zoom = 1.5, aspect=4.0, show=true)
+	end
 end
 
 # ╔═╡ de69f808-2618-4add-b092-522a1d7e0bb7
@@ -524,7 +524,6 @@ Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 # ╟─eb9dd385-c4be-42a2-8565-cf3cc9b2a078
 # ╟─107b390f-f9e6-4879-89a7-ec1373bafb52
 # ╠═5547b97e-5adf-48ec-9fb9-55d54c1503a4
-# ╠═f41be4f2-a8f4-4ff7-a5ca-9b323d9865e8
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╟─de69f808-2618-4add-b092-522a1d7e0bb7
 # ╟─bcaae53b-d58b-4e36-9b79-471b02acaea6

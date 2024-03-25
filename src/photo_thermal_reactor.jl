@@ -438,7 +438,8 @@ $(TYPEDFIELDS)
 	iTw::Int64=iT+1 # index of window Temperature (upper chamber)
 	iTp::Int64=iTw+1 # index of plate Temperature (lower chamber)
 	
-	ibf::Int64=iTp+1 # index of boundary flux species, workaround to include spatially varying boundary flux
+	# ibf::Int64=iTp+1 # index of boundary flux species, workaround to include spatially varying boundary flux
+	ibf::Int64 = dim == 3 ? iTp+1 : iTp # index of boundary flux species, workaround to include spatially varying boundary flux
 
 	idpdt::Int64=ibf+1 # index of auxiliary variable holding dp/dt for use in enthalpy equation
 	
@@ -641,11 +642,6 @@ function PTR_grid_boundaries_regions(dim;nref=0)
 end
 
 function PTR_init_system(dim, grid, data::ReactorData)
-
-	# handling of optional auxiliary variables: for dim == 2, ibf does not exist, reduce idptp by 1
-	if dim == 2
-		data.idpdt -= 1 
-	end
 
 	(;p,ip,Tamb,iT,iTw,iTp,ibf,idpdt,inlet_boundaries,irradiated_boundaries,outlet_boundaries,catalyst_regions,X0,solve_T_equation,include_dpdt,nom_flux) = data
 	ng=ngas(data)

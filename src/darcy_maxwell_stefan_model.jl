@@ -3,7 +3,7 @@
 @doc raw"""
 # The model
 Model equations for multi-component transport of reacting (ideal) gas phase mixtures in porous media.
-## Overall Mass Continuity
+## Total mass continuity
 Mixture mass flow (overall mass flow) through the pore space of the porous medium.
 Mixture mass averaged velocity is calculated from Darcy equation. The void fraction (porosity) is given by $\epsilon$.
 
@@ -14,7 +14,7 @@ Mixture mass averaged velocity is calculated from Darcy equation. The void fract
 \end{align}
 ```
 
-## Species Mass Continuity and Transport
+## Species mass transport
 ```math
 \begin{align}
 	\frac{\partial \epsilon \rho_i}{\partial t} + \nabla \cdot \left( \vec J_i + \rho_i \vec v \right ) - r_i(\varrho) &= 0 ~, \qquad i = 1 ... n \\
@@ -32,7 +32,7 @@ The __convective__ mass flux of species $i$ is the product of the superficial me
 function DMS_Info_isothermal() end
 
 @doc raw"""
-## Thermal Energy Transport
+## Thermal energy transport
 
 Enthalpy equation for __gas phase only__.
 Considers convective-diffusive transport of thermal energy,
@@ -42,7 +42,7 @@ Formulation based on separation of "reference  enthalpy" and "thermal enthalpy".
 In the documentation.jl notebook see section "Derivation of Separated Formulation".
 ```math
 \begin{align}
-\frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec J_i \right) + \vec q \right ) + \sum h_i^0 r_i &= 0
+\frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec J_i \right) + \vec q \right ) + \sum h_i^0 r_i - \frac{\partial p}{\partial t} &= 0
 \end{align}
 ```
 
@@ -60,7 +60,8 @@ In the documentation.jl notebook see section "Derivation of Separated Formulatio
 
 ```math
 \begin{align}
-\frac{\partial (\varepsilon \sum (\rho_i h_i^{\text{th}}(T))  + [1-\varepsilon] \rho_{\text s} h_{\text s}) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec J_i \right) + \vec q_{\text{eff}} \right ) + \sum h_i^0 r_i &= 0
+\frac{\partial (\varepsilon \sum (\rho_i h_i^{\text{th}}(T))  + [1-\varepsilon] \rho_{\text s} h_{\text s}) )}{\partial t} +& \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec J_i \right) + \vec q_{\text{eff}} \right ) \\
++& \sum h_i^0 r_i - \varepsilon \frac{\partial p}{\partial t} = 0
 
 \end{align}
 ```
@@ -333,10 +334,12 @@ Reaction function definition for use with VoronoiFVM.jl for the Darcy-Maxwell-St
     (DMS) model for Multi-component gas transport in porous media.
 """
 function DMS_reaction(f,u,node,data)
-	(;m,ip,iT,idpdt,is_reactive,solve_T_equation,include_dpdt,catalyst_regions)=data
+	(;m,ip,iT,idpdt,is_reactive,solve_T_equation,include_dpdt,catalyst_regions,poros)=data
 	ng=ngas(data)
 
-	f[iT] = zero(eltype(u))
+	if solve_T_equation
+		f[iT] = zero(eltype(u))
+	end
 	if node.region in catalyst_regions && is_reactive # catalyst layer
 		(;lcat,kinpar,Treac,)=data
 		(;nuij)=kinpar
@@ -365,7 +368,7 @@ function DMS_reaction(f,u,node,data)
 
 	if solve_T_equation && include_dpdt
 		f[idpdt] = -u[idpdt]
-		f[iT] += u[idpdt] # dpdt source term in enthalpy eq.		
+		f[iT] += poros*u[idpdt] # dpdt source term in enthalpy eq.		
 	end
 
 	f[ng] = zero(eltype(u))
