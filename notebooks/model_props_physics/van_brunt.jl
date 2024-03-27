@@ -62,6 +62,15 @@ function grid_2D(;nref=0)
 	subgrid(grid, [1])
 end
 
+# ╔═╡ b55537bf-9982-4997-8a2a-1972127bdd86
+let
+	vis = GridVisualizer(resolution=(450,225))
+	gridplot!(vis, grid_2D(nref=0), zoom=2, linewidth=1)
+	reveal(vis)
+	#fn = "../../../data/out/2024-03-25/Soret_domain_nref0.pdf"
+	#GridVisualize.save(fn, vis)
+end
+
 # ╔═╡ bfebc943-28ef-477b-bc15-6cab9d398d92
 function grid_1D(;L=18*ufac"cm", n=20)
 	X=(0:(L/n):L)
@@ -79,15 +88,12 @@ elseif dim == 2
 	const Γ_right = 2
 end;
 
-# ╔═╡ b55537bf-9982-4997-8a2a-1972127bdd86
-gridplot(grid, resolution=(500,300), zoom=2)
-
 # ╔═╡ 9fde21eb-1112-40ec-8fe2-0c8a12c9926d
 md"""
 # M-S flux-force relationship
 ```math
 \begin{align}
-	\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} + x_i \sum_{j=1}^{n} \frac{x_j}{D_{ij}} (\mathcal{D}_i^{\text T} - \mathcal{D}_j^{\text T}) \frac{\nabla T}{T} \right) &= -\sum_{j=1 \atop j \neq i}^{n} \frac{w_j \vec J_i-w_i \vec \PhJ{D_{ij} M_i M_j} \\
+	\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} + x_i \sum_{j=1}^{n} \frac{x_j}{D_{ij}} (\mathcal{D}_i^{\text T} - \mathcal{D}_j^{\text T}) \frac{\nabla T}{T} \right) &= -\sum_{j=1 \atop j \neq i}^{n} \frac{w_j \vec J_i-w_i \vec J_j}{D_{ij} M_i M_j} \\
 \end{align}
 ```
 """
@@ -268,11 +274,11 @@ md"""
 | [1] | This work |
 |:----------:|:----------:|
 | $(LocalResource("img/vanbrunt_result_xHe_2.png", :width=> 250)) | __He__ molar fraction |
-| $(LocalResource("img/vanbrunt_result_xHe.png", :width=> 250)) 	| $((; gni) = data; scalarplot(grid, sol[gni[:He],:], resolution=(300,200), colormap=:coolwarm, zoom=2.5) ) |
+| $(LocalResource("img/vanbrunt_result_xHe.png", :width=> 250)) 	| $((; gni) = data; scalarplot(grid, sol[gni[:He],:], resolution=(400,300), colormap=:coolwarm )) |
 | $(LocalResource("img/vanbrunt_result_xKr_2.png", :width=> 250))     | __Kr__ molar fraction |
-| $(LocalResource("img/vanbrunt_result_xKr.png", :width=> 250))  	| $((;gni) = data; scalarplot(grid, sol[gni[:Kr],:], resolution=(300,200), colormap=:coolwarm, zoom=2.5) ) |
+| $(LocalResource("img/vanbrunt_result_xKr.png", :width=> 250))  	| $((;gni) = data; scalarplot(grid, sol[gni[:Kr],:], resolution=(400,300), colormap=:coolwarm) ) |
 | $(LocalResource("img/vanbrunt_result_T_2.png", :width=> 250))  	| __Temperature (K)__ |
-| $(LocalResource("img/vanbrunt_result_T.png", :width=> 250))  	| $((;iT) = data; scalarplot(grid, sol[iT,:], resolution=(300,200), colormap=:gist_heat, zoom=2.5) ) |
+| $(LocalResource("img/vanbrunt_result_T.png", :width=> 250))  	| $((;iT) = data; scalarplot(grid, sol[iT,:], resolution=(400,300), colormap=:gist_heat) ) |
 """
 
 # ╔═╡ 9ba456c7-f6ed-49c5-9878-d9e0deb96384
@@ -327,10 +333,37 @@ md"""
 | $(LocalResource("img/vanbrunt_result_T.png", :width=> 250))  	| $(scalarplot(grid, sol_ss[iT,:], limits=(300, 400), levels=51, linewidth=1, colorbarticks=[300,320,340,360,380,400], resolution=(400,300), colormap=:gist_heat, zoom=2.5) ) |
 """
 
+# ╔═╡ 2dc80ec7-f9ad-4e98-92de-faeac2beb368
+let
+	(; gni,iT,ip) = data;
+	
+	#vis =GridVisualizer(layout=(2,2), resolution=(1000,600))
+	vis =GridVisualizer(layout=(2,2), resolution=(900,450))
+	
+	scalarplot!(vis[1,1], grid, sol_ss[gni[:He],:], limits=(0.32, 0.345), levels=51, linewidth=1, colorbarticks=[0.32,0.325,0.33,0.335,0.34,0.345], colormap=:coolwarm, xlabel="X (cm)", ylabel="Y (cm)", title = "He molar fraction")
+
+	scalarplot!(vis[1,2], grid, sol_ss[gni[:Kr],:], limits=(0.325, 0.34), levels=28, linewidth=1, colorbarticks=[0.325,0.33,0.335,0.34], colormap=:coolwarm, xlabel="X (cm)", ylabel="Y (cm)", title = "Kr molar fraction")
+
+	scalarplot!(vis[2,1], grid, sol_ss[iT,:], limits=(300, 400), levels=51, linewidth=1, colorbarticks=[300,320,340,360,380,400], colormap=:gist_heat, xlabel="X (cm)", ylabel="Y (cm)", title = "Temperature (K)")
+	
+	#scalarplot!(vis[1,1], grid, sol[gni[:He],:], colormap=:coolwarm, title = "He molar fraction",)
+	#scalarplot!(vis[1,2], grid, sol[gni[:Kr],:], colormap=:coolwarm, title = "Kr molar fraction",)
+	#scalarplot!(vis[2,1], grid, sol[iT,:], colormap=:gist_heat, title = "Temperature (K)",)
+
+	#f = map((x, y) -> maximum(sol[ip,:]), grid)
+	pmax = round(maximum(sol_ss[ip,:]))
+	f = map((x, y) -> pmax, grid)
+	scalarplot!(vis[2,2], grid, f, xlabel="X (cm)", ylabel="Y (cm)", title = "Pressure (Pa)",)
+	reveal(vis)
+	
+	#fn = "../../../data/out/2024-03-25/Soret_result_highres_nref1.pdf"
+	#GridVisualize.save(fn, vis)
+end
+
 # ╔═╡ 65dbb492-4795-44ca-afcb-fb2a2c925d92
 md"""
 # References
-1) Van_Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599                            .
+1) Van_Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599                              .
 1) Giovangigli, Vincent (2016): Solutions for Models of Chemically Reacting Mixtures. In: Yoshikazu Giga und Antonin Novotny (Hg.): Handbook of Mathematical Analysis in Mechanics of Viscous Fluids. Cham: Springer International Publishing, S. 1–52.
 """
 
@@ -407,7 +440,7 @@ end
 # ╟─e9cb07eb-cfbb-4802-bc7f-6de7a6ad8ac6
 # ╠═7f1d9cf8-7785-48c1-853c-74680188121f
 # ╟─07e97ba1-357a-4de8-ad5a-64e7a27b0cb8
-# ╟─9ba456c7-f6ed-49c5-9878-d9e0deb96384
+# ╠═9ba456c7-f6ed-49c5-9878-d9e0deb96384
 # ╠═8b30f68c-9111-4803-b3dc-16e4c440865b
 # ╠═cf1d3089-a0d2-445d-b004-571776f1c9a0
 # ╠═ad68e43e-df7e-4a06-a697-fa5824f54d3e
@@ -419,8 +452,9 @@ end
 # ╠═56b18561-2d4e-42a8-a363-98c783d0f991
 # ╠═a31d1583-8b59-4f30-9fae-cc4c3ceea1cd
 # ╟─8c53810e-330f-4eef-9402-62d31fb5d753
-# ╟─4296aa28-9f52-4d40-a968-ee583ffc7d3c
+# ╠═4296aa28-9f52-4d40-a968-ee583ffc7d3c
 # ╟─b0007963-cf73-49b5-92a7-5a2ef1bbd2f5
+# ╠═2dc80ec7-f9ad-4e98-92de-faeac2beb368
 # ╟─65dbb492-4795-44ca-afcb-fb2a2c925d92
 # ╟─e8425c71-666a-462e-9c4d-fc480810f922
 # ╠═3c4ae416-a47b-451d-b870-fa10166d97de

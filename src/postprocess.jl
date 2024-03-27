@@ -360,8 +360,12 @@ Helper function to print an extended summary based on calculated flux integrals 
 """
 function Print_summary_ext(solt,grid,sys,data)
 
-	t = solt.t[end]
-	sol = solt(t)
+    if isa(solt, TransientSolution)
+        t = solt.t[end]
+        sol = solt(t)
+    else
+        sol = solt
+    end
 
 	(;gn,gni,m,nflowin,X0) = data
 	ng=ngas(data)

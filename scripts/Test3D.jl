@@ -10,6 +10,7 @@ function run(;dim=3, times=[0,20.0], nref=0)
         dim=dim,
         nflowin = 7.4*ufac"mol/hr",
 		nom_flux = 70.0*ufac"kW/m^2",		
+        # nom_flux = 100.0*ufac"kW/m^2",		
 		dt_hf_irrad = (2.0, 10.0),
 		dt_hf_enth = (2.0, 3.0),
 		T_gas_in = 273.15 + 25,
@@ -65,7 +66,8 @@ function runtests()
     solt,grid,sys,data = run()
 
     solss,grid,sys,data = run_steadystate(solt,sys,grid,data)
-    @test isapprox(minimum(solss[data.iT,:]), 410.60941331349306)    
+    # @test isapprox(minimum(solss[data.iT,:]), 410.60941331349306) # 100 suns
+    @test isapprox(minimum(solss[data.iT,:]), 382.19131101873813) # 70 suns
 end
 
 end
