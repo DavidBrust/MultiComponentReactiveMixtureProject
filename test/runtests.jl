@@ -16,13 +16,8 @@ notebooks = [
     @testplutonotebooks(joinpath(@__DIR__, "..", "notebooks"), notebooks)
 end
 
-# scripts = ["TestSim.jl"]
 
-# @testset "scripts + notebooks" begin
-#     @testscripts(joinpath(@__DIR__, "..", "scripts"), scripts)
-# end
-
-modules = ["Test3D.jl"]
+modules = ["PTR3D.jl"]
 
 @testset "module examples" begin
     @testmodules(joinpath(@__DIR__, "..", "scripts"), modules)

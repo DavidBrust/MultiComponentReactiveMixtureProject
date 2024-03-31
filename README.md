@@ -23,12 +23,25 @@ After checking out or updating, run from the project root directory:
 $ julia --project -e "using Pkg; Pkg.instantiate()"
 ```
 
-Computational notebooks based on the ``Pluto.jl`` package are used to illustrate this package's functionality,
-where notebooks located in the notebooks subfolder.
+Computational notebooks based on the ``Pluto.jl`` package are used to illustrate this package's functionality, located in the notebooks subfolder.
 
 #### Notebooks
 
-- `documentation.jl`: project documentation
-- `Uphill_Diff1D.jl`: example of transport uphill a concentration gradient in iso-thermal conditions
+- `documentation.jl`: documentation of model equations
+- `Thermodiffusion.jl`: demonstration of thermodiffusion (reproduces figures shown in the article)
+- `Uphill_Diff1D.jl`: illustration of transport against a concentration gradient (convection driven) in iso-thermal conditions
 - `Residual_MoleFrac1D.jl`: investigation of grid refinement on residual molar fractions
-- `PTReactorDemo.jl.jl`: example application of photo-thermal reactor in 2D and 3D geometry and non-isothermal conditions
+- `PTReactorDemo.jl`: application to photo-thermal reactor in 2D and 3D geometry and non-isothermal conditions
+
+#### Examples shown in the article
+Running the following files allows to reproduce the figures shown in the article:
+- `scripts/PTR3D.jl`: script for 3D Photo-thermal reactor simulation with data export for plot (Figure 5, Section 4.1)
+- `Thermodiffusion.jl`: Pluto notebook demonstrating thermodiffusion, export plot (Figure 8, Section 4.2)
+
+To run the script `PTR3D.jl`, run from the Julia REPL in the project root:
+```
+include("scripts/PTR3D.jl")
+PTR3D.run()
+```
+
+The script will run the simulation and will export the solution in VTK format to a new folder for plotting with [ParaView](https://www.paraview.org/). Use the provided ParaView state file `data/IJHMT_3D.pvsm` to reproduce Figure 5 in Section 4.1.
