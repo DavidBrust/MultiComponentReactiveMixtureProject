@@ -1,6 +1,9 @@
 MultiComponentReactiveMixtureProject
 ====================================
 
+[![DOI](https://zenodo.org/badge/643598052.svg)](https://zenodo.org/doi/10.5281/zenodo.10901335)
+
+
 Project package for the implementation of a model for heat and multi-component, reactive gas phase transport in porous media.
 
 The model is applied to the simulation of a Photo-Thermal catalytic reactor. 
