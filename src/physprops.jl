@@ -345,6 +345,80 @@ Ar=FluidProps(
 )
 );
 
+# all values taken from VDI heat atlas 2010 chapter D3
+He=FluidProps(
+    name="He" ,
+	# D3.1 Table 1
+	MW=4.00*ufac"g/mol",
+    # standard enthalpy of formation taken from Aspen Plus V10, for ideal gas at 25 °C and 1 atm pressure (1.01325 bar) 
+    ΔHform=0.0*ufac"kJ/mol",
+    # Group contributions for the diffusion volumes in the Fuller method from VDI heat atlas 2010, D1 Table 9 (p.150)
+    ΔvF=2.67, 
+	# D3.1 Table 6
+	HeatCap=PropsCoeffs(
+	A=0.0,
+	B=2.5,
+	C=2.5,
+	D=0.0,
+	E=0.0,
+	F=0.0,
+	G=0.0
+	),
+	# D3.1 Table 10
+	ThermCond=PropsCoeffs( 
+	A=34.000e-3,
+	B=0.457e-3,
+	C=-0.21489e-6,
+	D=0.100710e-9,
+	E=-0.019140e-12
+	),
+	# D3.1 Table 8
+	DynVisc=PropsCoeffs(
+	A=0.39223e-5,
+	B=0.61300e-7,
+	C=-0.31007e-10,
+	D=0.01479e-12,
+	E=-0.00284e-15
+)
+);
+
+# all values taken from VDI heat atlas 2010 chapter D3
+Kr=FluidProps(
+    name="Kr" ,
+	# D3.1 Table 1
+	MW=83.80*ufac"g/mol",
+    # standard enthalpy of formation taken from Aspen Plus V10, for ideal gas at 25 °C and 1 atm pressure (1.01325 bar) 
+    ΔHform=0.0*ufac"kJ/mol",
+    # Group contributions for the diffusion volumes in the Fuller method from VDI heat atlas 2010, D1 Table 9 (p.150)
+    ΔvF=24.5, 
+	# D3.1 Table 6
+	HeatCap=PropsCoeffs(
+	A=0.0,
+	B=2.5,
+	C=2.5,
+	D=0.0,
+	E=0.0,
+	F=0.0,
+	G=0.0
+	),
+	# D3.1 Table 10
+	ThermCond=PropsCoeffs( 
+	A=-0.389e-3,
+	B=0.039e-3,
+	C=-0.021190e-6,
+	D=0.008780e-9,
+	E=-0.001520e-12
+	),
+	# D3.1 Table 8
+	DynVisc=PropsCoeffs(
+	A=-0.07920e-5,
+	B=1.02624e-7,
+	C=-0.55428e-10,
+	D=0.02187e-12,
+	E=-0.00369e-15
+)
+);
+
 #Dynamic viscosity of gases at low pressures, Pa*s
 function dynvisc_gas(Fluid, T)
 	(;A,B,C,D,E) = Fluid.DynVisc
@@ -354,40 +428,7 @@ end
 
 
 
-# from VDI heat atlas 2010 ch. D
-# mixture dynamic viscosity according to Wilke mixing rule
-# Wilke CR (1950) A viscosity equation for gas mixtures. J Chem Phys 18:517
-# function dynvisc_mix(data, T, x)
-#     ng = data.ng
-#     Fluid = data.Fluids
-#     mumix = 0
-#     #mu = zeros(Float64, ng)
-#     #M = zeros(Float64, ng)
-#     mu = zeros(typeof(T), ng)
-#     M = zeros(typeof(T), ng)
-#     for i=1:ng
-#         mu[i] = dynvisc_gas(Fluid[i], T)
-#         M[i] = data.Fluids[i].MW
-#     end
-#     for i=1:ng
-#         sumyFij = 0
-#         for j=1:ng
-#             Fij = (1+(mu[i]/mu[j])^0.5*(M[j]/M[i])^0.25)^2 / sqrt(8*(1+M[i]/M[j]))
-#             sumyFij += x[j]*Fij
-#         end
-#         if x[i] > 0
-#             mumix += x[i] * mu[i] / sumyFij
-#         end
-#    end
-#     mumix
-# end
 
-#
-# By default, ngas(data) returns data.ng. For the ModelData type from FixAllocations
-# it uses the definition from the notebook
-# function ngas(data::Any)
-#     data.ng
-# end
 
 
 #combined function returning mixture dynamic viscosity as well as thermal conductivity
@@ -399,7 +440,7 @@ end
 function dynvisc_thermcond_mix(data, T, x)
     ng = ngas(data)
     # Fluid = data.Fluids
-    (;Fluids, constant_properties) = data
+    (;Fluids, constant_properties, constant_species_viscosities, constant_species_thermal_conductivities) = data
 
     #  !!!ALLOC for types stubility & correctness
     #  !!!ALLOC initialize with zero(eltype) instead of 0.0
@@ -407,30 +448,30 @@ function dynvisc_thermcond_mix(data, T, x)
     lambdamix=zero(eltype(T))
     
     if constant_properties
-        mumix += 2.0e-5*ufac"Pa*s"
-        lambdamix += 2.0e-2*ufac"W/(m*K)"
-    else
-        # !!!ALLOC Use MVectors with static size information instead of Vector
-        mu=MVector{ngas(data),eltype(T)}(undef)
-        lambda=MVector{ngas(data),eltype(T)}(undef)
-        M=MVector{ngas(data),eltype(T)}(undef)
+		mumix += 2.0e-5*ufac"Pa*s"
+		lambdamix += 2.0e-2*ufac"W/(m*K)"
+	else
+		# !!!ALLOC Use MVectors with static size information instead of Vector
+		mu=MVector{ngas(data),eltype(x)}(undef)
+		lambda=MVector{ngas(data),eltype(x)}(undef)
+		M=MVector{ngas(data),eltype(x)}(undef)
 
-        for i=1:ngas(data)
-            mu[i] = dynvisc_gas(Fluids[i], T)
-            lambda[i] = thermcond_gas(Fluids[i], T)
-            M[i] = Fluids[i].MW
-        end
-        for i=1:ng
-            sumyFij = zero(T)
-            for j=1:ng
-                Fij = (1+(mu[i]/mu[j])^0.5*(M[j]/M[i])^0.25)^2 / sqrt(8*(1+M[i]/M[j]))
-                sumyFij += x[j]*Fij
-            end
-            if x[i] > 0
-                mumix += x[i] * mu[i] / sumyFij
-                lambdamix += x[i] * lambda[i] / sumyFij
-            end
-        end
+		for i=1:ngas(data)
+			mu[i] = dynvisc_gas(Fluids[i], T)
+				lambda[i] = thermcond_gas(Fluids[i], T)
+			M[i] = Fluids[i].MW
+		end
+		for i=1:ng
+			sumyFij = zero(T)
+			for j=1:ng
+				Fij = (1+(mu[i]/mu[j])^0.5*(M[j]/M[i])^0.25)^2 / sqrt(8*(1+M[i]/M[j]))
+				sumyFij += x[j]*Fij
+			end
+			if x[i] > 0
+				mumix += x[i] * mu[i] / sumyFij
+				lambdamix += x[i] * lambda[i] / sumyFij
+			end
+		end
     end
 
     return  mumix, lambdamix

@@ -1,57 +1,81 @@
 module Sensitivity
 
 using DataFrames, CSV, LinearAlgebra
-include("../../notebooks/model_props_physics/PTReactor_sens.jl")
+# include("../../notebooks/model_props_physics/PTReactor_sens.jl")
+
+function getIndices(grid)
+    d1 = 0.025*sqrt(2)/2
+    d2 = 0.05*sqrt(2)/2
+    
+    # uc
+    T_03 = [0.08,0.08,0.005] # y,x,z
+    T_04 = T_03 .+ [d2, -d2, 0]
+    T_05 = T_03 .+ [d1, d1, 0]
+    T_06 = T_03 .+ [-d1, -d1, 0]
+    T_07 = T_03 .+ [-d2, d2, 0]
+    # lc
+    T_12 = [0.08,0.08,0.0] # y,x,z
+    T_13 = T_12 .+ [d1, d1, 0]
+    T_14 = T_12 .+ [-d2, d2, 0]	
+    
+    
+    function index(c, coords)
+        cols = eachcol(coords)
+        findmin(norm.([c - col for col in cols]))[2]
+    end
+
+    [index(c,grid[Coordinates]) for c in [T_03,T_04,T_05,T_06,T_07,T_12,T_13,T_14]]
+    # [index(c,grid[Coordinates]) for c in [T_03]] # only get center temperature
+end
+
+function probe_Temps(solt,grid,data)
+    # # solt,grid,sys,data=PTR_base(dim,par;times=[0.0,5.0]);
+    # # return solt,grid,sys,data
+    # return PTR_base(dim,par);
+    
+
+    sol = solt(solt.t[end])
+    (;iT) = data
+
+    if dim == 2
+        return sol[iT,91] - 273.15
+    elseif dim == 3
+        # return sol[iT,3035] .- 273.15
+        return sol[iT,getIndices(grid)] .- 273.15
+    end
+    
+end
+
+function save_Temps(solt,grid,data)
+
+    (;nom_flux, nflowin) = data
+    T_03,T_04,T_05,T_06,T_07,T_12,T_13,T_14 = probe_Temps(solt,grid,data)
+              
+    df = DataFrame()
+    df[!, :nom_flux] = nom_flux
+    df[!, :nflowin]  .= nflowin
+    df[!, :T_03] .= T_03
+    df[!, :T_04] .= T_04
+    df[!, :T_05] .= T_05
+    df[!, :T_06] .= T_06
+    df[!, :T_07] .= T_07
+    df[!, :T_12] .= T_12
+    df[!, :T_13] .= T_13
+    df[!, :T_14] .= T_14
+
+    CSV.write("data/out/2024-01-26/Tc_Uc.csv", df)
+end
 
 function run(nom_fluxs, nflowins; SensPar=SensPar)
 
-    function getIndices(grid)
-        d1 = 0.025*sqrt(2)/2
-        d2 = 0.05*sqrt(2)/2
-        
-        # uc
-        T_03 = [0.08,0.08,0.005] # y,x,z
-        T_04 = T_03 .+ [d2, -d2, 0]
-        T_05 = T_03 .+ [d1, d1, 0]
-        T_06 = T_03 .+ [-d1, -d1, 0]
-        T_07 = T_03 .+ [-d2, d2, 0]
-        # lc
-        T_12 = [0.08,0.08,0.0] # y,x,z
-        T_13 = T_12 .+ [d1, d1, 0]
-        T_14 = T_12 .+ [-d2, d2, 0]	
-        
-        
-        function index(c, coords)
-            cols = eachcol(coords)
-            findmin(norm.([c - col for col in cols]))[2]
-        end
+    
 
-        [index(c,grid[Coordinates]) for c in [T_03,T_04,T_05,T_06,T_07,T_12,T_13,T_14]]
-        # [index(c,grid[Coordinates]) for c in [T_03]] # only get center temperature
-    end
 
-    function probe_Temps(par;dim=2)
-        # solt,grid,sys,data=PTR_base(dim,par;times=[0.0,5.0]);
-        # return solt,grid,sys,data
-        return PTR_base(dim,par);
-        
 
-        sol = solt(solt.t[end])
-        (;iT) = data
-
-        if dim == 2
-            return sol[iT,91] - 273.15
-        elseif dim == 3
-            # return sol[iT,3035] .- 273.15
-            return sol[iT,getIndices(grid)] .- 273.15
-        end
-        
-    end
-
-    function SensitivityUncertainty(par;dim=2)
-        dT2_dp = T2_part_deriv(dim, par, ReactorData())
-        return calc_combined_uncertainty_T2(par,dT2_dp)
-    end
+    # function SensitivityUncertainty(par;dim=2)
+    #     dT2_dp = T2_part_deriv(dim, par, ReactorData())
+    #     return calc_combined_uncertainty_T2(par,dT2_dp)
+    # end
 
     T_03s = Float64[]
     T_04s = Float64[]

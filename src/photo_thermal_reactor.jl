@@ -268,8 +268,6 @@ function PTR_bstorage(f,u,bnode,data)
 end
 
 
-
-
 #"""
 #Effective thermal conductivity of porous filter frit according to:
 #
@@ -280,14 +278,17 @@ end
 # calculate fixed bed (porous material) effective thermal conductivity
 
 
-function kbed(data, lambdaf)
-	(;poros,lambdas) = data
-	B=1.25*((1.0-poros)/poros)^(10.0/9.0)
-	kp=lambdas/lambdaf
-	N=1.0-(B/kp)
-	kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
-	1.0-sqrt(1.0-poros)+sqrt(1.0-poros)*kc
-end
+# function kbed(data, lambdaf)
+# 	(;poros,lambdas) = data
+# 	# !!! regularize function to catch poros=1 (pure gas phase) !!!
+# 	ϵ_reg = 1.0e-12
+# 	B=1.25*((1.0-poros)/poros)^(10.0/9.0)
+# 	kp=lambdas/lambdaf
+# 	N=1.0-(B/kp)
+# 	#kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
+# 	kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/(B+ϵ_reg)) - (B+1.0)/2.0 - (B-1.0)/N)
+# 	1.0-sqrt(1.0-poros)+sqrt(1.0-poros)*kc
+# end
 
 # mostly equivalent to VDI Heat Atlas 2010, ch. D6.3 eqs. (5a-5e). with addition
 # of flattening coefficient ψ, that might be relevant for sintered materials
@@ -437,6 +438,8 @@ $(TYPEDFIELDS)
     solve_T_equation::Bool = true
 	constant_irradiation_flux_bc = true
     constant_properties::Bool = false
+	include_Soret_Dufour::Bool = false
+	include_dpdt::Bool = false
 
 	#ip::Int64 = NG+1
     ip::Int64 = ng+1
@@ -445,7 +448,10 @@ $(TYPEDFIELDS)
 	iTw::Int64=iT+1 # index of window Temperature (upper chamber)
 	iTp::Int64=iTw+1 # index of plate Temperature (lower chamber)
 	
-	ibf::Int64=iTp+1 # index of boundary flux species, workaround to include spatially varying boundary flux
+	# ibf::Int64=iTp+1 # index of boundary flux species, workaround to include spatially varying boundary flux
+	ibf::Int64 = dim == 3 ? iTp+1 : iTp # index of boundary flux species, workaround to include spatially varying boundary flux
+
+	idpdt::Int64=ibf+1 # index of auxiliary variable holding dp/dt for use in enthalpy equation
 	
 	p::Float64 = 1.0*ufac"bar"
 	Tamb::Float64 = 298.15*ufac"K"
@@ -469,11 +475,18 @@ $(TYPEDFIELDS)
 		x[gni[:CO2]] = 1.0
 		#x[gni[:N2]] = 1.0
 		x/sum(x)
-	end # inlet composition
+	end # inlet / initial composition
 	
 	mmix0::Float64 = sum(X0 .* m)
 	W0::Vector{Float64} = @. m*X0/mmix0
 
+	# Constant property storage
+	constant_binary_diff_coeffs::Vector{Float64} = ones(Float64, ng*(ng-1)÷2) * 0.2*ufac"cm^2/s"
+	constant_newman_soret_diff_coeffs::Vector{Float64} = ones(Float64, ng*(ng-1)÷2) * 0.1
+	constant_species_viscosities::Vector{Float64} = ones(Float64, ng) * 2.0e-5*ufac"Pa*s"
+	constant_species_thermal_conductivities::Vector{Float64} = ones(Float64, ng) * 0.02*ufac"W/(m*K)"
+
+	# Inflow properties
 	nflowin::Float64 = 7.4*ufac"mol/hr"
 	mflowin::Float64 = nflowin*mmix0
 	mfluxin::Float64 = mflowin/(100*ufac"cm^2")*ufac"kg/(m^2*s)"
@@ -519,22 +532,109 @@ $(TYPEDFIELDS)
 	lambda_window::Float64=1.38*ufac"W/(m*K)"
 	lambda_Al::Float64=235.0*ufac"W/(m*K)"
 
-	# Sensitivity Parameters
-	# sp1::Tv = 1.0
-	sp::Vector{Tv} = [0.0]
-	
+	logreg::Float64=1.0e-20
 
-    function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,permeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_irradiation_flux_bc,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,sp)
+    function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,include_Soret_Dufour,include_dpdt,ip,iT,iTw,iTp,ibf,idpdt,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs,constant_species_viscosities,constant_species_thermal_conductivities,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,logreg)
         KP = MultiComponentReactiveMixtureProject.KinData{nreac(kinpar)}
 		Tv = eltype(sp)
 		# FluxIntp = flux_interpol(nom_flux)
 		# flux_inner, flux_outer = flux_inner_outer(nom_flux)
-        new{ng,KP,Tv}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,permeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_irradiation_flux_bc,constant_properties,ip,iT,iTw,iTp,ibf,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,sp)
+        new{ng,KP}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,include_Soret_Dufour,include_dpdt,ip,iT,iTw,iTp,ibf,idpdt,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs,constant_species_viscosities,constant_species_thermal_conductivities,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,logreg)
 
     end
 end
 
-ngas(::ReactorData{NG,KP,Tv}) where {NG,KP,Tv} = NG
+
+"""
+Regularized logarithm:
+```
+   rlog(u,data)= log(u+electrolyte.logreg)
+```
+"""
+rlog(x,data::ReactorData)=rlog(x,data.logreg)
+
+function rlog(x,eps)
+    if x<eps
+        return log(eps)+(x-eps)/eps
+    else
+        return log(x)
+    end
+end
+
+"""
+    rexp(x;trunc=500.0)
+
+Regularized exponential. Linear continuation for `x>trunc`,  
+returns 1/rexp(-x) for `x<-trunc`.
+"""
+function rexp(x; trunc = 20.0)
+    if x < -trunc
+        1.0 / rexp(-x; trunc)
+    elseif x <= trunc
+        exp(x)
+    else
+        exp(trunc) * (x - trunc + 1)
+    end
+end
+
+function kbed(data, lambdaf)
+	(;poros,lambdas) = data
+	B=1.25*((1.0-poros)/poros)^(10/9)
+	kp=lambdas/lambdaf
+	N=1-(B/kp)
+	# !!! regularize function to catch poros=1 (pure gas phase) !!!
+	#kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
+	kc=2/N* (B/N^2 * (kp-1)/kp * (log(kp)-rlog(B,data)) - (B+1)/2 - (B-1)/N)
+	# !!! reglog
+	1-sqrt(1-poros)+sqrt(1-poros)*kc
+end
+
+
+"""
+Regularized logarithm:
+```
+   rlog(u,data)= log(u+electrolyte.logreg)
+```
+"""
+rlog(x,data::ReactorData)=rlog(x,data.logreg)
+
+function rlog(x,eps)
+    if x<eps
+        return log(eps)+(x-eps)/eps
+    else
+        return log(x)
+    end
+end
+
+"""
+    rexp(x;trunc=500.0)
+
+Regularized exponential. Linear continuation for `x>trunc`,  
+returns 1/rexp(-x) for `x<-trunc`.
+"""
+function rexp(x; trunc = 20.0)
+    if x < -trunc
+        1.0 / rexp(-x; trunc)
+    elseif x <= trunc
+        exp(x)
+    else
+        exp(trunc) * (x - trunc + 1)
+    end
+end
+
+function kbed(data, lambdaf)
+	(;poros,lambdas) = data
+	B=1.25*((1.0-poros)/poros)^(10/9)
+	kp=lambdas/lambdaf
+	N=1-(B/kp)
+	# !!! regularize function to catch poros=1 (pure gas phase) !!!
+	#kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
+	kc=2/N* (B/N^2 * (kp-1)/kp * (log(kp)-rlog(B,data)) - (B+1)/2 - (B-1)/N)
+	# !!! reglog
+	1-sqrt(1-poros)+sqrt(1-poros)*kc
+end
+
+ngas(::ReactorData{NG,KP}) where {NG,KP} = NG
 
 function PTR_grid_boundaries_regions(dim;nref=0)
 	Ω_high_perm = 2 # high permeability, unblocked region
@@ -613,7 +713,7 @@ end
 
 function PTR_init_system(dim, grid, data::ReactorData; assembly=:edgewise, unknown_storage=:dense)
 
-	(;p,ip,Tamb,iT,iTw,iTp,ibf,inlet_boundaries,irradiated_boundaries,outlet_boundaries,catalyst_regions,permeable_regions,X0,solve_T_equation,nom_flux,constant_irradiation_flux_bc,sp)=data
+	(;p,ip,Tamb,iT,iTw,iTp,ibf,idpdt,inlet_boundaries,irradiated_boundaries,outlet_boundaries,catalyst_regions,permeable_regions,X0,solve_T_equation,include_dpdt,nom_flux,constant_irradiation_flux_bc,sp) = data
 	ng=ngas(data)
 	Tv = eltype(sp)
 
@@ -628,20 +728,24 @@ function PTR_init_system(dim, grid, data::ReactorData; assembly=:edgewise, unkno
 							bstorage=PTR_bstorage,
 							boutflow=DMS_boutflow,
 							outflowboundaries=outlet_boundaries,
-							assembly=assembly,
-							unknown_storage=unknown_storage
+							assembly=:edgewise,
+							unknown_storage=:dense
 							)
 
 	if solve_T_equation
 		enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
 		enable_boundary_species!(sys, iTw, irradiated_boundaries) # window temperature as boundary species in upper chamber
+		enable_boundary_species!(sys, iTp, outlet_boundaries) # plate temperature as boundary species in lower chamber
 
 		# for 3 dimensional domain, apply measured irradiation flux density as boundary condition
 		if dim == 3 && !constant_irradiation_flux_bc
 			# boundary flux species, workaround to implement spatially varying irradiation
 			enable_boundary_species!(sys, ibf, irradiated_boundaries)
 		end
-		enable_boundary_species!(sys, iTp, outlet_boundaries) # plate temperature as boundary species in lower chamber
+		if include_dpdt
+			enable_species!(sys; species=idpdt) # auxiliary variable holding dpdt term
+		end
+		
 	else
 		enable_species!(sys; species=collect(1:(ng+1))) # gas phase species xi, ptotal
 	end
@@ -675,7 +779,7 @@ function PTR_init_system(dim, grid, data::ReactorData; assembly=:edgewise, unkno
 				a[1]=b[1]
 				a[2]=b[2]
 			end
-			inival[ibf,:] .= 0.0
+			inival[ibf,:] .= zero(eltype(inival))
 			sub=ExtendableGrids.subgrid(grid,irradiated_boundaries,boundary=true, transform=d3tod2 )
 				
 			for inode in sub[CellNodes]
@@ -683,6 +787,9 @@ function PTR_init_system(dim, grid, data::ReactorData; assembly=:edgewise, unkno
 				inodeip = sub[ExtendableGrids.NodeParents][inode]
 				inival[ibf,inodeip] = FluxIntp(c[1]-0.02, c[2]-0.02)
 			end
+		end
+		if include_dpdt
+			inival[idpdt,:] .= zero(eltype(inival))
 		end
 	end
 

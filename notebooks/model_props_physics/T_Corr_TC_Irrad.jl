@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.38
+# v0.19.40
 
 using Markdown
 using InteractiveUtils
@@ -92,7 +92,8 @@ phi10 = phi12 = 0.5;
 
 # ╔═╡ 850a86cf-97db-40dd-994b-e9dd903a0522
 function EB_TC_conv(T1, T2, nTC, data; phi10=phi10, phi12=phi12,)
-	(;nom_flux, T_gas_in, k_nat_conv, FluxIntp) = data
+	(;nom_flux, T_gas_in, k_nat_conv) = data
+	FluxIntp = MultiComponentReactiveMixtureProject.flux_interpol(nom_flux)
 	#G_lamp = nom_flux
 
    	d1 = 0.025*sqrt(2)/2
@@ -101,10 +102,10 @@ function EB_TC_conv(T1, T2, nTC, data; phi10=phi10, phi12=phi12,)
 	T_03 = [0.06,0.06] # y,x,z
 	dTC_coord = Dict(
 		3 => T_03,
-		4 => T_03 .+ [d1, d1],
-		5 => T_03 .+ [d1, d1],
-		6 => T_03 .+ [-d1, -d1],
-		7 => T_03 .+ [-d2, d2]
+		4 => T_03 .+ [d2, -d2],
+		5 => T_03 .+ [-d1, d1],
+		6 => T_03 .+ [d1, -d1],
+		7 => T_03 .+ [-d2, -d2]
 	)
 	# uc
 	
@@ -155,6 +156,9 @@ begin
 	
 end;
 
+# ╔═╡ 264c3b82-576a-430c-a61b-17091f9d1a99
+df_230804_Texp
+
 # ╔═╡ 3be5c8e0-d621-4670-aea3-3c928b38668a
 md"""
 ```20230807_Chemical_Analysis.xlsx```
@@ -201,15 +205,6 @@ function parity_plot_Tcalc(df_calc,df_exp, fflow)
 	Plots.scatter!(p,df.exp_T_06_TC, df.calc_T_06_TC, label="T_06",c=4)
 	Plots.scatter!(p,df.exp_T_07_TC, df.calc_T_07_TC, label="T_07",c=5)
 	
-end
-
-# ╔═╡ d51f7678-1bd0-4018-b23b-b4384faa834a
-let
-	A = ph"σ"*(220+273.15)^4
-	B = ph"σ"*(600+273.15)^4 
-	C = 70000
-
-	A/B
 end
 
 # ╔═╡ 14d41f40-059c-4826-92c1-d3a42260385f
@@ -554,11 +549,6 @@ end
 # ╔═╡ 9cc7316f-2654-425d-bc9d-1e26197f081c
 data = newData(T2)
 
-# ╔═╡ 981530f4-8998-49f2-9b6c-410565c467ec
-let
-	data.FluxIntp(0.06,0.06)
-end
-
 # ╔═╡ bd4e7816-7790-4657-aa3c-78ce6bd578c7
 md"""
 ## Thermocouple
@@ -822,15 +812,19 @@ function df_Tcalc(f)
 end
 
 # ╔═╡ 673e65b6-63c3-462f-96c5-e658429ebf46
-df_230804_Tcalc = df_Tcalc("../../data/out/2024-01-24/Tc_Uc_230804.csv" )
+df_230804_Tcalc = df_Tcalc("../../../data/out/JECE_TemperaturesTC_Uncertainty/Tc_Uc_230804.csv" )
+
+# ╔═╡ 8dbdd15a-7912-47c6-95ea-7b47fcb38c71
+let
+	path = "../../../data/out/2024-03-20/22_38_55/"
+	df_230804_Tcalc_recalc = df_Tcalc(path * "Sim_T_probe_70.0suns_7.4.csv" )
+	
+	CSV.write(path * "Thermocouple_temps_calc.csv", df_230804_Tcalc_recalc)
+	CSV.write(path * "Thermocouple_temps_exp.csv", df_230804_Texp)
+end
 
 # ╔═╡ b61ce7e8-8b66-4b42-9453-db6e37193423
-df_230807_Tcalc = df_Tcalc("../../data/out/2024-01-26/230807_Tc_Uc.csv" )
-
-# ╔═╡ fc5e706e-43e5-4195-86a8-53b0f5dfbadf
-let
- df_230807_Texp.exp_T_03_TC .- df_230807_Tcalc.calc_T_03_TC
-end
+df_230807_Tcalc = df_Tcalc("../../../data/out/JECE_TemperaturesTC_Uncertainty/Tc_Uc_230807.csv")
 
 # ╔═╡ fc594076-cb09-4cc1-a447-ed7b24dc38d7
 let
@@ -925,7 +919,6 @@ LocalResource(
 # ╠═bcf12f50-b3a6-11ee-0f2b-1b63d8c56346
 # ╟─640a4e80-b06e-40b2-a659-13feed18f55a
 # ╟─07cf6a69-c1eb-49a6-adbb-fee87efb9519
-# ╠═981530f4-8998-49f2-9b6c-410565c467ec
 # ╠═9cc7316f-2654-425d-bc9d-1e26197f081c
 # ╠═c3a8a9c9-113e-4bcc-9ad7-0ceb045a123c
 # ╟─31d90ef7-e398-49ab-9338-45eb505b720e
@@ -946,15 +939,15 @@ LocalResource(
 # ╠═9c55c919-e373-40d3-aab5-8c6989b04e2f
 # ╟─3086a90e-0a2e-423a-afa4-43ac1a94928c
 # ╠═c6740d22-2a2f-43de-8418-55e1030789c7
+# ╠═264c3b82-576a-430c-a61b-17091f9d1a99
 # ╟─3be5c8e0-d621-4670-aea3-3c928b38668a
 # ╠═585e99c9-04ba-4e86-8e4a-434345f6c778
 # ╠═673e65b6-63c3-462f-96c5-e658429ebf46
+# ╠═8dbdd15a-7912-47c6-95ea-7b47fcb38c71
 # ╠═b61ce7e8-8b66-4b42-9453-db6e37193423
-# ╠═fc5e706e-43e5-4195-86a8-53b0f5dfbadf
 # ╠═bbb6d613-1592-49ae-8929-12d10fa7c39c
 # ╠═8afe6a43-f0e0-4849-8405-9c4f72bafcd4
 # ╠═fc594076-cb09-4cc1-a447-ed7b24dc38d7
-# ╠═d51f7678-1bd0-4018-b23b-b4384faa834a
 # ╠═4f67dc46-b5b6-4648-a526-77992c22020f
 # ╟─14d41f40-059c-4826-92c1-d3a42260385f
 # ╟─9b287a3a-bce9-483e-a788-ada05c5b46bd
@@ -969,7 +962,7 @@ LocalResource(
 # ╠═8aca7493-e1d7-488f-a78b-e16517918fe4
 # ╟─b7db1ccc-7b9d-4332-bff7-04d9e97b7138
 # ╠═9b3a6003-7263-40ed-a11b-3a55c3a7a510
-# ╠═964a2633-9c83-4fb7-8ac2-692018a536de
+# ╟─964a2633-9c83-4fb7-8ac2-692018a536de
 # ╠═9e282b41-7870-4416-9b5f-e873b25cf032
 # ╠═1d6a9361-0473-488d-a56a-914e908b7a83
 # ╠═06fb7b1b-3a36-4cd9-8485-8c2c55eab86c
@@ -979,8 +972,8 @@ LocalResource(
 # ╠═045f3f13-c606-4bf7-8416-2a95248ca35b
 # ╠═0c0d6d13-dd5e-4c9c-becc-3d41fbe627e1
 # ╠═d19d7b31-d966-4a3b-a040-31667d8c4648
-# ╠═c6d4d255-29e1-4d68-9f7e-77afec7186d6
 # ╠═82315b1c-bfe3-48f3-a537-d5ef0cc2312c
+# ╠═c6d4d255-29e1-4d68-9f7e-77afec7186d6
 # ╠═a8114301-8e45-4cd6-93e1-e7596532324f
 # ╟─ccc9f43e-1c1e-43c0-8fd5-6f19e79990be
 # ╠═0f6953e7-3a37-4d41-bb15-7d2872770921
@@ -992,7 +985,7 @@ LocalResource(
 # ╟─36a032e5-d0f4-49a2-98fb-e362189b0901
 # ╠═8dc9a71b-759d-4440-a8c4-030f6a9e57e4
 # ╠═c5c9bc3b-d460-4730-9637-64fd0443860e
-# ╠═9073c7da-cc86-4191-b8a8-b49379803c89
+# ╟─9073c7da-cc86-4191-b8a8-b49379803c89
 # ╟─5229e919-38eb-41e2-acc4-0355bb933528
 # ╠═1a74b5da-438b-4e2d-9899-a1081d59d638
 # ╟─e7ecc92c-226f-4b00-9a29-72abda41225a

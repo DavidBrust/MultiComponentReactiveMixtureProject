@@ -42,7 +42,7 @@ Base.@kwdef struct KinData{NR}
     
     nr::Int64=3 # number of reactions
     rnames::Vector{Symbol} = [:R1, :R2, :R3]
-    rn::Dict{Int, Symbol} 	= Dict(1:nr .=> rnames)
+    rn::Dict{Int, Symbol} 	= Dict(1:nr .=> rnames[1:nr])
 	rni::Dict{Symbol, Int}  = Dict(value => key for (key, value) in rn)
 
     nuij::Vector{Int64} = vcat(
@@ -51,21 +51,22 @@ Base.@kwdef struct KinData{NR}
         [1, 3, -1, -1, 0, 0], #R2 : CH4 + H2O -> 3 H2 + CO
     )
     # values of reaction rate constants @ Tref
-	ki_ref::Dict{Symbol,Float64} = Dict(:R1=>-1.51715, :R2=>-11.2379, :R3=>-Inf)
-    Tki_ref::Dict{Symbol,Float64} = Dict( rnames .=> [648.0, 648.0, 648.0]*ufac"K")
+	# ki_ref::Dict{Symbol,Float64} = Dict(:R1=>-1.51715, :R2=>-11.2379, :R3=>-Inf)
+    ki_ref::Dict{Symbol,Float64} = Dict(rnames .=> [-1.51715, -11.2379, -Inf][1:nr])
+    Tki_ref::Dict{Symbol,Float64} = Dict( rnames .=> [648.0, 648.0, 648.0][1:nr]*ufac"K")
     # Activation energies
-    Ei::Dict{Symbol,Float64} = Dict( rnames .=> [0.0, 175.904, 0.0]*ufac"kJ/mol")
+    Ei::Dict{Symbol,Float64} = Dict( rnames .=> [0.0, 175.904, 0.0][1:nr]*ufac"kJ/mol")
 
     # equilibrium constants Ki
-    Ki_ref::Dict{Symbol,Float64} = Dict( rnames .=> [10.18, 1.947e-3, 1.913e-4])
-    TKi_ref::Dict{Symbol,Float64} = Dict( rnames .=> [693.0, 693.0, 693.0]*ufac"K")
+    Ki_ref::Dict{Symbol,Float64} = Dict( rnames .=> [10.18, 1.947e-3, 1.913e-4][1:nr])
+    TKi_ref::Dict{Symbol,Float64} = Dict( rnames .=> [693.0, 693.0, 693.0][1:nr]*ufac"K")
     # reaction enthalpies
-    ΔHi::Dict{Symbol,Float64} = Dict( rnames .=> [-37.92, 182.09, 220.01]*ufac"kJ/mol")
+    ΔHi::Dict{Symbol,Float64} = Dict( rnames .=> [-37.92, 182.09, 220.01][1:nr]*ufac"kJ/mol")
 	
     # values of gas phase species adsorption coefficients @ Tref
-	Kj_ref::Dict{Symbol,Float64} = Dict( gnames .=> [0.0, 0.0296, 0.0, 0.0, 0.0, 0.0])
-    TKj_ref::Dict{Symbol,Float64} = Dict( gnames .=> [648.0, 648.0, 823.0, 823.0, 823.0, 823.0]*ufac"K" )
-    ΔHj::Dict{Symbol,Float64} = Dict( gnames .=> [-70.65, -82.9, -38.28, 88.68, 0, 0]*ufac"kJ/mol")
+	Kj_ref::Dict{Symbol,Float64} = Dict( gnames .=> [0.0, 0.0296, 0.0, 0.0, 0.0, 0.0][1:ng])
+    TKj_ref::Dict{Symbol,Float64} = Dict( gnames .=> [648.0, 648.0, 823.0, 823.0, 823.0, 823.0][1:ng]*ufac"K" )
+    ΔHj::Dict{Symbol,Float64} = Dict( gnames .=> [-70.65, -82.9, -38.28, 88.68, 0, 0][1:ng]*ufac"kJ/mol")
 
     KinData(ng,gnames,Fluids,gn,gni,nr,rnames,rn,rni,nuij,ki_ref,Tki_ref,Ei,Ki_ref,TKi_ref,ΔHi,Kj_ref,TKj_ref,ΔHj) = 
     new{nr}(ng,gnames,Fluids,gn,gni,nr,rnames,rn,rni,nuij,ki_ref,Tki_ref,Ei,Ki_ref,TKi_ref,ΔHi,Kj_ref,TKj_ref,ΔHj)
