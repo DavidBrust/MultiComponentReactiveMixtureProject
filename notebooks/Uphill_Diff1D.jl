@@ -47,7 +47,7 @@ function grid1D(nref=0)
     h=1/nx
 	X=(0:h:1)*ufac"cm"
 	grid=simplexgrid(X)
-	cellmask!(grid,[0.4]*ufac"cm",[0.6]*ufac"cm",2)	# catalyst region
+	cellmask!(grid,[0.4]*ufac"cm",[0.6]*ufac"cm",3)	# catalyst region
 	grid
 end
 
