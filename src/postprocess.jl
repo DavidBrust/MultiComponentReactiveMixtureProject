@@ -125,72 +125,93 @@ function flux_side(f,u,bnode,data)
     end
 end
 
-function TotalFlows(t,solt,grid,sys,data)
-    (;iT,Fluids,inlet_boundaries,outlet_boundaries)=data
+# function TotalThermalEnergyFlows(t,solt,sys,data)
+#     (;iT,inlet_boundaries,outlet_boundaries)=data
 
-    tfact=TestFunctionFactory(sys)	
-	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
-	tf_in=testfunction(tfact,outlet_boundaries,inlet_boundaries)
+#     tfact=TestFunctionFactory(sys)	
+# 	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
+# 	tf_in=testfunction(tfact,outlet_boundaries,inlet_boundaries)
 
-    inflow_rate=Float64[]
-	outflow_rate=Float64[]
-    
-    # for i=2:length(solt)
-	# 	ifr=integrate(sys,tf_in,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])[iT]
-	# 	ofr=integrate(sys,tf_out,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])[iT]
-	# 	push!(inflow_rate,ifr)
-	# 	push!(outflow_rate,ofr)        
-   	# end
-
-    # ind = findfirst(x->x.== t, solt.t) -1
-    ind = findfirst(x->x.== t, solt.t)
+#     ind = findfirst(x->x.== t, solt.t)
 
 
-    ifr=integrate(sys,tf_in,solt[ind],solt[ind-1],solt.t[ind]-solt.t[ind-1])[iT]
-    ofr=integrate(sys,tf_out,solt[ind],solt[ind-1],solt.t[ind]-solt.t[ind-1])[iT]
+#     ifr=integrate(sys,tf_in,solt[ind],solt[ind-1],solt.t[ind]-solt.t[ind-1])[iT]
+#     ofr=integrate(sys,tf_out,solt[ind],solt[ind-1],solt.t[ind]-solt.t[ind-1])[iT]
    
-    ifr, ofr
-    # inflow_rate[ind], outflow_rate[ind]
-end
+#     ifr, ofr
+# end
+
+# function TotalThermalEnergyFlows(sol,sys,data)
+#     (;iT,inlet_boundaries,outlet_boundaries)=data
+
+#     tfact=TestFunctionFactory(sys)	
+# 	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
+# 	tf_in=testfunction(tfact,outlet_boundaries,inlet_boundaries)
 
 
-function HeatFluxes_EB_I(t,solt,grid,sys,data)
+#     ifr=integrate(sys,tf_in,sol)[iT]
+#     ofr=integrate(sys,tf_out,sol)[iT]
+   
+#     ifr, ofr
+# end
 
-    (;iT,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,dt_hf_irrad)=data
+function HeatFluxes_EB_I(t,solt,sys,data)
 
-    inflow, outflow = TotalFlows(t,solt,grid,sys,data)
-    dE_dt = inflow + outflow
-    # tend = solt.t[end]
-    # sol = solt(tend)
+    (;iT,dt_hf_irrad)=data
+
+    # inflow, outflow = TotalThermalEnergyFlows(t,solt,sys,data)
+
+    inflow, outflow = BoundaryFluxes(t, solt, sys, data)
+
+    # dE_dt = inflow + outflow
+    dE_dt = inflow[iT] + outflow[iT]
+
     sol = solt(t)
 
+    # calc_hf = t >= dt_hf_irrad[1]
+    Q_irrad_01,
+    Q_irrad_10,
+    Q_conve_10,
+    Q_irrad_34,
+    Q_irrad_43,
+    Q_conve_34,
+    Q_sides,
+    H_reaction = zeros(8) 
 
-    # calc_hf = tend >= dt_hf_irrad[1]
-    calc_hf = t >= dt_hf_irrad[1]
+    if t >= dt_hf_irrad[1]
+        Q_irrad_01,
+        Q_irrad_10,
+        Q_conve_10,
+        Q_irrad_34,
+        Q_irrad_43,
+        Q_conve_34,
+        Q_sides,
+        H_reaction = HeatFluxes_EB_I_(sol,sys,data)            
+    end
 
-    Q_conve_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,irradiated_boundaries]
-    Q_conve_10 = calc_hf ? sum(Q_conve_10) : 0.0
+    # Q_conve_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,irradiated_boundaries]
+    # Q_conve_10 = calc_hf ? sum(Q_conve_10) : 0.0
     
-    Q_irrad_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,irradiated_boundaries]
-    Q_irrad_01 = calc_hf ? sum(Q_irrad_01) : 0.0
+    # Q_irrad_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,irradiated_boundaries]
+    # Q_irrad_01 = calc_hf ? sum(Q_irrad_01) : 0.0
 
-    Q_irrad_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,irradiated_boundaries]
-    Q_irrad_10 = calc_hf ? sum(Q_irrad_10) : 0.0
+    # Q_irrad_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,irradiated_boundaries]
+    # Q_irrad_10 = calc_hf ? sum(Q_irrad_10) : 0.0
 
-    Q_irrad_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,outlet_boundaries]
-    Q_irrad_34 = calc_hf ? sum(Q_irrad_34) : 0.0
+    # Q_irrad_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,outlet_boundaries]
+    # Q_irrad_34 = calc_hf ? sum(Q_irrad_34) : 0.0
     
-    Q_irrad_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,outlet_boundaries]
-    Q_irrad_43 = calc_hf ? sum(Q_irrad_43) : 0.0
+    # Q_irrad_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,outlet_boundaries]
+    # Q_irrad_43 = calc_hf ? sum(Q_irrad_43) : 0.0
 
-    Q_conve_34=integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,outlet_boundaries]
-    Q_conve_34 = calc_hf ? sum(Q_conve_34) : 0.0
+    # Q_conve_34=integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,outlet_boundaries]
+    # Q_conve_34 = calc_hf ? sum(Q_conve_34) : 0.0
 
-    # Qsides=integrate(sys,MultiComponentReactiveMixtureProject.PTR_side,sol; boundary=true)[iT,side_boundaries]
-    Q_sides=integrate(sys,flux_side,sol; boundary=true)[iT,side_boundaries]
-    Q_sides = sum(Q_sides)
+    # # Qsides=integrate(sys,MultiComponentReactiveMixtureProject.PTR_side,sol; boundary=true)[iT,side_boundaries]
+    # Q_sides=integrate(sys,flux_side,sol; boundary=true)[iT,side_boundaries]
+    # Q_sides = sum(Q_sides)
 
-    H_reaction = sum(integrate(sys,sys.physics.reaction,sol), dims=2)[iT]
+    # H_reaction = sum(integrate(sys,sys.physics.reaction,sol), dims=2)[iT]
 
     H_thermal = dE_dt - (Q_irrad_01 - Q_irrad_10) - (Q_irrad_43 - Q_irrad_34) + Q_conve_10 + Q_conve_34 + Q_sides
 
@@ -205,8 +226,78 @@ function HeatFluxes_EB_I(t,solt,grid,sys,data)
         Q_irrad_43=Q_irrad_43,
         Q_sides=-Q_sides
     )
-    
+end
 
+function HeatFluxes_EB_I(sol,sys,data)
+
+    (;iT,dt_hf_irrad)=data
+
+    inflow, outflow = BoundaryFluxes(sol, sys, data)
+
+    # dE_dt = inflow + outflow
+    dE_dt = inflow[iT] + outflow[iT]
+
+    Q_irrad_01,
+    Q_irrad_10,
+    Q_conve_10,
+    Q_irrad_34,
+    Q_irrad_43,
+    Q_conve_34,
+    Q_sides,
+    H_reaction = HeatFluxes_EB_I_(sol,sys,data)
+
+    H_thermal = dE_dt - (Q_irrad_01 - Q_irrad_10) - (Q_irrad_43 - Q_irrad_34) + Q_conve_10 + Q_conve_34 + Q_sides
+
+    (
+        Q_irrad_01=Q_irrad_01,
+        Q_irrad_10=-Q_irrad_10,
+        H_thermal=H_thermal,
+        H_reaction=-H_reaction,
+        Q_conve_10=-Q_conve_10,
+        Q_conve_34=-Q_conve_34,
+        Q_irrad_34=-Q_irrad_34,
+        Q_irrad_43=Q_irrad_43,
+        Q_sides=-Q_sides
+    )
+end
+
+function HeatFluxes_EB_I_(sol,sys,data)
+
+    (;iT, irradiated_boundaries, outlet_boundaries, side_boundaries) = data
+
+    Q_irrad_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,irradiated_boundaries]
+    Q_irrad_01 = sum(Q_irrad_01)
+
+    Q_irrad_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,irradiated_boundaries]
+    Q_irrad_10 = sum(Q_irrad_10)
+    
+    Q_conve_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,irradiated_boundaries]
+    Q_conve_10 = sum(Q_conve_10)
+
+    Q_irrad_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,outlet_boundaries]
+    Q_irrad_34 = sum(Q_irrad_34)
+    
+    Q_irrad_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,outlet_boundaries]
+    Q_irrad_43 = sum(Q_irrad_43)
+
+    Q_conve_34=integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,outlet_boundaries]
+    Q_conve_34 = sum(Q_conve_34)
+
+    Q_sides=integrate(sys,flux_side,sol; boundary=true)[iT,side_boundaries]
+    Q_sides = sum(Q_sides)
+
+    H_reaction = sum(integrate(sys,sys.physics.reaction,sol), dims=2)[iT]
+
+    (
+        Q_irrad_01=Q_irrad_01,
+        Q_irrad_10=-Q_irrad_10,
+        Q_conve_10=-Q_conve_10,
+        Q_irrad_34=-Q_irrad_34,
+        Q_irrad_43=Q_irrad_43,
+        Q_conve_34=-Q_conve_34,
+        Q_sides=-Q_sides,
+        H_reaction=-H_reaction
+    )
 end
 
 function BoundaryFlows_Integrals(sol, sys, data) 
@@ -216,53 +307,16 @@ function BoundaryFlows_Integrals(sol, sys, data)
 	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
 	tf_in=testfunction(tfact,outlet_boundaries,inlet_boundaries)
 		
-	# inflow_rate=Vector{Float64}[]
-	# outflow_rate=Vector{Float64}[]
-	# reaction_rate=Vector{Float64}[]
-	# stored_amount=Vector{Float64}[]
-
-	# for i=2:length(solt)
-		
     inflow_rate = integrate(sys, tf_in, sol)
     outflow_rate = integrate(sys, tf_out, sol)
 
-		# push!(inflow_rate,ifr)
-		# push!(outflow_rate,ofr)
-
-		# rr = vec(sum(integrate(sys,sys.physics.reaction,solt[i]), dims=2))
     reaction_rate = sum(integrate(sys, sys.physics.reaction, sol), dims=2)
 		
-
-		# push!(reaction_rate, rr)
-		# push!(stored_amount, amount)
-
-   	# end
-
-	# integrals
-	# I_in=zeros(num_species(sys))
-	# I_out=zeros(num_species(sys))
-	# I_reac=zeros(num_species(sys))
-	# for i=1:length(solt)-1
-	# 	I_in .+= inflow_rate[i]*(solt.t[i+1]-solt.t[i])
-	# 	I_out .+= outflow_rate[i]*(solt.t[i+1]-solt.t[i])
-	# 	I_reac .+= reaction_rate[i]*(solt.t[i+1]-solt.t[i])
-	# end
-
     return (
         inflow_rate,
         outflow_rate,
         reaction_rate
     )
-	# return (
-	# 	inflow_rate=inflow_rate,
-	# 	outflow_rate=outflow_rate,
-	# 	reaction_rate=reaction_rate, 
-	# 	stored_amount=stored_amount,
-	# 	I_in=I_in,
-	# 	I_out=I_out,
-	# 	I_reac=I_reac
-	# )
-
 end
 
 function BoundaryFlows_Integrals(solt::TransientSolution, sys, data)
@@ -319,7 +373,7 @@ end
 Helper function to calculate flux integrals over in- and outflow boundaries in 
     the Darcy-Maxwell-Stefan (DMS) model.
 """
-function _checkinout(sol,sys,data)	
+function BoundaryFluxes(sol,sys,data)	
 	(;inlet_boundaries,outlet_boundaries)=data
 	tfact=TestFunctionFactory(sys)
 
@@ -329,13 +383,28 @@ function _checkinout(sol,sys,data)
 	(;in=integrate(sys,tf_in,sol),out=integrate(sys,tf_out,sol) )
 end
 
+function BoundaryFluxes(t,solt,sys,data)	
+	(;inlet_boundaries,outlet_boundaries)=data
+	tfact=TestFunctionFactory(sys)
+
+	tf_in=testfunction(tfact,outlet_boundaries,inlet_boundaries)
+	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
+
+    ind = findfirst(x -> x.==t, solt.t)
+
+    ifr=integrate(sys, tf_in, solt[ind], solt[ind-1], solt.t[ind]-solt.t[ind-1])
+    ofr=integrate(sys, tf_out, solt[ind], solt[ind-1], solt.t[ind]-solt.t[ind-1])
+	
+	(;in=ifr, out=ofr)
+end
+
 @doc raw"""
 Helper function to print a summary based on calculated flux integrals over in- 
     and outflow boundaries in the Darcy-Maxwell-Stefan (DMS) model.
 """
 function Print_summary(sol,grid,sys,data)
     (;ip,m,mfluxin,mmix0,X0,ng,inlet_boundaries) = data
-    in_,out_=_checkinout(sol,sys,data)
+    in_,out_=BoundaryFluxes(sol,sys,data)
 
     nout(i) = out_[i]/m[i]
     local Ain = 0.0
@@ -354,30 +423,18 @@ function Print_summary(sol,grid,sys,data)
         @printf "%i\tIN: %2.6e \t OUT: %2.6e \t REACT: %2.6e mol/hr \n\tSUM: %2.6e mol/hr\n" i nin(i)/ufac"mol/hr" nout(i)/ufac"mol/hr" -RI[i]/m[i]/ufac"mol/hr" (nin(i)+nout(i)-RI[i]/m[i])/ufac"mol/hr"
     end
 end
-@doc raw"""
-Helper function to print an extended summary based on calculated flux integrals over in- 
-    and outflow boundaries in the Darcy-Maxwell-Stefan (DMS) model.
-"""
-function Print_summary_ext(solt,grid,sys,data)
 
-    if isa(solt, TransientSolution)
-        t = solt.t[end]
-        sol = solt(t)
-    else
-        sol = solt
-    end
-
-	(;gn,gni,m,nflowin,X0) = data
+function Print_summary_ext_(in,out,HeatFluxes,data)
+    (;gn,gni,m,nflowin,X0) = data
 	ng=ngas(data)
-	in_,out_ = _checkinout(sol,sys,data)
 
-	nout(i) = -out_[i]/m[i]
+	nout(i) = -out[i]/m[i]
 	nin(i) = nflowin*X0[i]
 	nout_dry = 0.0
 	
-	println("Molar species in- & outflows:")
+	@printf "Molar species in- & outflows: (Norm conditions T=293.15 K, p=%2.5f bara)\n" 1.0ufac"atm"/ufac"bar"
 	for i = 1:ng
-		@printf "%s\tIN: %2.2f\t OUT: %2.2f mol/hr\n" gn[i] nin(i)/ufac"mol/hr" nout(i)/ufac"mol/hr"
+		@printf "%s\tIN: %2.2f\t OUT: %2.2f mol/hr (%2.2f NL/min) \n" gn[i] nin(i)/ufac"mol/hr" nout(i)/ufac"mol/hr" nout(i)*ph"R"*293.15/(1.0ufac"atm")/ufac"l/minute"
 		if i != gni[:H2O] 
 			nout_dry += nout(i)
 		end
@@ -400,16 +457,38 @@ function Print_summary_ext(solt,grid,sys,data)
 		@printf "Y%4s: %2.2f \tS%4s: %2.2f\n" gn[i] nout(i)/nin(gni[:CO2]) gn[i] nout(i)/(nin(gni[:CO2])-nout(gni[:CO2]))
 	end
 
-	fluxes = HeatFluxes_EB_I(t,solt,grid,sys,data)
-	ns = keys(fluxes)
-	vs = values(fluxes)
-	#QG_01,	QG_10, H_thermal, H_reaction, Qconv_10,	Qconv_34, QG_34, QG_43,	Qsides = fluxes
+
+
+	# fluxes = HeatFluxes_EB_I(t,solt,grid,sys,data)
+
+	ns = keys(HeatFluxes)
+	vs = values(HeatFluxes)
+	
 	println("\nEnergy Balancing [W]:")
-	for i=1:length(fluxes)
+	for i=1:length(HeatFluxes)
 		@printf "%s:\t%.2f \n" String(ns[i]) vs[i]
 	end
-	@printf "Sum:\t\t%.6f \n" sum(fluxes)
+	@printf "Sum:\t\t%.6f \n" sum(HeatFluxes)
+end
 
+function Print_summary_ext(sol,sys,data)
+
+	in_,out_ = BoundaryFluxes(sol,sys,data)
+    HeatFluxes = HeatFluxes_EB_I(sol,sys,data)
+
+	Print_summary_ext_(in_,out_,HeatFluxes,data)
+end
+
+@doc raw"""
+Helper function to print an extended summary based on calculated flux integrals over in- 
+    and outflow boundaries in the Darcy-Maxwell-Stefan (DMS) model.
+"""
+function Print_summary_ext(t,solt,sys,data)
+
+    in_,out_ = BoundaryFluxes(t,solt,sys,data)	
+    HeatFluxes = HeatFluxes_EB_I(t,solt,sys,data)
+
+	Print_summary_ext_(in_,out_,HeatFluxes,data)
 end
 
 @doc raw"""

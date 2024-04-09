@@ -23,12 +23,13 @@ begin
 	using LinearSolve, Pardiso, ExtendableSparse
 	
 	using LessUnitful
-	using PlutoUI, PlutoVista, Plots
+	using PlutoUI, PlutoVista, CairoMakie
 	using CSV, Tables, Dates, Printf
 	using StaticArrays
 	using MultiComponentReactiveMixtureProject
 	
 	GridVisualize.default_plotter!(PlutoVista)
+	#GridVisualize.default_plotter!(CairoMakie)
 end;
 
 # ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
@@ -46,7 +47,7 @@ Select problem dimension: $(@bind dim Select([2,3], default=2))
 
 Select grid refinement level: $(@bind nref Select([0,1,2,3], default=0))
 
-Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=false))
+Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=true))
 """
 
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
@@ -77,26 +78,30 @@ end
 # ╔═╡ 415f6fa7-d5b5-40a2-806e-3d8a61541c2e
 @doc MultiComponentReactiveMixtureProject.DMS_Info_thermal()
 
-# ╔═╡ 1638178e-840b-4abe-9f46-8b0bbe3d606a
-Wolf_rWGS
-
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
-function ThermalDemo(dim; nref=nref)
+function ThermalDemo(dim; nref=nref, H_cat=0.05*ufac"cm", mcat=500*ufac"mg")
 
-	grid, inb, irrb, outb, sb, catr, permr =  PTR_grid_boundaries_regions(dim, nref=nref)
+	grid, inb, irrb, outb, sb, catr, permr =  PTR_grid_boundaries_regions(dim, nref=nref, H_cat=H_cat)
 
 	data = ReactorData(
 		dim=dim,
-		kinpar=Wolf_rWGS,
-		#kinpar=XuFroment,
-		p = 3.5*ufac"bar",
-		#nflowin = 7.4*ufac"mol/hr",
-		nflowin = 3.5*7.4*ufac"mol/hr",
+		#kinpar=Wolf_rWGS,
+		kinpar=XuFroment,
 		nom_flux = 70.0*ufac"kW/m^2",
-		mcat = 3000*ufac"mg",
+
+		perm=[1.0e-6,1.0,1.0]*1.23e-10*ufac"m^2",
+		
+		#p = 3.5*ufac"bar",
+		p = 1.0*ufac"bar",
+		#nflowin = 3.5*7.4*ufac"mol/hr",
+		nflowin = 7.4*ufac"mol/hr",		
+		#mcat = 3000*ufac"mg",
+		mcat = mcat,
+		
 		dt_hf_irrad = (2.0, 10.0),
 		dt_hf_enth = (2.0, 3.0),
 		T_gas_in = 273.15 + 25,
+		Nu = 0.0,
 		
 		X0 = [0,0.5,0,0,0.5,0.0], # H2 / CO2 = 1/1
 		inlet_boundaries=inb,
@@ -137,7 +142,7 @@ end;
 
 # ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
 md"""
-# Initialisation and Solve
+# Setup and transient solution
 The simulation is setup as a transient simulation. An initialisation strategy is employed where different physics are enabled step by step once a stationary state is established. Initially, no heat is transported and no chemical reactions take place. 
 
 1. Velocity field (mass flow is ramped up from 1-100 % in T=$(data.dt_mf) s)
@@ -147,14 +152,14 @@ The simulation is setup as a transient simulation. An initialisation strategy is
 The mass flow boundary condition into the reactor domain is "ramped up" starting from a low value and linearly increasing until the final value is reached. A time delay is given to let the flow stabilize. Once the flow field is established, heat transport is ramped up until a stable temperature field is established. Finally, the reactivity of the catalyst is "ramped up" until its final reactivity value is reached.
 """
 
+# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
+@bind t PlutoUI.Slider(solt.t,show_value=true,default=solt.t[end])
+
+# ╔═╡ b42ce84e-9f97-488a-9311-24c809437623
+sol = solt(t);
+
 # ╔═╡ 1cc9d6c4-e2d6-4501-ae4d-d7568dee1e8f
 plothistory(solt)
-
-# ╔═╡ 3207839f-48a9-49b6-9861-e5e74bc593a4
-# ╠═╡ skip_as_script = true
-#=╠═╡
-MultiComponentReactiveMixtureProject.Print_summary_ext(solt,grid,sys,data)
-  ╠═╡ =#
 
 # ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╠═╡ skip_as_script = true
@@ -212,6 +217,12 @@ end
 # ╔═╡ e148f083-4d4e-4fe8-960d-bccd00689c9b
 sol_ss = run_ss(solt,sys);
 
+# ╔═╡ 3207839f-48a9-49b6-9861-e5e74bc593a4
+# ╠═╡ skip_as_script = true
+#=╠═╡
+MultiComponentReactiveMixtureProject.Print_summary_ext(sol,sys,data)
+  ╠═╡ =#
+
 # ╔═╡ e6828f65-fc35-4e2e-aedd-324ccfe4a22c
 function write_sol(sol; desc="")
 	
@@ -230,65 +241,13 @@ end
 # ╔═╡ f99203e7-e53e-4109-b6ff-7fb87d290324
 #write_sol(solt(3.0), desc="include_dpdt=$(data.include_dpdt)")
 
-# ╔═╡ dbb6346c-e08a-4ad0-a985-3052272cf6c7
-function Test_RR(sol_ss, sys, data)
-	(;gni, m) = data
-	
-	inflow_rate, outflow_rate, reaction_rate, = BoundaryFlows_Integrals(sol_ss, sys, data)
-
-	return -reaction_rate[gni[:CO]] / m[gni[:CO]] / ufac"mol/hr"
-end
-
-# ╔═╡ 380c74fb-66c4-43fb-a3f5-9c942b13fa0d
-if dim == 2
-	@test isapprox(Test_RR(sol_ss, sys, data), 1.0401674474564733)
-elseif dim == 3
-	@test isapprox(Test_RR(sol_ss, sys, data), 0.7774951984340692)
-end
-
 # ╔═╡ 98468f9e-6dee-4b0b-8421-d77ac33012cc
 md"""
-### Temperature
+## Temperature
 1) Porous frit + catalyst layer domain
 2) Window inner surface
 3) Bottom plate
 """
-
-# ╔═╡ 58c0b05d-bb0e-4a3f-af05-71782040c8b9
-if dim == 2
-md"""
-- (1,1): T-profile at r=0
-- (2,1): T-profile at z=0
-- (1,2): Window T-profile
-- (2,2): Bottom Plate T-profile
-"""
-end
-
-# ╔═╡ c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
-md"""
-### Molar fractions
-1) CO
-2) CO2
-3) CH4
-"""
-
-# ╔═╡ eb9dd385-c4be-42a2-8565-cf3cc9b2a078
-md"""
-### Flow field
-1. Pressure
-2. Density
-3. Velocity X
-4. Velocity Y
-"""
-
-# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-@bind t Slider(solt.t,show_value=true,default=solt.t[end])
-
-# ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
-sol = solt(t);
-
-# ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
-MultiComponentReactiveMixtureProject.Print_summary(sol,grid,sys,data)
 
 # ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
 # ╠═╡ show_logs = false
@@ -311,37 +270,6 @@ md"""
 - (2,2): Bottom Plate T-profile
 """
 end
-
-# ╔═╡ c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
-md"""
-### Molar fractions
-1) CO
-2) CO2
-"""
-
-# ╔═╡ eb9dd385-c4be-42a2-8565-cf3cc9b2a078
-md"""
-### Flow field
-1. Pressure
-2. Density
-3. Velocity X
-4. Velocity Y
-"""
-
-# ╔═╡ 107b390f-f9e6-4879-89a7-ec1373bafb52
-md"""
-### Source term in Enthalpy Eq
-Visualize distribution of magnitude of source term from $\partial p / \partial t$ [W/m³]:
-"""
-
-# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-@bind t Slider(solt.t,show_value=true,default=solt.t[end])
-
-# ╔═╡ b42ce84e-9f97-488a-9311-24c809437623
-sol = solt(t);
-
-# ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
-MultiComponentReactiveMixtureProject.Print_summary(sol,grid,sys,data)
 
 # ╔═╡ 8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╠═╡ show_logs = false
@@ -376,6 +304,13 @@ let
 		scalarplot!(vis[2,2],bgridp, bsolp.-273.15,show=true)
 	end
 end
+
+# ╔═╡ c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
+md"""
+## Molar fractions
+1) CO
+2) CO2
+"""
 
 # ╔═╡ 111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╠═╡ show_logs = false
@@ -417,14 +352,35 @@ let
 end
   ╠═╡ =#
 
-# ╔═╡ 5547b97e-5adf-48ec-9fb9-55d54c1503a4
-let
-	(;idpdt, include_dpdt) = data
-	if include_dpdt
-		vis=GridVisualizer(resolution=(680,300))
-		scalarplot!(vis,grid, sol[idpdt,:], zoom = 1.5, aspect=4.0, show=true)
-	end
+# ╔═╡ cefa0637-d397-4870-8838-828d41232b1a
+md"""
+## Reaction rate
+"""
+
+# ╔═╡ dbb6346c-e08a-4ad0-a985-3052272cf6c7
+function Test_RR(sol_ss, sys, data)
+	(;gni, m) = data
+	
+	inflow_rate, outflow_rate, reaction_rate, = BoundaryFlows_Integrals(sol_ss, sys, data)
+
+	return -reaction_rate[gni[:CO]] / m[gni[:CO]] / ufac"mol/hr"
 end
+
+# ╔═╡ 380c74fb-66c4-43fb-a3f5-9c942b13fa0d
+if dim == 2
+	@test isapprox(Test_RR(sol_ss, sys, data), 1.0401674474564733)
+elseif dim == 3
+	@test isapprox(Test_RR(sol_ss, sys, data), 0.7774951984340692)
+end
+
+# ╔═╡ eb9dd385-c4be-42a2-8565-cf3cc9b2a078
+md"""
+## Flow field
+1. Pressure
+2. Density
+3. Velocity X
+4. Velocity Y
+"""
 
 # ╔═╡ de69f808-2618-4add-b092-522a1d7e0bb7
 # ╠═╡ show_logs = false
@@ -464,6 +420,21 @@ let
 	reveal(vis)
 end
   ╠═╡ =#
+
+# ╔═╡ 107b390f-f9e6-4879-89a7-ec1373bafb52
+md"""
+## Source term in Enthalpy Eq
+Visualize distribution of magnitude of source term from $\partial p / \partial t$ [W/m³]:
+"""
+
+# ╔═╡ 5547b97e-5adf-48ec-9fb9-55d54c1503a4
+let
+	(;idpdt, include_dpdt) = data
+	if include_dpdt
+		vis=GridVisualizer(resolution=(680,300))
+		scalarplot!(vis,grid, sol[idpdt,:], zoom = 1.5, aspect=4.0, show=true)
+	end
+end
 
 # ╔═╡ bcaae53b-d58b-4e36-9b79-471b02acaea6
 md"""
@@ -544,33 +515,32 @@ Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═a1ea393e-f123-4ad0-affa-885db325cfd5
 # ╠═415f6fa7-d5b5-40a2-806e-3d8a61541c2e
-# ╠═1638178e-840b-4abe-9f46-8b0bbe3d606a
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
+# ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 # ╠═b42ce84e-9f97-488a-9311-24c809437623
-# ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
+# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═1cc9d6c4-e2d6-4501-ae4d-d7568dee1e8f
-# ╠═994d4a87-3f27-4a51-b061-6111c3346d60
-# ╠═3207839f-48a9-49b6-9861-e5e74bc593a4
 # ╟─5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╟─560ad300-42fc-4528-a3ec-95bcd66cdbce
 # ╠═70cdb28c-4b23-4ea4-8cd4-5eb97a3b930a
 # ╠═e148f083-4d4e-4fe8-960d-bccd00689c9b
+# ╠═3207839f-48a9-49b6-9861-e5e74bc593a4
 # ╠═e6828f65-fc35-4e2e-aedd-324ccfe4a22c
 # ╠═f99203e7-e53e-4109-b6ff-7fb87d290324
-# ╠═dbb6346c-e08a-4ad0-a985-3052272cf6c7
-# ╠═380c74fb-66c4-43fb-a3f5-9c942b13fa0d
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
 # ╠═99b59260-7651-45d0-b364-4f86db9927f8
 # ╟─58c0b05d-bb0e-4a3f-af05-71782040c8b9
 # ╟─8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
-# ╠═111b1b1f-51a5-4069-a365-a713c92b79f4
+# ╟─111b1b1f-51a5-4069-a365-a713c92b79f4
+# ╟─cefa0637-d397-4870-8838-828d41232b1a
+# ╠═dbb6346c-e08a-4ad0-a985-3052272cf6c7
+# ╠═380c74fb-66c4-43fb-a3f5-9c942b13fa0d
 # ╟─eb9dd385-c4be-42a2-8565-cf3cc9b2a078
+# ╠═de69f808-2618-4add-b092-522a1d7e0bb7
 # ╟─107b390f-f9e6-4879-89a7-ec1373bafb52
 # ╠═5547b97e-5adf-48ec-9fb9-55d54c1503a4
-# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-# ╟─de69f808-2618-4add-b092-522a1d7e0bb7
 # ╟─bcaae53b-d58b-4e36-9b79-471b02acaea6
 # ╠═1196e9ed-024a-4469-95cf-a8622ecaf413
 # ╟─b519541f-9ccd-4032-bc51-9a1abaecadba

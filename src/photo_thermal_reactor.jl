@@ -27,10 +27,6 @@ function PTR_radiosity_window(f,u,bnode,data)
 			G_lamp += u[ibf]
 		end
 	end
-	# # !!! SENSITIVITY !!!
-	# # sp = parameters(u)
-	# G_lamp *= (1 + sp[1])
-	# # !!! SENSITIVITY !!!
 
     Tglass = u[iTw] # local tempererature of quartz window
     G1_bot_IR = eps1*ph"σ"*(Tglass^4-Tamb^4)+ph"σ"*Tamb^4
@@ -590,14 +586,17 @@ end
 
 ngas(::ReactorData{NG,KP}) where {NG,KP} = NG
 
-function PTR_grid_boundaries_regions(dim;nref=0)
-	Ω_high_perm = 2 # high permeability, unblocked region
-	Ω_catalyst = 3
-	W=16
-	H=0.5
-
+function PTR_grid_boundaries_regions(dim;nref=0,
+										W=16.0*ufac"cm",
+										W_block=3.0*ufac"cm",
+										H=0.5*ufac"cm",
+										H_cat=0.05*ufac"cm",
+										Ω_high_perm=2, # high permeability, unblocked region
+										Ω_catalyst=3, # catalyst occupied region
+									)
 	nz = 10*2^(nref)
-	Z=(0:(H/nz):H)*ufac"cm"
+	# Z=(0:(H/nz):H)*ufac"cm"
+	Z=(0:(H/nz):H)
 
 	if dim == 2
 		# Γ_bottom = 1
@@ -609,27 +608,35 @@ function PTR_grid_boundaries_regions(dim;nref=0)
 		Γ_top_irradiated = 6
 
 		W=W/2 # axisymmetry, half domain is sufficient
-		nr=W*2^(nref)
+		# nr=W*2^(nref)
+		nr=W/(1.0ufac"cm")*2^(nref)
+		nblocked = nr*W_block/W
 
-		efix = 1.0e-2
+		efix = 1.0e-2*ufac"cm"
 		# R=(0:(W/nr):W)*ufac"cm"
-		R1=(0:(W/nr):(W-2))*ufac"cm"
-		R2=((W-2):efix:(W-2+efix))*ufac"cm"
-		R3=(W-2+efix:((2-efix)/2^(nref+1)):W)*ufac"cm"
-		R = glue(R1,R2)
-		R = glue(R,R3)
 
-		
+
+		R=(0:(W/nr):(W-W_block))
+		R_=((W-W_block):efix:(W-W_block+efix))
+		R=glue(R,R_)
+		R_ = linspace((W-W_block+efix), W-W_block*(nblocked-1)/nblocked, 2)
+		R=glue(R,R_)
+		R_ = linspace(W-W_block*(nblocked-1)/nblocked, W, Integer(nblocked))
+		R=glue(R,R_)
+
+	
 		grid=simplexgrid(R,Z)
 		circular_symmetric!(grid)
 	
-		# cellmask!(grid,[0,0].*ufac"cm",[6/8*W,9/10*H].*ufac"cm",Ω_high_perm) # gas permeable region
-		# cellmask!(grid,[0,9/10*H].*ufac"cm",[6/8*W,H].*ufac"cm",Ω_catalyst) # catalyst layer region
-		
-		cellmask!(grid,[0,0].*ufac"cm",[6/8*W,H].*ufac"cm",Ω_catalyst) # catalyst layer region
+		# cellmask!(grid,[0,0].*ufac"cm",[(W-W_block),H].*ufac"cm",Ω_catalyst) # catalyst layer region
 
-		bfacemask!(grid, [0,0].*ufac"cm",[W-2,0].*ufac"cm",Γ_bottom_permeable)
-		bfacemask!(grid, [0,H].*ufac"cm",[W-2,H].*ufac"cm",Γ_top_irradiated) 
+		cellmask!(grid, [0,0], [W-W_block,H-H_cat], Ω_high_perm) # catalyst layer region
+		cellmask!(grid, [0,H-H_cat], [W-W_block,H], Ω_catalyst) # catalyst layer region
+
+		#bfacemask!(grid, [0,0].*ufac"cm",[W-2,0].*ufac"cm",Γ_bottom_permeable)
+
+		bfacemask!(grid, [0,0], [W-W_block,0], Γ_bottom_permeable)
+		bfacemask!(grid, [0,H], [W-W_block,H], Γ_top_irradiated) 
 				
 		# inb = [Γ_top_permeable,Γ_top_irradiated]
 		inb = [Γ_top_irradiated]
