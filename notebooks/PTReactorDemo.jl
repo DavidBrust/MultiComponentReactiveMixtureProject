@@ -23,7 +23,7 @@ begin
 	using LinearSolve, Pardiso, ExtendableSparse
 	
 	using LessUnitful
-	using PlutoUI, PlutoVista, CairoMakie
+	using PlutoUI, PlutoVista, CairoMakie, Colors, ColorSchemes
 	using CSV, Tables, Dates, Printf
 	using StaticArrays
 	using MultiComponentReactiveMixtureProject
@@ -58,20 +58,6 @@ if dim == 3
 end
   ╠═╡ =#
 
-# ╔═╡ a995f83c-6ff7-4b95-a798-ea636ccb1d88
-# ╠═╡ show_logs = false
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	grid, inb,irrb,outb,sb,catr,accr =  PTR_grid_boundaries_regions(dim, nref=nref)
-	if dim == 2
-		gridplot(grid, resolution=(660,300), aspect=4.0, zoom=2.8)
-	else
-		gridplot(grid,  xplane=xcut, resolution=(660,460), zoom=1.8, )
-	end
-end
-  ╠═╡ =#
-
 # ╔═╡ a1ea393e-f123-4ad0-affa-885db325cfd5
 @doc MultiComponentReactiveMixtureProject.DMS_Info_isothermal()
 
@@ -79,9 +65,9 @@ end
 @doc MultiComponentReactiveMixtureProject.DMS_Info_thermal()
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
-function ThermalDemo(dim; nref=nref, H_cat=0.05*ufac"cm", mcat=500*ufac"mg")
+function ThermalDemo(dim; nref=nref, W_block=1.0ufac"cm", H_cat=0.05ufac"cm", mcat=500ufac"mg")
 
-	grid, inb, irrb, outb, sb, catr, permr =  PTR_grid_boundaries_regions(dim, nref=nref, H_cat=H_cat)
+	grid, inb, irrb, outb, sb, catr, permr =  PTR_grid_boundaries_regions(dim, nref=nref, W_block=W_block, H_cat=H_cat)
 
 	data = ReactorData(
 		dim=dim,
@@ -137,8 +123,22 @@ end
 
 # ╔═╡ fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 if RunSim
-	solt,grid,sys,data=ThermalDemo(dim);
+	solt,grid,sys,data=ThermalDemo(dim,W_block=3.0ufac"cm");
 end;
+
+# ╔═╡ a995f83c-6ff7-4b95-a798-ea636ccb1d88
+# ╠═╡ show_logs = false
+# ╠═╡ skip_as_script = true
+#=╠═╡
+let
+	#grid, inb,irrb,outb,sb,catr,accr =  PTR_grid_boundaries_regions(dim, nref=nref)
+	if dim == 2
+		gridplot(grid, resolution=(660,300), aspect=4.0, zoom=2.8)
+	else
+		gridplot(grid,  xplane=xcut, resolution=(660,460), zoom=1.8, )
+	end
+end
+  ╠═╡ =#
 
 # ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
 md"""
@@ -151,12 +151,6 @@ The simulation is setup as a transient simulation. An initialisation strategy is
 
 The mass flow boundary condition into the reactor domain is "ramped up" starting from a low value and linearly increasing until the final value is reached. A time delay is given to let the flow stabilize. Once the flow field is established, heat transport is ramped up until a stable temperature field is established. Finally, the reactivity of the catalyst is "ramped up" until its final reactivity value is reached.
 """
-
-# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-@bind t PlutoUI.Slider(solt.t,show_value=true,default=solt.t[end])
-
-# ╔═╡ b42ce84e-9f97-488a-9311-24c809437623
-sol = solt(t);
 
 # ╔═╡ 1cc9d6c4-e2d6-4501-ae4d-d7568dee1e8f
 plothistory(solt)
@@ -220,7 +214,7 @@ sol_ss = run_ss(solt,sys);
 # ╔═╡ 3207839f-48a9-49b6-9861-e5e74bc593a4
 # ╠═╡ skip_as_script = true
 #=╠═╡
-MultiComponentReactiveMixtureProject.Print_summary_ext(sol,sys,data)
+MultiComponentReactiveMixtureProject.Print_summary_ext(sol_ss,sys,data)
   ╠═╡ =#
 
 # ╔═╡ e6828f65-fc35-4e2e-aedd-324ccfe4a22c
@@ -249,18 +243,6 @@ md"""
 3) Bottom plate
 """
 
-# ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
-# ╠═╡ show_logs = false
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	(;iT,iTw,iTp,irradiated_boundaries,outlet_boundaries)=data
-	#vis=GridVisualizer(layout=(3,1), resolution=(680,900))
-	vis=GridVisualizer(layout=(1,1), resolution=(680,300))
-	scalarplot!(vis[1,1],grid, sol_ss[iT,:] .- 273.15, zoom = 2.8, aspect=4.0, show=true)
-end
-  ╠═╡ =#
-
 # ╔═╡ 58c0b05d-bb0e-4a3f-af05-71782040c8b9
 if dim == 2
 md"""
@@ -270,6 +252,23 @@ md"""
 - (2,2): Bottom Plate T-profile
 """
 end
+
+# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
+@bind t PlutoUI.Slider(solt.t,show_value=true,default=solt.t[end])
+
+# ╔═╡ b42ce84e-9f97-488a-9311-24c809437623
+sol = solt(t);
+
+# ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
+# ╠═╡ show_logs = false
+# ╠═╡ skip_as_script = true
+#=╠═╡
+let
+	(;iT,iTw,iTp,irradiated_boundaries,outlet_boundaries)=data
+	vis=GridVisualizer(layout=(1,1), resolution=(680,300))
+	scalarplot!(vis[1,1],grid, sol[iT,:] .- 273.15, zoom = 2.8, aspect=4.0, show=true)
+end
+  ╠═╡ =#
 
 # ╔═╡ 8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╠═╡ show_logs = false
@@ -308,8 +307,9 @@ end
 # ╔═╡ c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
 md"""
 ## Molar fractions
-1) CO
-2) CO2
+1. CO
+1. CO2
+1. CH4
 """
 
 # ╔═╡ 111b1b1f-51a5-4069-a365-a713c92b79f4
@@ -320,13 +320,14 @@ let
 	(;ip,p,gn,gni) = data
 	ng=ngas(data)
 	if dim == 2
-		#vis=GridVisualizer(layout=(4,1), resolution=(680,900))
-		vis=GridVisualizer(layout=(3,1), resolution=(680,900))
-		scalarplot!(vis[1,1], grid, sol[gni[:CO],:], aspect = 4.0,zoom = 2.8) # CO
-		scalarplot!(vis[2,1], grid, sol[gni[:CO2],:], aspect = 4.0,zoom = 2.8) # CO2
+		vis=GridVisualizer(layout=(4,1), resolution=(480,800))
+		scalarplot!(vis[1,1], grid, sol[gni[:CO],:], aspect = 4.0,zoom = 3.2) # CO
+		scalarplot!(vis[2,1], grid, sol[gni[:CO2],:], aspect = 4.0,zoom = 3.2) # CO2
+		scalarplot!(vis[3,1], grid, sol[gni[:CH4],:], aspect = 4.0,zoom = 3.2) # CH4
 		#scalarplot!(vis[3,1], grid, sol[gni[:N2],:], aspect = 4.0,zoom = 2.8) # N2
 
-		cols = distinguishable_colors(ng)
+		#cols = distinguishable_colors(ng)
+		cols =ColorSchemes.:Dark2_6
 		# plot species molar fractions along frit thickness (along y axis)
 		function _2to1(a,b)
 			a[1]=b[2]
@@ -338,7 +339,7 @@ let
 		for i=1:ng
 			sol1D=view(sol[i, :], grid1D)
 			#scalarplot!(vis[4,1],grid1D, sol1D, label=gn[i], color=cols[i],clear=false)
-			scalarplot!(vis[3,1],grid1D, sol1D, label=gn[i], color=cols[i],clear=false)
+			scalarplot!(vis[4,1],grid1D, sol1D, label=gn[i], color=cols[i],clear=false)
 		end
 		reveal(vis)
 	
@@ -519,7 +520,6 @@ Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 # ╠═b42ce84e-9f97-488a-9311-24c809437623
-# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═1cc9d6c4-e2d6-4501-ae4d-d7568dee1e8f
 # ╟─5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╟─560ad300-42fc-4528-a3ec-95bcd66cdbce
@@ -529,11 +529,12 @@ Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 # ╠═e6828f65-fc35-4e2e-aedd-324ccfe4a22c
 # ╠═f99203e7-e53e-4109-b6ff-7fb87d290324
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
-# ╠═99b59260-7651-45d0-b364-4f86db9927f8
+# ╟─99b59260-7651-45d0-b364-4f86db9927f8
 # ╟─58c0b05d-bb0e-4a3f-af05-71782040c8b9
 # ╟─8de4b22d-080c-486f-a6a9-41e8a5489966
-# ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
-# ╟─111b1b1f-51a5-4069-a365-a713c92b79f4
+# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
+# ╠═c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
+# ╠═111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╟─cefa0637-d397-4870-8838-828d41232b1a
 # ╠═dbb6346c-e08a-4ad0-a985-3052272cf6c7
 # ╠═380c74fb-66c4-43fb-a3f5-9c942b13fa0d
