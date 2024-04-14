@@ -88,9 +88,9 @@ nflowin(flowrate) = flowrate == :high ? 0.005 : 0.0001
 
 # ╔═╡ a56afd30-76ad-404a-9510-5f2d1b5dcf5d
 data = ReactorData(
-		inlet_boundaries=[Γ_left],
-		outlet_boundaries=[Γ_right],
-		irradiated_boundaries=[],
+		inflow_boundaries=[Γ_left],
+		outflow_boundaries=[Γ_right],
+		top_radiation_boundaries=[],
 		side_boundaries=[],
 		solve_T_equation=false,
 		nflowin=nflowin(flowrate),
@@ -182,9 +182,9 @@ let
 	flowrate = :high
 	
 	data = ReactorData(
-		inlet_boundaries=[Γ_left],
-		outlet_boundaries=[Γ_right],
-		irradiated_boundaries=[],
+		inflow_boundaries=[Γ_left],
+		outflow_boundaries=[Γ_right],
+		top_radiation_boundaries=[],
 		side_boundaries=[],
 		solve_T_equation=false,
 		nflowin=nflowin(flowrate),

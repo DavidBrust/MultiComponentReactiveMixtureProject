@@ -124,9 +124,9 @@ function setup_solve(;dim=2, nref=0)
 		solve_T_equation=false,
 		Tamb = 200 + 273.15,
 		X0 = [0,0,0,0,0.0,1.0], # N2
-		inlet_boundaries=inb,
-		irradiated_boundaries=irrb,
-		outlet_boundaries=outb,
+		inflow_boundaries=inb,
+		top_radiation_boundaries=irrb,
+		outflow_boundaries=outb,
 		side_boundaries=sb,
 		catalyst_regions=catr,
 	)

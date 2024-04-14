@@ -4,7 +4,7 @@ using MultiComponentReactiveMixtureProject, VoronoiFVM, LessUnitful, Pardiso, Ex
 
 function run_transient(;dim=3, times=[0,20.0], nref=0)
 
-    grid, inlet_boundaries, irradiated_boundaries, outlet_boundaries, side_boundaries, catalyst_regions = PTR_grid_boundaries_regions(dim,nref=nref)
+    grid, inflow_boundaries, top_radiation_boundaries, outflow_boundaries, side_boundaries, catalyst_regions = PTR_grid_boundaries_regions(dim,nref=nref)
 
     data=ReactorData(
         dim=dim,
@@ -16,9 +16,9 @@ function run_transient(;dim=3, times=[0,20.0], nref=0)
 		T_gas_in = 273.15 + 25,
 		Nu = 0.0,
 		X0 = [0,0.5,0,0,0.5,0.0], # H2 / CO2 = 1/1
-        inlet_boundaries=inlet_boundaries,
-        irradiated_boundaries=irradiated_boundaries,
-        outlet_boundaries=outlet_boundaries,
+        inflow_boundaries=inflow_boundaries,
+        top_radiation_boundaries=top_radiation_boundaries,
+        outflow_boundaries=outflow_boundaries,
         side_boundaries=side_boundaries,
         catalyst_regions=catalyst_regions,
         rhos=5.0*ufac"kg/m^3" # set solid density to low value to reduce thermal inertia of system

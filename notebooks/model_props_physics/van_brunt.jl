@@ -183,8 +183,8 @@ data = ReactorData(
 	constant_binary_diff_coeffs = [0.756, 0.6553, 0.1395] * ufac"cm^2/s",
 	constant_newman_soret_diff_coeffs = [-0.291, -0.2906, 0.004] * ufac"cm^2/s",
 	
-	outlet_boundaries=[Γ_left],
-	inlet_boundaries=[Γ_right]	
+	outflow_boundaries=[Γ_left],
+	inflow_boundaries=[Γ_right]	
 )
 
 # ╔═╡ 8b30f68c-9111-4803-b3dc-16e4c440865b
@@ -197,7 +197,7 @@ md"""
 
 # ╔═╡ 93970c02-91c6-499a-9318-f7f632604bb5
 function bcondition(f,u,bnode,data)
-	(;p,ip,iT,Tamb,inlet_boundaries,dt_hf_enth)=data
+	(;p,ip,iT,Tamb,inflow_boundaries,dt_hf_enth)=data
 
 	#boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_left,value=Tamb)
 	eps_=1/1e-4
@@ -216,7 +216,7 @@ end
 
 # ╔═╡ 1e51701d-a893-4056-8336-a3772b85abe4
 function setup_run_sim(grid, data)
-	(;ng, ip, iT, Tamb, p, X0, outlet_boundaries) = data
+	(;ng, ip, iT, Tamb, p, X0, outflow_boundaries) = data
 	sys=VoronoiFVM.System(
 		grid;
 		data=data,

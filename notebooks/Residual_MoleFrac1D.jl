@@ -148,9 +148,9 @@ function make_data()
 	
 	data = ReactorData(;
 		dim = 1,
-		inlet_boundaries = [Γ_left],
-		outlet_boundaries = [Γ_right],
-		irradiated_boundaries = [],
+		inflow_boundaries = [Γ_left],
+		outflow_boundaries = [Γ_right],
+		top_radiation_boundaries = [],
 		side_boundaries = [],
 		solve_T_equation = false,
 		constant_properties = true,

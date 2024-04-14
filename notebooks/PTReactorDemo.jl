@@ -47,7 +47,7 @@ Select problem dimension: $(@bind dim Select([2,3], default=2))
 
 Select grid refinement level: $(@bind nref Select([0,1,2,3], default=0))
 
-Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=true))
+Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=false))
 """
 
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
@@ -67,13 +67,16 @@ end
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
 function ThermalDemo(dim; nref=nref, W_block=1.0ufac"cm", H_cat=0.05ufac"cm", mcat=500ufac"mg")
 
-	grid, inb, irrb, outb, sb, catr, permr =  PTR_grid_boundaries_regions(dim, nref=nref, W_block=W_block, H_cat=H_cat)
+	#grid, inb, irrb, outb, sb, catr, permr =  PTR_grid_boundaries_regions(dim, nref=nref, W_block=W_block, H_cat=H_cat)
 
 	data = ReactorData(
 		dim=dim,
 		#kinpar=Wolf_rWGS,
 		kinpar=XuFroment,
 		nom_flux = 70.0*ufac"kW/m^2",
+
+		solve_T_equation = false,
+		#Treac = 600.0 + 273.15,
 
 		perm=[1.0e-6,1.0,1.0]*1.23e-10*ufac"m^2",
 		
@@ -90,15 +93,18 @@ function ThermalDemo(dim; nref=nref, W_block=1.0ufac"cm", H_cat=0.05ufac"cm", mc
 		Nu = 0.0,
 		
 		X0 = [0,0.5,0,0,0.5,0.0], # H2 / CO2 = 1/1
-		inlet_boundaries=inb,
-		irradiated_boundaries=irrb,
-		outlet_boundaries=outb,
-		side_boundaries=sb,
-		catalyst_regions=catr,
-		permeable_regions=permr,
+		#inflow_boundaries=inb,
+		#top_radiation_boundaries=irrb,
+		#outflow_boundaries=outb,
+		#side_boundaries=sb,
+		#catalyst_regions=catr,
+		#permeable_regions=permr,
 
 		include_dpdt=true
 	)
+
+	grid = PTR_grid_boundaries_regions!(dim,data; nref=nref, W_block=W_block, H_cat=H_cat)
+	
 	
 	inival,sys = PTR_init_system(dim, grid, data)
 
@@ -115,9 +121,9 @@ function ThermalDemo(dim; nref=nref, W_block=1.0ufac"cm", H_cat=0.05ufac"cm", mc
 	control.handle_exceptions=true
 	control.Δu_opt=100
 	control.Δt_max=100
-		
-	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="aen",log=true)
-	
+
+	#return grid,sys,data
+	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="aen",log=true)	
 	return solt,grid,sys,data
 end
 
@@ -139,6 +145,9 @@ let
 	end
 end
   ╠═╡ =#
+
+# ╔═╡ a736bc51-0598-4804-9767-c469d2bed4a1
+data
 
 # ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
 md"""
@@ -264,7 +273,7 @@ sol = solt(t);
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	(;iT,iTw,iTp,irradiated_boundaries,outlet_boundaries)=data
+	(;iT,iTw,iTp,top_radiation_boundaries,outflow_boundaries)=data
 	vis=GridVisualizer(layout=(1,1), resolution=(680,300))
 	scalarplot!(vis[1,1],grid, sol[iT,:] .- 273.15, zoom = 2.8, aspect=4.0, show=true)
 end
@@ -274,7 +283,7 @@ end
 # ╠═╡ show_logs = false
 let
 	if dim == 2
-		(;iT,iTw,iTp,irradiated_boundaries,outlet_boundaries) = data
+		(;iT,iTw,iTp,top_radiation_boundaries,bottom_radiation_boundaries) = data
 		vis=GridVisualizer(layout=(2,2), resolution=(680,600))
 		function _2to1(a,b)
 			a[1]=b[2]
@@ -289,16 +298,16 @@ let
 		function __2to1(a,b)
 			a[1]=b[1]
 		end
-		grid1D = subgrid(grid, outlet_boundaries; boundary = true, transform = __2to1)
+		grid1D = subgrid(grid, bottom_radiation_boundaries; boundary = true, transform = __2to1)
 		sol1D=view(sol[iT, :], grid1D)
 		scalarplot!(vis[2,1],grid1D, sol1D .-273.15, label="Temperature along X-axis", clear=false)
 		
 	    # window
-		bgridw = subgrid(grid, irradiated_boundaries; boundary = true, transform = __2to1)
+		bgridw = subgrid(grid, top_radiation_boundaries; boundary = true, transform = __2to1)
 		bsolw=view(sol[iTw, :], bgridw)
 		scalarplot!(vis[1,2],bgridw, bsolw.-273.15,)
 		# bottom plate
-		bgridp = subgrid(grid, outlet_boundaries; boundary = true, transform = __2to1)
+		bgridp = subgrid(grid, bottom_radiation_boundaries; boundary = true, transform = __2to1)
 		bsolp=view(sol[iTp, :], bgridp)
 		scalarplot!(vis[2,2],bgridp, bsolp.-273.15,show=true)
 	end
@@ -388,7 +397,7 @@ md"""
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	(;p,m,ip,iT,Tamb,mfluxin) = data
+	(;p,m,ip,solve_T_equation,iT,Tamb,mfluxin) = data
 	ng = ngas(data)
 	mmix = []
 	for j in 1:length(sol[1,:])
@@ -400,12 +409,16 @@ let
 	end
 	
 	ps = sol[ip,:]
-	Ts = sol[iT,:]
+	if solve_T_equation
+		Ts = sol[iT,:]
+	else
+		Ts = Tamb
+	end
 	#rho = @. ps * mmix /(ph"R"*T)
 	rho = @. ps * mmix /(ph"R"*Ts)
 	
 	if dim == 2
-		vis=GridVisualizer(layout=(4,1), resolution=(600,800))
+		vis=GridVisualizer(layout=(4,1), resolution=(520,800))
 		scalarplot!(vis[1,1], grid, ps, aspect=4.0, zoom=3.5) # Total pressure
 		scalarplot!(vis[2,1], grid, rho, aspect=4.0, zoom=3.5) # Total Density
 		nf = nodeflux(sys, sol)
@@ -430,8 +443,8 @@ Visualize distribution of magnitude of source term from $\partial p / \partial t
 
 # ╔═╡ 5547b97e-5adf-48ec-9fb9-55d54c1503a4
 let
-	(;idpdt, include_dpdt) = data
-	if include_dpdt
+	(;idpdt, solve_T_equation, include_dpdt) = data
+	if solve_T_equation && include_dpdt
 		vis=GridVisualizer(resolution=(680,300))
 		scalarplot!(vis,grid, sol[idpdt,:], zoom = 1.5, aspect=4.0, show=true)
 	end
@@ -513,6 +526,7 @@ Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 # ╟─d3278ac7-db94-4119-8efd-4dd18107e248
 # ╟─b2791860-ae0f-412d-9082-bb2e27f990bc
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
+# ╠═a736bc51-0598-4804-9767-c469d2bed4a1
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═a1ea393e-f123-4ad0-affa-885db325cfd5
 # ╠═415f6fa7-d5b5-40a2-806e-3d8a61541c2e
@@ -531,15 +545,15 @@ Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
 # ╟─99b59260-7651-45d0-b364-4f86db9927f8
 # ╟─58c0b05d-bb0e-4a3f-af05-71782040c8b9
-# ╟─8de4b22d-080c-486f-a6a9-41e8a5489966
+# ╠═8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-# ╠═c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
+# ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
 # ╠═111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╟─cefa0637-d397-4870-8838-828d41232b1a
 # ╠═dbb6346c-e08a-4ad0-a985-3052272cf6c7
 # ╠═380c74fb-66c4-43fb-a3f5-9c942b13fa0d
 # ╟─eb9dd385-c4be-42a2-8565-cf3cc9b2a078
-# ╠═de69f808-2618-4add-b092-522a1d7e0bb7
+# ╟─de69f808-2618-4add-b092-522a1d7e0bb7
 # ╟─107b390f-f9e6-4879-89a7-ec1373bafb52
 # ╠═5547b97e-5adf-48ec-9fb9-55d54c1503a4
 # ╟─bcaae53b-d58b-4e36-9b79-471b02acaea6

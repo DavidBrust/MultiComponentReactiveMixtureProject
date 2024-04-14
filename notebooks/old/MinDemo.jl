@@ -203,9 +203,9 @@ function MinDemo(dim; times=nothing, mfluxin = nothing)
 )
 	
 	mydata = ReactorData(;
-		inlet_boundaries=inb,
-		irradiated_boundaries=irrb,
-		outlet_boundaries=outb,
+		inflow_boundaries=inb,
+		top_radiation_boundaries=irrb,
+		outflow_boundaries=outb,
 		side_boundaries=sb,
 		kinpar=MinKin,
 		lcat = 1.0,

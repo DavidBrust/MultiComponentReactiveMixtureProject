@@ -392,7 +392,7 @@ Storage function definition for use with VoronoiFVM.jl for the Darcy-Maxwell-Ste
     (DMS) model for Multi-component gas transport in porous media.
 """
 function DMS_storage(f,u,node,data)
-	(;ip,iT,idpdt,Tamb,m,poros,rhos,cs,solve_T_equation,include_dpdt,Fluids)=data
+	(;ip,iT,idpdt,Tamb,m,poros,rhos,cs,solve_T_equation,include_dpdt,permeable_regions,Fluids)=data
 	ng=ngas(data)
 
     T = solve_T_equation ? u[iT] : one(eltype(u))*Tamb
@@ -412,11 +412,15 @@ function DMS_storage(f,u,node,data)
 
     if solve_T_equation       
 
-		# f[iT] = u[iT] * rhos*cs*(1-poros) + poros * enthalpy_gas
-		f[iT] = (u[iT]-298.15) * rhos*cs*(1-poros) + poros * enthalpy_gas
+		# !!! TEST: Partial domain blocking !!!
+		if node.region in permeable_regions
+			f[iT] = (u[iT]-298.15) * rhos*cs*(1-poros) + poros * enthalpy_gas
 
-		if include_dpdt
-			f[idpdt] = u[ip]
+			if include_dpdt
+				f[idpdt] = u[ip]
+			end
+		else
+			f[iT] = (u[iT]-298.15) * rhos*cs # impermeable region: poros = 0
 		end
 
     end

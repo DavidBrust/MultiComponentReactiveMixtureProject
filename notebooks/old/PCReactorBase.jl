@@ -157,9 +157,9 @@ function PTR_base(dim; times=nothing, verbose="aen")
 	
 	data=ReactorData(
 		dim=dim,
-		inlet_boundaries=inb,
-		irradiated_boundaries=irrb,
-		outlet_boundaries=outb,
+		inflow_boundaries=inb,
+		top_radiation_boundaries=irrb,
+		outflow_boundaries=outb,
 		side_boundaries=sb,
 		catalyst_regions=catr,
 		rhos=5.0*ufac"kg/m^3" # set solid density to low value to reduce thermal inertia of system
@@ -256,13 +256,13 @@ The mass flow boundary condition into the reactor domain is "ramped up" starting
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	(;m,ip,iT,gn,gni,poros,mflowin,nflowin,W0,T_gas_in,Tamb,X0,outlet_boundaries,inlet_boundaries,dt_mf,dt_hf_enth)=data
+	(;m,ip,iT,gn,gni,poros,mflowin,nflowin,W0,T_gas_in,Tamb,X0,outflow_boundaries,inflow_boundaries,dt_mf,dt_hf_enth)=data
 	ng=ngas(data)
 	vis=GridVisualizer(resolution=(600,300), xlabel="Time / s", ylabel="Molar flow / Total Moles")
 	
 	tfact=TestFunctionFactory(sys)	
-	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
-	tf_in=testfunction(tfact,outlet_boundaries,inlet_boundaries)
+	tf_out=testfunction(tfact,inflow_boundaries,outflow_boundaries)
+	tf_in=testfunction(tfact,outflow_boundaries,inflow_boundaries)
 		
 	inflow_rate=Float64[]
 	#inflow_rate_manual=Float64[]
@@ -349,9 +349,9 @@ sol = solt(t);
 # ╔═╡ d6a073e4-f4f6-4589-918f-20b61a780dad
 #=╠═╡
 let
-	(;inlet_boundaries,outlet_boundaries)=data
+	(;inflow_boundaries,outflow_boundaries)=data
 	tfact=TestFunctionFactory(sys)
-	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
+	tf_out=testfunction(tfact,inflow_boundaries,outflow_boundaries)
 	#tf_out=testfunction(tfact,[1,3,4,5,6,7],[2])
 	out=integrate(sys,tf_out,sol)
 	#scalarplot(grid,tf_out)
@@ -379,7 +379,7 @@ HeatFluxes_EB_I(t,solt,grid,sys,data)
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	(;iT,iTw,iTp,irradiated_boundaries,outlet_boundaries)=data
+	(;iT,iTw,iTp,top_radiation_boundaries,outflow_boundaries)=data
 	#vis=GridVisualizer(layout=(3,1), resolution=(680,900))
 	vis=GridVisualizer(layout=(1,1), resolution=(680,300))
 	scalarplot!(vis[1,1],grid, sol[iT,:] .- 273.15, zoom = 2.8, aspect=4.0, show=true)
@@ -401,7 +401,7 @@ end
 #=╠═╡
 let
 	if dim == 2
-		(;iT,iTw,iTp,irradiated_boundaries,outlet_boundaries) = data
+		(;iT,iTw,iTp,top_radiation_boundaries,outflow_boundaries) = data
 		vis=GridVisualizer(layout=(2,2), resolution=(680,600))
 		function _2to1(a,b)
 			a[1]=b[2]
@@ -415,16 +415,16 @@ let
 		function __2to1(a,b)
 			a[1]=b[1]
 		end
-		grid1D = subgrid(grid, outlet_boundaries; boundary = true, transform = __2to1)
+		grid1D = subgrid(grid, outflow_boundaries; boundary = true, transform = __2to1)
 		sol1D=view(sol[iT, :], grid1D)
 		scalarplot!(vis[2,1],grid1D, sol1D .-273.15, label="Temperature along X-axis", clear=false)
 		
 	    # window
-		bgridw = subgrid(grid, irradiated_boundaries; boundary = true, transform = __2to1)
+		bgridw = subgrid(grid, top_radiation_boundaries; boundary = true, transform = __2to1)
 		bsolw=view(sol[iTw, :], bgridw)
 		scalarplot!(vis[1,2],bgridw, bsolw.-273.15,)
 		# bottom plate
-		bgridp = subgrid(grid, outlet_boundaries; boundary = true, transform = __2to1)
+		bgridp = subgrid(grid, outflow_boundaries; boundary = true, transform = __2to1)
 		bsolp=view(sol[iTp, :], bgridp)
 		scalarplot!(vis[2,2],bgridp, bsolp.-273.15,show=true)
 	end

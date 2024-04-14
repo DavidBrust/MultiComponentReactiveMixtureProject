@@ -336,13 +336,13 @@ end
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	(;m,ip,iT,gn,gni,poros,mflowin,nflowin,W0,T_gas_in,Tamb,X0,outlet_boundaries,inlet_boundaries,dt_mf,dt_hf_enth)=data
+	(;m,ip,iT,gn,gni,poros,mflowin,nflowin,W0,T_gas_in,Tamb,X0,outflow_boundaries,inflow_boundaries,dt_mf,dt_hf_enth)=data
 	ng=ngas(data)
 	vis=GridVisualizer(resolution=(600,300), xlabel="Time / s", ylabel="Molar flow / Total Moles")
 	
 	tfact=TestFunctionFactory(sys)	
-	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
-	tf_in=testfunction(tfact,outlet_boundaries,inlet_boundaries)
+	tf_out=testfunction(tfact,inflow_boundaries,outflow_boundaries)
+	tf_in=testfunction(tfact,outflow_boundaries,inflow_boundaries)
 		
 	inflow_rate=Float64[]
 	#inflow_rate_manual=Float64[]
@@ -459,7 +459,7 @@ end
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	(;iT,iTw,iTp,irradiated_boundaries,outlet_boundaries)=data
+	(;iT,iTw,iTp,top_radiation_boundaries,outflow_boundaries)=data
 	#vis=GridVisualizer(layout=(3,1), resolution=(680,900))
 	vis=GridVisualizer(layout=(1,1), resolution=(680,300))
 	scalarplot!(vis[1,1],grid, sol[iT,:] .- 273.15, zoom = 2.8, aspect=4.0, levelalpha=0.0, show=true)
@@ -484,7 +484,7 @@ end
 #=╠═╡
 let
 	if dim == 2
-		(;iT,iTw,iTp,irradiated_boundaries,outlet_boundaries) = data
+		(;iT,iTw,iTp,top_radiation_boundaries,outflow_boundaries) = data
 		vis=GridVisualizer(layout=(2,2), resolution=(680,600))
 		function _2to1(a,b)
 			a[1]=b[2]
@@ -498,16 +498,16 @@ let
 		function __2to1(a,b)
 			a[1]=b[1]
 		end
-		grid1D = subgrid(grid, outlet_boundaries; boundary = true, transform = __2to1)
+		grid1D = subgrid(grid, outflow_boundaries; boundary = true, transform = __2to1)
 		sol1D=view(sol[iT, :], grid1D)
 		scalarplot!(vis[2,1],grid1D, sol1D .-273.15, label="Temperature along X-axis", clear=false)
 		
 	    # window
-		bgridw = subgrid(grid, irradiated_boundaries; boundary = true, transform = __2to1)
+		bgridw = subgrid(grid, top_radiation_boundaries; boundary = true, transform = __2to1)
 		bsolw=view(sol[iTw, :], bgridw)
 		scalarplot!(vis[1,2],bgridw, bsolw.-273.15,)
 		# bottom plate
-		bgridp = subgrid(grid, outlet_boundaries; boundary = true, transform = __2to1)
+		bgridp = subgrid(grid, outflow_boundaries; boundary = true, transform = __2to1)
 		bsolp=view(sol[iTp, :], bgridp)
 		scalarplot!(vis[2,2],bgridp, bsolp.-273.15,show=true)
 	end
@@ -664,9 +664,9 @@ function PTR_base(dim, par; times=nothing)
 		perm=perm,
 		lambdas=lambdas,
 		delta_gap=delta_gap,
-		inlet_boundaries=inb,
-		irradiated_boundaries=irrb,
-		outlet_boundaries=outb,
+		inflow_boundaries=inb,
+		top_radiation_boundaries=irrb,
+		outflow_boundaries=outb,
 		side_boundaries=sb,
 		catalyst_regions=catr,
 		rhos=5.0*ufac"kg/m^3" # set solid density to low value to reduce thermal inertia of system
@@ -674,7 +674,7 @@ function PTR_base(dim, par; times=nothing)
 
 	# ##########################################################################
 	# # BEGIN SYS INIT
-	# (;p,ip,Tamb,iT,iTw,iTp,ibf,irradiated_boundaries,FluxIntp,ng,X0)=data
+	# (;p,ip,Tamb,iT,iTw,iTp,ibf,top_radiation_boundaries,FluxIntp,ng,X0)=data
 	# ng=ngas(data)
 
 	# sys=VoronoiFVM.System( 	grid;
@@ -714,7 +714,7 @@ function PTR_base(dim, par; times=nothing)
 	# 	a[2]=b[2]
 	# end
 	# inival[ibf,:] .= 0.0
-	# sub=subgrid(grid,irradiated_boundaries,boundary=true, transform=d3tod2 )
+	# sub=subgrid(grid,top_radiation_boundaries,boundary=true, transform=d3tod2 )
 		
 	# for inode in sub[CellNodes]
 	# 	c = sub[Coordinates][:,inode]
