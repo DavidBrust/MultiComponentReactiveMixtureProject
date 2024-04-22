@@ -26,6 +26,6 @@ export RePrPe, kbed, kbed_VDI_flattening, lambda_eff_AC, SurfaceOpticalProps, Re
 
 
 include("postprocess.jl")
-export HeatFluxes_EB_I, BoundaryFlows_Integrals, Print_summary, Print_summary_ext, WriteSolution3D
+export HeatFluxes_EB_I, HeatFluxes_EB_I_inner, BoundaryFlows_Integrals, Print_summary, Print_summary_ext, WriteSolution3D
 
 end

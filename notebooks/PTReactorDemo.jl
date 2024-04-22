@@ -47,8 +47,15 @@ Select problem dimension: $(@bind dim Select([2,3], default=2))
 
 Select grid refinement level: $(@bind nref Select([0,1,2,3], default=0))
 
-Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=false))
+Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=true))
 """
+
+# ╔═╡ 89bc522c-0423-45a0-acf6-60f130294abe
+begin
+	W_block=3.0ufac"cm"
+	H_cat=0.05ufac"cm"
+	mcat=500ufac"mg"
+end;
 
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═╡ skip_as_script = true
@@ -67,15 +74,16 @@ end
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
 function ThermalDemo(dim; nref=nref, W_block=1.0ufac"cm", H_cat=0.05ufac"cm", mcat=500ufac"mg")
 
-	#grid, inb, irrb, outb, sb, catr, permr =  PTR_grid_boundaries_regions(dim, nref=nref, W_block=W_block, H_cat=H_cat)
-
 	data = ReactorData(
 		dim=dim,
-		#kinpar=Wolf_rWGS,
 		kinpar=XuFroment,
 		nom_flux = 70.0*ufac"kW/m^2",
 
-		solve_T_equation = false,
+		
+		T_gas_in = 273.15 + 100,
+		
+		is_reactive = false,
+		#solve_T_equation = false,
 		#Treac = 600.0 + 273.15,
 
 		perm=[1.0e-6,1.0,1.0]*1.23e-10*ufac"m^2",
@@ -86,21 +94,11 @@ function ThermalDemo(dim; nref=nref, W_block=1.0ufac"cm", H_cat=0.05ufac"cm", mc
 		nflowin = 7.4*ufac"mol/hr",		
 		#mcat = 3000*ufac"mg",
 		mcat = mcat,
-		
-		dt_hf_irrad = (2.0, 10.0),
-		dt_hf_enth = (2.0, 3.0),
-		T_gas_in = 273.15 + 25,
-		Nu = 0.0,
-		
-		X0 = [0,0.5,0,0,0.5,0.0], # H2 / CO2 = 1/1
-		#inflow_boundaries=inb,
-		#top_radiation_boundaries=irrb,
-		#outflow_boundaries=outb,
-		#side_boundaries=sb,
-		#catalyst_regions=catr,
-		#permeable_regions=permr,
-
+	
+		Nu = 0.0,		
 		include_dpdt=true
+			
+		
 	)
 
 	grid = PTR_grid_boundaries_regions!(dim,data; nref=nref, W_block=W_block, H_cat=H_cat)
@@ -119,7 +117,7 @@ function ThermalDemo(dim; nref=nref, W_block=1.0ufac"cm", H_cat=0.05ufac"cm", mc
 		)
 	end
 	control.handle_exceptions=true
-	control.Δu_opt=100
+	control.Δu_opt=1000
 	control.Δt_max=100
 
 	#return grid,sys,data
@@ -129,7 +127,7 @@ end
 
 # ╔═╡ fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 if RunSim
-	solt,grid,sys,data=ThermalDemo(dim,W_block=3.0ufac"cm");
+	solt,grid,sys,data=ThermalDemo(dim,nref=nref,W_block=W_block);
 end;
 
 # ╔═╡ a995f83c-6ff7-4b95-a798-ea636ccb1d88
@@ -145,9 +143,6 @@ let
 	end
 end
   ╠═╡ =#
-
-# ╔═╡ a736bc51-0598-4804-9767-c469d2bed4a1
-data
 
 # ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
 md"""
@@ -173,8 +168,8 @@ let
 
 	#k=gni[:H2]
 	#k=gni[:CO]
-	#k=iT
-	k=ip
+	k=iT
+	#k=ip
 
 	if k in 1:ng
 		name = gn[k]
@@ -186,7 +181,7 @@ let
 	
 	@printf "%s In: %2.2e \t Out: %2.2e \t React: %2.2e \nIn - Out: %2.4e \nStorage tEnd -t0: %2.4e" name I_in[k] I_out[k] I_reac[k] (I_in+I_out-I_reac)[k] (stored_amount[end]-stored_amount[1])[k]
 
-	vis=GridVisualizer(resolution=(500,600), layout=(3,1), xlabel="Time / s", ylabel="Inflow / Outflow / Reaction Rate")
+	vis=GridVisualizer(resolution=(500,800), layout=(4,1), xlabel="Time / s", ylabel="Inflow / Outflow / Reaction Rate")
 
 	function plot_flows!(k,vis)
 		scalarplot!(vis, solt.t[2:end], stack(inflow_rate, dims=1)[:,k], label="Inflow rate")
@@ -195,9 +190,10 @@ let
 		#scalarplot!(vis, solt.t[2:end], stack(stored_amount, dims=1)[:,k], label="Stored amount", color=:green, clear=false, )
 	end
 
-	plot_flows!(ip,vis[1,1])
-	plot_flows!(gni[:H2],vis[2,1])
-	plot_flows!(gni[:CO],vis[3,1])
+	plot_flows!(iT,vis[1,1])
+	plot_flows!(ip,vis[2,1])
+	plot_flows!(gni[:H2],vis[3,1])
+	plot_flows!(gni[:CO],vis[4,1])
 	
 	reveal(vis)
 end
@@ -224,7 +220,23 @@ sol_ss = run_ss(solt,sys);
 # ╠═╡ skip_as_script = true
 #=╠═╡
 MultiComponentReactiveMixtureProject.Print_summary_ext(sol_ss,sys,data)
+#MultiComponentReactiveMixtureProject.Print_summary_ext(t,solt,sys,data)
   ╠═╡ =#
+
+# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
+@bind t PlutoUI.Slider(solt.t,show_value=true,default=solt.t[end])
+
+# ╔═╡ b42ce84e-9f97-488a-9311-24c809437623
+sol = solt(t);
+
+# ╔═╡ f810ca08-e9b6-4c8c-b911-18ea909f5232
+HeatFluxes_outer = HeatFluxes_EB_I(sol,sys,data)
+
+# ╔═╡ f40d7865-1649-4445-86eb-48e2a1a8817b
+HeatFluxes_inner = HeatFluxes_EB_I_inner(sol,sys,data)
+
+# ╔═╡ 8e41eb3d-0305-4556-8bbf-ca1e01f7e3ea
+data
 
 # ╔═╡ e6828f65-fc35-4e2e-aedd-324ccfe4a22c
 function write_sol(sol; desc="")
@@ -247,10 +259,18 @@ end
 # ╔═╡ 98468f9e-6dee-4b0b-8421-d77ac33012cc
 md"""
 ## Temperature
-1) Porous frit + catalyst layer domain
-2) Window inner surface
-3) Bottom plate
 """
+
+# ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
+# ╠═╡ show_logs = false
+# ╠═╡ skip_as_script = true
+#=╠═╡
+let
+	(;iT,iTw,iTp,top_radiation_boundaries,outflow_boundaries)=data
+	vis=GridVisualizer(layout=(1,1), resolution=(680,300))
+	scalarplot!(vis[1,1],grid, sol_ss[iT,:] .- 273.15, zoom = 2.8, aspect=4.0, show=true)
+end
+  ╠═╡ =#
 
 # ╔═╡ 58c0b05d-bb0e-4a3f-af05-71782040c8b9
 if dim == 2
@@ -262,23 +282,6 @@ md"""
 """
 end
 
-# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-@bind t PlutoUI.Slider(solt.t,show_value=true,default=solt.t[end])
-
-# ╔═╡ b42ce84e-9f97-488a-9311-24c809437623
-sol = solt(t);
-
-# ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
-# ╠═╡ show_logs = false
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	(;iT,iTw,iTp,top_radiation_boundaries,outflow_boundaries)=data
-	vis=GridVisualizer(layout=(1,1), resolution=(680,300))
-	scalarplot!(vis[1,1],grid, sol[iT,:] .- 273.15, zoom = 2.8, aspect=4.0, show=true)
-end
-  ╠═╡ =#
-
 # ╔═╡ 8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╠═╡ show_logs = false
 let
@@ -288,27 +291,29 @@ let
 		function _2to1(a,b)
 			a[1]=b[2]
 		end
-		_grid,_,_,_,_,_ = PTR_grid_boundaries_regions(dim,nref=nref)
-		newreg = num_bfaceregions(grid) + 1
+		#_grid,_,_,_,_,_ = PTR_grid_boundaries_regions(dim,nref=nref)
+		_grid = PTR_grid_boundaries_regions!(dim,data; nref=nref, W_block=W_block, H_cat=H_cat)
+		
+		newreg = num_bfaceregions(_grid) + 1
 		bfacemask!(_grid, [0.0,0.0].*ufac"cm",[0.0,0.5].*ufac"cm",newreg)
 		grid1D = subgrid(_grid, [newreg]; boundary = true, transform = _2to1)
-		sol1D=view(sol[iT, :], grid1D)
-		scalarplot!(vis[1,1],grid1D, sol1D .-273.15, label="Temperature along Y-axis", clear=false)
+		sol1D=view(sol_ss[iT, :], grid1D)
+		scalarplot!(vis[1,1],grid1D, sol1D .-273.15, clear=false)
 	
 		function __2to1(a,b)
 			a[1]=b[1]
 		end
 		grid1D = subgrid(grid, bottom_radiation_boundaries; boundary = true, transform = __2to1)
-		sol1D=view(sol[iT, :], grid1D)
-		scalarplot!(vis[2,1],grid1D, sol1D .-273.15, label="Temperature along X-axis", clear=false)
+		sol1D=view(sol_ss[iT, :], grid1D)
+		scalarplot!(vis[2,1],grid1D, sol1D .-273.15, clear=false)
 		
 	    # window
 		bgridw = subgrid(grid, top_radiation_boundaries; boundary = true, transform = __2to1)
-		bsolw=view(sol[iTw, :], bgridw)
+		bsolw=view(sol_ss[iTw, :], bgridw)
 		scalarplot!(vis[1,2],bgridw, bsolw.-273.15,)
 		# bottom plate
 		bgridp = subgrid(grid, bottom_radiation_boundaries; boundary = true, transform = __2to1)
-		bsolp=view(sol[iTp, :], bgridp)
+		bsolp=view(sol_ss[iTp, :], bgridp)
 		scalarplot!(vis[2,2],bgridp, bsolp.-273.15,show=true)
 	end
 end
@@ -330,9 +335,9 @@ let
 	ng=ngas(data)
 	if dim == 2
 		vis=GridVisualizer(layout=(4,1), resolution=(480,800))
-		scalarplot!(vis[1,1], grid, sol[gni[:CO],:], aspect = 4.0,zoom = 3.2) # CO
-		scalarplot!(vis[2,1], grid, sol[gni[:CO2],:], aspect = 4.0,zoom = 3.2) # CO2
-		scalarplot!(vis[3,1], grid, sol[gni[:CH4],:], aspect = 4.0,zoom = 3.2) # CH4
+		scalarplot!(vis[1,1], grid, sol_ss[gni[:CO],:], aspect = 4.0,zoom = 3.2)
+		scalarplot!(vis[2,1], grid, sol_ss[gni[:CO2],:], aspect = 4.0,zoom = 3.2)
+		scalarplot!(vis[3,1], grid, sol_ss[gni[:CH4],:], aspect = 4.0,zoom = 3.2)
 		#scalarplot!(vis[3,1], grid, sol[gni[:N2],:], aspect = 4.0,zoom = 2.8) # N2
 
 		#cols = distinguishable_colors(ng)
@@ -525,8 +530,8 @@ Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─d3278ac7-db94-4119-8efd-4dd18107e248
 # ╟─b2791860-ae0f-412d-9082-bb2e27f990bc
+# ╠═89bc522c-0423-45a0-acf6-60f130294abe
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
-# ╠═a736bc51-0598-4804-9767-c469d2bed4a1
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═a1ea393e-f123-4ad0-affa-885db325cfd5
 # ╠═415f6fa7-d5b5-40a2-806e-3d8a61541c2e
@@ -540,13 +545,16 @@ Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 # ╠═70cdb28c-4b23-4ea4-8cd4-5eb97a3b930a
 # ╠═e148f083-4d4e-4fe8-960d-bccd00689c9b
 # ╠═3207839f-48a9-49b6-9861-e5e74bc593a4
+# ╠═f810ca08-e9b6-4c8c-b911-18ea909f5232
+# ╠═f40d7865-1649-4445-86eb-48e2a1a8817b
+# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
+# ╠═8e41eb3d-0305-4556-8bbf-ca1e01f7e3ea
 # ╠═e6828f65-fc35-4e2e-aedd-324ccfe4a22c
 # ╠═f99203e7-e53e-4109-b6ff-7fb87d290324
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
-# ╟─99b59260-7651-45d0-b364-4f86db9927f8
+# ╠═99b59260-7651-45d0-b364-4f86db9927f8
 # ╟─58c0b05d-bb0e-4a3f-af05-71782040c8b9
-# ╠═8de4b22d-080c-486f-a6a9-41e8a5489966
-# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
+# ╟─8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
 # ╠═111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╟─cefa0637-d397-4870-8838-828d41232b1a

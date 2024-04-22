@@ -48,23 +48,78 @@ function flux_convection_top(f,u,bnode,data)
     end
 end
 
+function flux_enth_top(f,u,bnode,data)
+    (;iT, solve_T_equation, inflow_boundaries, T_gas_in, X0, mfluxin, mmix0 ) =data
+	if solve_T_equation && bnode.region in inflow_boundaries
+        
+        hin = zero(eltype(u))
+        @inbounds for i=1:ng
+            hin += X0[i]*enthalpy_gas_thermal(data.Fluids[i],T_gas_in)
+        end
+
+        r_hf_enth = mfluxin/mmix0 * hin
+        f[iT] = r_hf_enth
+    end
+end
+
+function flux_enth_bottom(f,u,bnode,data)
+    (;iT, solve_T_equation, outflow_boundaries, m, mfluxin, ) =data
+	if solve_T_equation && bnode.region in outflow_boundaries
+        
+        mmix = zero(eltype(u))
+        hout = zero(eltype(u))
+        @inbounds for i=1:ng
+            mmix += u[i]*m[i]
+            hout += u[i]*enthalpy_gas_thermal(data.Fluids[i],u[iT])
+        end
+
+        # total mass is constant, outflow cross section = inflow cross section
+        r_hf_enth = mfluxin/mmix * hout
+        f[iT] = r_hf_enth
+    end
+end
+
+# Post-processing (pp) wrapping function to handle time-dependent ramping inside b.c. functions
+function PTR_top_post(f,u,bnode,data)
+    bnode.time = Inf
+    PTR_top(f,u,bnode,data)
+end
+
+function PTR_side_post(f,u,bnode,data)
+    bnode.time = Inf
+    PTR_side(f,u,bnode,data)
+end
+
+function PTR_bottom_post(f,u,bnode,data)
+    bnode.time = Inf
+    PTR_bottom(f,u,bnode,data)
+end
+
+function DMS_boutflow_post(f,u,edge,data)
+    edge.time = Inf
+    DMS_boutflow(f,u,edge,data)
+end
+
+
 function flux_radiation_frit_bottom(f,u,bnode,data)
     (;iT,iTp,lc_frit,lc_plate,bottom_radiation_boundaries) = data
     #if bnode.region==Γ_bottom
-    if bnode.region in bottom_radiation_boundaries
-		
+    if bnode.region in bottom_radiation_boundaries		
 		
 		# irradiation exchange between porous frit (3) and Al bottom plate (4)
 		# porous frit properties (3)
-		eps3=lc_frit.eps;  rho3_IR=lc_frit.rho_IR; 	
+		eps3 = lc_frit.eps
+        rho3_IR = lc_frit.rho_IR
 		# Al bottom plate properties (4)
-		eps4=lc_plate.eps; rho4_IR=lc_plate.rho_IR;
+		eps4 = lc_plate.eps
+        rho4_IR = lc_plate.rho_IR
 	
-        # local plate temperature
-        Tplate = u[iTp]
-        G1_IR = (eps3*ph"σ"*u[iT]^4 + rho3_IR*eps4*ph"σ"*Tplate^4)/(1-rho3_IR*rho4_IR)
+        T3 = u[iT] # frit temperature
+        T4 = u[iTp] # plate temperature
+        
+	    G34_IR = (eps3*ph"σ"*T3^4 + rho3_IR*eps4*ph"σ"*T4^4)/(1-rho3_IR*rho4_IR)
 
-        f[iT] = G1_IR
+        f[iT] = G34_IR
     end
 end
 
@@ -75,15 +130,20 @@ function flux_radiation_plate_bottom(f,u,bnode,data)
 		
 		# irradiation exchange between porous frit (3) and Al bottom plate (4)
 		# porous frit properties (3)
-		eps3=lc_frit.eps;  rho3_IR=lc_frit.rho_IR; 	
+		eps3 = lc_frit.eps
+        rho3_IR = lc_frit.rho_IR
 		# Al bottom plate properties (4)
-		eps4=lc_plate.eps; rho4_IR=lc_plate.rho_IR;
-		
-        # local plate temperature
-        Tplate = u[iTp]
-        G2_IR = (eps4*ph"σ"*Tplate^4 + rho4_IR*eps3*ph"σ"*u[iT]^4)/(1-rho3_IR*rho4_IR)
+		eps4 = lc_plate.eps
+        rho4_IR = lc_plate.rho_IR		
 
-        f[iT] = G2_IR
+        T3 = u[iT] # frit temperature
+        T4 = u[iTp] # plate temperature
+
+	    G34_IR = (eps3*ph"σ"*T3^4 + rho3_IR*eps4*ph"σ"*T4^4)/(1-rho3_IR*rho4_IR)
+
+        G43_IR = rho4_IR*G34_IR + eps4*ph"σ"*T4^4
+
+        f[iT] = G43_IR
     end
 end
 
@@ -128,123 +188,115 @@ end
 
 function HeatFluxes_EB_I(t,solt,sys,data)
 
-    (;iT,dt_hf_irrad)=data
-
-    # inflow, outflow = TotalThermalEnergyFlows(t,solt,sys,data)
-
-    inflow, outflow = BoundaryFluxes(t, solt, sys, data)
-
-    # dE_dt = inflow + outflow
-    dE_dt = inflow[iT] + outflow[iT]
-
     sol = solt(t)
+    HeatFluxes_EB_I(sol,sys,data)
 
-    # calc_hf = t >= dt_hf_irrad[1]
-    Q_irrad_01,
-    Q_irrad_10,
-    Q_conve_10,
-    Q_irrad_34,
-    Q_irrad_43,
-    Q_conve_34,
-    Q_sides,
-    H_reaction = zeros(8) 
-
-    if t >= dt_hf_irrad[1]
-        Q_irrad_01,
-        Q_irrad_10,
-        Q_conve_10,
-        Q_irrad_34,
-        Q_irrad_43,
-        Q_conve_34,
-        Q_sides,
-        H_reaction = HeatFluxes_EB_I_(sol,sys,data)            
-    end
-
-   
-    H_thermal = dE_dt - (Q_irrad_01 - Q_irrad_10) - (Q_irrad_43 - Q_irrad_34) + Q_conve_10 + Q_conve_34 + Q_sides
-
-    (
-        Q_irrad_01=Q_irrad_01,
-        Q_irrad_10=-Q_irrad_10,
-        H_thermal=H_thermal,
-        H_reaction=-H_reaction,
-        Q_conve_10=-Q_conve_10,
-        Q_conve_34=-Q_conve_34,
-        Q_irrad_34=-Q_irrad_34,
-        Q_irrad_43=Q_irrad_43,
-        Q_sides=-Q_sides
-    )
 end
 
+# stationary energy balance: dE_dt = 0
 function HeatFluxes_EB_I(sol,sys,data)
 
-    (;iT,dt_hf_irrad)=data
+    (;iT, inflow_boundaries, top_radiation_boundaries, outflow_boundaries, bottom_radiation_boundaries, side_boundaries) = data
 
-    inflow, outflow = BoundaryFluxes(sol, sys, data)
+    top_boundaries = unique(reduce(vcat, [inflow_boundaries,top_radiation_boundaries]))
 
-    # dE_dt = inflow + outflow
-    dE_dt = inflow[iT] + outflow[iT]
+    bottom_boundaries = unique(reduce(vcat, [bottom_radiation_boundaries,outflow_boundaries]))
+    
+    # Top boundary
+    Q_irrad_12 = integrate(sys,flux_window_underside,sol; boundary=true)[iT,top_radiation_boundaries]
+    Q_irrad_12 = sum(Q_irrad_12)
 
-    Q_irrad_01,
-    Q_irrad_10,
-    Q_conve_10,
-    Q_irrad_34,
-    Q_irrad_43,
-    Q_conve_34,
-    Q_sides,
-    H_reaction = HeatFluxes_EB_I_(sol,sys,data)
+    Q_irrad_21 = integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,top_radiation_boundaries]
+    Q_irrad_21 = sum(Q_irrad_21)
 
-    H_thermal = dE_dt - (Q_irrad_01 - Q_irrad_10) - (Q_irrad_43 - Q_irrad_34) + Q_conve_10 + Q_conve_34 + Q_sides
+    H_enth_in_2 = integrate(sys,flux_enth_top,sol; boundary=true)[iT,top_boundaries]
+    H_enth_in_2 = sum(H_enth_in_2)
+    
+    Q_conve_21 = integrate(sys,flux_convection_top,sol; boundary=true)[iT,top_radiation_boundaries]
+    Q_conve_21 = sum(Q_conve_21)
+
+    # Bottom boundary
+    Q_irrad_34 = integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,bottom_radiation_boundaries]
+    Q_irrad_34 = sum(Q_irrad_34)
+    
+    Q_irrad_43 = integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,bottom_radiation_boundaries]
+    Q_irrad_43 = sum(Q_irrad_43)
+
+    H_enth_out_3 = integrate(sys,flux_enth_bottom,sol; boundary=true)[iT,bottom_boundaries]
+	H_enth_out_3 = sum(H_enth_out_3)
+
+    Q_conve_34 = integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,bottom_radiation_boundaries]
+    Q_conve_34 = sum(Q_conve_34)
+
+    # Side boundaries
+    Q_sides = integrate(sys,flux_side,sol; boundary=true)[iT,side_boundaries]
+    Q_sides = sum(Q_sides)
+
+    H_chemical = sum(integrate(sys,sys.physics.reaction,sol), dims=2)[iT]
+    # H_thermal = H_enth_in_2 - H_enth_out_3
 
     (
-        Q_irrad_01=Q_irrad_01,
-        Q_irrad_10=-Q_irrad_10,
-        H_thermal=H_thermal,
-        H_reaction=-H_reaction,
-        Q_conve_10=-Q_conve_10,
-        Q_conve_34=-Q_conve_34,
+        Q_irrad_12=Q_irrad_12,
+        Q_irrad_21=-Q_irrad_21,        
+        Q_conve_21=-Q_conve_21,
         Q_irrad_34=-Q_irrad_34,
-        Q_irrad_43=Q_irrad_43,
-        Q_sides=-Q_sides
+        Q_irrad_43=Q_irrad_43,        
+        Q_conve_34=Q_conve_34,
+        Q_sides=-Q_sides,
+        H_enth_in_2=H_enth_in_2,
+        H_enth_out_3=-H_enth_out_3,
+        H_chemical=-H_chemical
     )
 end
 
-function HeatFluxes_EB_I_(sol,sys,data)
+function HeatFluxes_EB_I_inner(t,solt,sys,data)
+    sol = solt(t)
+    HeatFluxes_EB_I_inner(sol,sys,data)
+end
 
-    (;iT, top_radiation_boundaries, bottom_radiation_boundaries, side_boundaries) = data
+function HeatFluxes_EB_I_inner(sol,sys,data)
 
-    Q_irrad_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,top_radiation_boundaries]
-    Q_irrad_01 = sum(Q_irrad_01)
+    (;iT, inflow_boundaries,top_radiation_boundaries, side_boundaries,bottom_radiation_boundaries, outflow_boundaries) = data
 
-    Q_irrad_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,top_radiation_boundaries]
-    Q_irrad_10 = sum(Q_irrad_10)
-    
-    Q_conve_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,top_radiation_boundaries]
-    Q_conve_10 = sum(Q_conve_10)
+	top_boundaries = unique(reduce(vcat, [inflow_boundaries,top_radiation_boundaries]))
 
-    Q_irrad_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,bottom_radiation_boundaries]
-    Q_irrad_34 = sum(Q_irrad_34)
-    
-    Q_irrad_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,bottom_radiation_boundaries]
-    Q_irrad_43 = sum(Q_irrad_43)
+	bottom_boundaries = unique(reduce(vcat, [bottom_radiation_boundaries,outflow_boundaries]))
+	
+	hf_top = integrate(sys,MultiComponentReactiveMixtureProject.PTR_top_post,sol; boundary=true)[iT,top_boundaries]
+	hf_top = -sum(hf_top)
 
-    Q_conve_34=integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,bottom_radiation_boundaries]
-    Q_conve_34 = sum(Q_conve_34)
+	hf_top_enth = integrate(sys,MultiComponentReactiveMixtureProject.flux_enth_top,sol; boundary=true)[iT,top_boundaries]
+	hf_top_enth = sum(hf_top_enth)
+	
+	hf_side = integrate(sys,MultiComponentReactiveMixtureProject.PTR_side_post,sol; boundary=true)[iT,side_boundaries]
+	hf_side = sum(hf_side)
 
-    Q_sides=integrate(sys,flux_side,sol; boundary=true)[iT,side_boundaries]
-    Q_sides = sum(Q_sides)
+	hf_bottom_rad = integrate(sys,MultiComponentReactiveMixtureProject.PTR_bottom_post,sol; boundary=true)[iT,bottom_boundaries]
+	hf_bottom_rad = sum(hf_bottom_rad)
 
-    H_reaction = sum(integrate(sys,sys.physics.reaction,sol), dims=2)[iT]
+	hf_bottom_enth = integrate(sys,MultiComponentReactiveMixtureProject.flux_enth_bottom,sol; boundary=true)[iT,bottom_boundaries]
+	hf_bottom_enth = sum(hf_bottom_enth)
+
+	hf_reaction = sum(integrate(sys,sys.physics.reaction,sol), dims=2)[iT]
+
+	# # [hf_top, hf_top_enth, hf_side, hf_bottom_enth, hf_bottom_rad], hf_top-hf_side-hf_bottom_enth-hf_bottom_rad
+
+	# Heatflows = Dict(
+	# 	"Top radiation" => hf_top-hf_top_enth,
+	# 	"Top enthalpy inflow" => hf_top_enth,
+	# 	"Side convection" => -hf_side,
+	# 	"Bottom radiation" => -hf_bottom_rad,
+	# 	"Bottom enthalpy outflow" => -hf_bottom_enth,
+	# 	"Reaction enthalpy" => -hf_reaction,
+	# )
 
     (
-        Q_irrad_01=Q_irrad_01,
-        Q_irrad_10=-Q_irrad_10,
-        Q_conve_10=-Q_conve_10,
-        Q_irrad_34=-Q_irrad_34,
-        Q_irrad_43=Q_irrad_43,
-        Q_conve_34=-Q_conve_34,
-        Q_sides=-Q_sides,
-        H_reaction=-H_reaction
+        Q_rad_top_in = hf_top-hf_top_enth,
+        H_thermal_top_in = hf_top_enth,
+        Q_conv_sides_out = -hf_side,
+        Q_rad_bottom_out = -hf_bottom_rad,
+        H_thermal_bottom_out = -hf_bottom_enth,
+        H_chemical_out = -hf_reaction,
     )
 end
 
@@ -409,14 +461,27 @@ function Print_summary_ext_(in,out,HeatFluxes,data)
 	# fluxes = HeatFluxes_EB_I(t,solt,grid,sys,data)
 
     if !isnothing(HeatFluxes)
-        ns = keys(HeatFluxes)
-        vs = values(HeatFluxes)
+        HeatFluxes_outer, HeatFluxes_inner = HeatFluxes
         
-        println("\nEnergy Balancing [W]:")
-        for i=1:length(HeatFluxes)
-            @printf "%s:\t%.2f \n" String(ns[i]) vs[i]
+        # energy balance with outer radiation fluxes
+        println("\nEnergy Balancing [W]:\nOuter radiation balance: (based on surface radiosities)\n")
+        ns = keys(HeatFluxes_outer)
+        vs = values(HeatFluxes_outer)
+        for i=1:length(HeatFluxes_outer)
+            @printf "%15s: %6.1f \n" String(ns[i]) vs[i]
         end
-        @printf "Sum:\t\t%.6f \n" sum(HeatFluxes)
+        @printf "%*s\n" 22 "="
+        @printf "%15s: %6.1f \n" "Sum" sum(HeatFluxes_outer)
+
+        # energy balance with inner radiation fluxes
+        println("\nEnergy Balancing [W]:\nInner radiation balance: (based on net absorbed/emitted radiation fluxes)\n")
+        ns = keys(HeatFluxes_inner)
+        vs = values(HeatFluxes_inner)
+        for i=1:length(HeatFluxes_inner)
+            @printf "%21s: %6.1f \n" String(ns[i]) vs[i]
+        end
+        @printf "%*s\n" 28 "="
+        @printf "%21s: %6.1f \n" "Sum" sum(HeatFluxes_inner)
     end
 end
 
@@ -425,7 +490,9 @@ function Print_summary_ext(sol,sys,data)
 
 	in_,out_ = BoundaryFluxes(sol,sys,data)
     if solve_T_equation
-        HeatFluxes = HeatFluxes_EB_I(sol,sys,data)
+        HeatFluxes_outer = HeatFluxes_EB_I(sol,sys,data)
+        HeatFluxes_inner = HeatFluxes_EB_I_inner(sol,sys,data)
+        HeatFluxes = (HeatFluxes_outer, HeatFluxes_inner)
     else
         HeatFluxes = nothing
     end

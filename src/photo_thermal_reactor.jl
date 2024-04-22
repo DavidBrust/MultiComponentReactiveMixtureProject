@@ -9,10 +9,10 @@ function PTR_radiosity_window(f,u,bnode,data)
 	(;dim,iTw,ibf,nom_flux,Tamb,uc_window,top_radiation_boundaries,constant_irradiation_flux_bc)=data
 	
     # irrad. exchange between quartz window (1), cat surface (2), masked sruface (3) 
-    tau1_vis=uc_window.tau_vis
-    rho1_vis=uc_window.rho_vis
-    tau1_IR=uc_window.tau_IR
-    rho1_IR=uc_window.rho_IR
+    # tau1_vis=uc_window.tau_vis
+    # rho1_vis=uc_window.rho_vis
+    # tau1_IR=uc_window.tau_IR
+    # rho1_IR=uc_window.rho_IR
     eps1=uc_window.eps
 	
 	G_lamp = zero(eltype(u))
@@ -107,7 +107,7 @@ function PTR_top(f,u,bnode,data)
 			f[iT] = -r_hf_enth * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
 						
 			if bnode.region in top_radiation_boundaries
-				@inline hf_domain_top, hf_window = Top_HeatFlux(f,u,bnode,data)				
+				@inline hf_domain_top, hf_window = Top_HeatFlux(f,u,bnode,data)
 				f[iT] -= hf_domain_top
 				f[iTw] = -hf_window
 			end
@@ -149,17 +149,32 @@ function Bottom_HeatFlux(f,u,bnode,data)
 	(;iT,iTp,k_nat_conv,Tamb,lc_h,Nu,dt_hf_irrad,lc_frit,lc_plate) = data
 	ng=ngas(data)
 
-	# radiation heat flux
-	rho3_IR=lc_frit.rho_IR
-	alpha3_IR=lc_frit.alpha_IR
-	eps3=lc_frit.eps
-	rho4_IR=lc_plate.rho_IR
-	alpha4_IR=lc_plate.alpha_IR
-	eps4=lc_plate.eps
+	# optical parameters for radiation heat exchange
+
+	# surface 3: frit lower chamber
+	rho3_IR = lc_frit.rho_IR
+	alpha3_IR = lc_frit.alpha_IR
+	eps3 = lc_frit.eps
+	# surface 4: Al plate lower chamber
+	rho4_IR = lc_plate.rho_IR
+	alpha4_IR = lc_plate.alpha_IR
+	eps4 = lc_plate.eps
+	
+
 
 	# heatflux from irradiation exchange with bottom plate
-	Tplate = u[iTp]	
-	hflux_irrad = -eps3*ph"σ"*u[iT]^4 + alpha3_IR/(1-rho3_IR*rho4_IR)*(eps4*ph"σ"*Tplate^4+rho4_IR*eps3*ph"σ"*u[iT]^4)
+	T4 = u[iTp]	# plate temperature
+	T3 = u[iT]	# frit temperature
+
+
+	G34_IR = (eps3*ph"σ"*T3^4 + rho3_IR*eps4*ph"σ"*T4^4)/(1-rho3_IR*rho4_IR)
+
+	G43_IR = rho4_IR*G34_IR + eps4*ph"σ"*T4^4
+
+
+	# heat flux balance around frit in lower chamber (surface 3), positive sign entering, negative sign exiting
+	# net_hflux_irrad_3 = -eps3*ph"σ"*T3^4 + alpha3_IR/(1-rho3_IR*rho4_IR) * (eps4*ph"σ"*T4^4 + rho4_IR*eps3*ph"σ"*T3^4)
+	net_hflux_irrad_3 = -eps3*ph"σ"*T3^4 + alpha3_IR*G43_IR
 
 	# heatflux from convective/conductive heat exchange with bottom plate
 	# Tm=0.5*(u[iT] + Tplate)
@@ -173,21 +188,23 @@ function Bottom_HeatFlux(f,u,bnode,data)
 
 	# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
 	# f[iT] = (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
-	hf_domain_bottom = hflux_irrad * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+	net_hflux_3 = net_hflux_irrad_3 * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
 
 	# calculate (local) plate temperature from (local) flux balance
-	hflux_conv_bot_p = k_nat_conv*(u[iTp]-Tamb)
-	hflux_emit_p = lc_plate.eps*ph"σ"*u[iTp]^4
-	G1_IR = (eps3*ph"σ"*u[iT]^4 + rho3_IR*eps4*ph"σ"*u[iTp]^4)/(1-rho3_IR*rho4_IR)
-	hflux_abs_p = alpha4_IR*G1_IR + alpha4_IR*ph"σ"*Tamb^4
+	hflux_conv_bot_p = k_nat_conv * (T4-Tamb)
+	hflux_emit_p = eps4*ph"σ"*T4^4
+	
+	# hflux_abs_p = alpha4_IR*G34_IR + alpha4_IR*ph"σ"*Tamb^4
+	# !!! Include transmitted visible radiation from upper chamber
+	hflux_abs_p = alpha4_IR*G34_IR + alpha4_IR*ph"σ"*Tamb^4
 
 	# f[iTp] = -hflux_conv -hflux_abs_p +2*hflux_emit_p +hflux_conv_bot_p
 	# f[iTp] *= ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
 	# f[iTp] = -hflux_abs_p + 2*hflux_emit_p +hflux_conv_bot_p
 
-	hf_plate = hflux_abs_p - 2*hflux_emit_p - hflux_conv_bot_p
+	net_hflux_4 = hflux_abs_p - 2*hflux_emit_p - hflux_conv_bot_p
 
-	return hf_domain_bottom, hf_plate
+	return net_hflux_3, net_hflux_4
 end
 
 @doc raw"""
@@ -336,7 +353,8 @@ const uc_cat = SurfaceOpticalProps(
 	alpha_IR=0.56, # measurement (ideally at high T) integrated over IR
 	tau_IR=0.0, # opaque surface
 	alpha_vis=0.47, # measurement (ideally at high T) integrated over vis
-	tau_vis=0.13 
+	# tau_vis=0.13 
+	tau_vis=0.0 
 )
 
 # optical parameters for uncoated frit in upper chamber (uc)
@@ -344,7 +362,8 @@ const uc_mask = SurfaceOpticalProps(
 	alpha_IR=0.55, # measurement (ideally at high T) integrated over IR
 	tau_IR=0.0, # opaque surface
 	alpha_vis=0.16, # measurement (ideally at high T) integrated over vis
-	tau_vis=0.13 
+	# tau_vis=0.13 
+	tau_vis=0.0 
 )
 
 # optical parameters for uncoated frit in lower chamber (lc) = frit in upper chamber
@@ -701,12 +720,13 @@ function PTR_grid_boundaries_regions!(	dim, data;
 
 	if dim == 2
 		Γ_bottom_impermeable = 1
-		#Γ_bottom_rim = 8
+		
 		Γ_side = 2
 		Γ_sym = 4		
 		Γ_bottom_permeable = 5
 		Γ_top_irradiated = 6
-		Γ_top_permeable = 7		
+		Γ_top_permeable = 7
+		Γ_bottom_block = 8
 
 		W=W/2 # axisymmetry, half domain is sufficient
 		# nr=W*2^(nref)
@@ -747,12 +767,16 @@ function PTR_grid_boundaries_regions!(	dim, data;
 			rad_top_b = [Γ_top_irradiated]
 		else
 			bfacemask!(grid, [0,H], [W_window/2,H], Γ_top_irradiated)
+			# bfacemask!(grid, [W-W_block+efix,H], [W_window/2,H], Γ_top_irradiated)
+			
 			bfacemask!(grid, [0,H], [W-W_block,H], Γ_top_permeable)
 			inflow_b = [Γ_top_permeable]
 			rad_top_b = [Γ_top_permeable, Γ_top_irradiated]
 		end
+
 		if W_block >= 1.0ufac"cm"
 			bfacemask!(grid, [0,0], [W-W_block,0], Γ_bottom_permeable)
+			# bfacemask!(grid, [W-W_block,0], [W-W_block+efix,0], Γ_bottom_block)
 			rad_bottom_b = [Γ_bottom_impermeable, Γ_bottom_permeable]
 		else
 			bfacemask!(grid, [0,0], [W,0], Γ_bottom_permeable)

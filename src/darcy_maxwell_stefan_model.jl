@@ -463,8 +463,11 @@ function DMS_boutflow(f,u,edge,data)
         end
 
 		r_hf_enth = v * cout * hout
-        # f[iT] = r_hf_enth
+
+		# !!! DEBUG
 		f[iT] = r_hf_enth * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth)
+		# f[iT] = -r_hf_enth * ramp(edge.time; du=(0.0,1.0), dt=dt_hf_enth)
+		# !!! DEBUG
     end
 end
 
