@@ -565,7 +565,7 @@ end
 """
 Regularized logarithm:
 ```
-   rlog(u,data)= log(u+electrolyte.logreg)
+   rlog(u,data)= log(u+data.logreg)
 ```
 """
 rlog(x,data::ReactorData)=rlog(x,data.logreg)
@@ -871,10 +871,6 @@ function PTR_init_system(dim, grid, data::ReactorData)
 		inival[i,:] .= X0[i]
 	end
 
-	# for inert gas (pure N2), set is_reactive to false
-	if !any(X0[1:(ng-1)] .> 0.0)
-		data.is_reactive = false
-	end
 
 	if solve_T_equation
 		inival[[iT,iTw,iTp],:] .= Tamb

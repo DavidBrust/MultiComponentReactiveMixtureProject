@@ -266,14 +266,18 @@ function ri(data,T,p_)
     
     Ki_ = @inline Ki(data, T)
     pexp = MVector{nreac(kinpar),eltype(p_)}(undef)
-    unitc=one(eltype(p_))
+    pexp .= zero(eltype(p_))
+    unitc=  one(eltype(p_))
+    atol = one(eltype(p_))*1.0e-12
     if kinpar == XuFroment
         p ./= ufac"bar"
         unitc *=ufac"mol/(hr*g)"
-        pexp[1] = @inbounds 1/p[n[:H2]]^2.5*(p[n[:CH4]]*p[n[:H2O]]-p[n[:H2]]^3*p[n[:CO]]/Ki_[r[:R1]])    
-        pexp[2] = @inbounds 1/p[n[:H2]]*(p[n[:CO]]*p[n[:H2O]]-p[n[:H2]]*p[n[:CO2]]/Ki_[r[:R2]])
-        pexp[3] = @inbounds 1/p[n[:H2]]^3.5*(p[n[:CH4]]*p[n[:H2O]]^2-p[n[:H2]]^4*p[n[:CO2]]/Ki_[r[:R3]])
-        pexp ./= @inline DEN(data,T,p)^2
+        if @inbounds @views abs(p[n[:H2]]) > atol
+            pexp[1] = @inbounds 1/p[n[:H2]]^2.5*(p[n[:CH4]]*p[n[:H2O]]-p[n[:H2]]^3*p[n[:CO]]/Ki_[r[:R1]])    
+            pexp[2] = @inbounds 1/p[n[:H2]]*(p[n[:CO]]*p[n[:H2O]]-p[n[:H2]]*p[n[:CO2]]/Ki_[r[:R2]])
+            pexp[3] = @inbounds 1/p[n[:H2]]^3.5*(p[n[:CH4]]*p[n[:H2O]]^2-p[n[:H2]]^4*p[n[:CO2]]/Ki_[r[:R3]])
+            pexp ./= @inline DEN(data,T,p)^2
+        end
         
     elseif kinpar == S3P
         p ./= ufac"bar"
@@ -314,7 +318,4 @@ function ri(data,T,p_)
     end
     
     ri_ = @inline ki(data,T) .* pexp * unitc
- 
-
-
 end

@@ -26,7 +26,7 @@ begin
 	using VoronoiFVM
 	using GridVisualize
 	using ExtendableGrids
-	using Plots, Colors, PlutoUI, LaTeXStrings
+	using Plots, Colors, PlutoUI, LaTeXStrings, Measures
 	using Roots
 	using ForwardDiff, DiffResults
 	using MultiComponentReactiveMixtureProject
@@ -830,8 +830,8 @@ df_230807_Tcalc = df_Tcalc("../../../data/out/JECE_TemperaturesTC_Uncertainty/Tc
 let
 	p1 = parity_plot_Tcalc(df_230804_Tcalc,df_230804_Texp,3)
 	p2 = parity_plot_Tcalc(df_230807_Tcalc,df_230807_Texp,5.6)
-	p=Plots.plot(p1,p2,layout=(1,2), size=(550, 260))	
-	#Plots.savefig(p, "../../data/out/2024-01-26/ParityPlots.svg")
+	p=Plots.plot(p1,p2,layout=(1,2), margin = 5mm, size=(550, 270))	
+	#Plots.savefig(p, "../../../data/out/2024-04-24_JECE_revisions/ParityPlots.svg")
 end
 
 # ╔═╡ 4f67dc46-b5b6-4648-a526-77992c22020f
@@ -840,8 +840,8 @@ let
 	p1 = plot_Tcalc_exp(hcat(df_230804_Tcalc, df_230804_Texp), 3)
 	# 07.08.2023, 40-80 suns, 5.6NL/min
 	p2 = plot_Tcalc_exp(hcat(df_230807_Tcalc, df_230807_Texp), 5.6)
-	p=Plots.plot(p1,p2,layout=(1,2), size=(550, 250))	
-	#Plots.savefig(p, "../../data/out/2024-01-26/Tcat_surf_TC_uc.svg")
+	p=Plots.plot(p1,p2,layout=(1,2), margin = 5mm, size=(550, 270))	
+	#Plots.savefig(p, "../../../data/out/2024-04-24_JECE_revisions/Tcat_surf_TC_uc.svg")
 end
 
 # ╔═╡ 4389b52e-f286-41d1-93e6-e8090743e50a
@@ -934,7 +934,7 @@ LocalResource(
 # ╠═3a0c71bd-339f-437f-9705-ddcc543c3e8d
 # ╠═8bd04d1e-08d6-495e-ad64-435a9b504c17
 # ╠═1aefe230-88fc-4397-91d6-7899499cb3ea
-# ╠═28249727-2511-4ec1-9067-e2b6fb0651f1
+# ╟─28249727-2511-4ec1-9067-e2b6fb0651f1
 # ╟─fd262db7-015a-4102-a909-7a392d75c3fe
 # ╠═9c55c919-e373-40d3-aab5-8c6989b04e2f
 # ╟─3086a90e-0a2e-423a-afa4-43ac1a94928c
@@ -962,7 +962,7 @@ LocalResource(
 # ╠═8aca7493-e1d7-488f-a78b-e16517918fe4
 # ╟─b7db1ccc-7b9d-4332-bff7-04d9e97b7138
 # ╠═9b3a6003-7263-40ed-a11b-3a55c3a7a510
-# ╟─964a2633-9c83-4fb7-8ac2-692018a536de
+# ╠═964a2633-9c83-4fb7-8ac2-692018a536de
 # ╠═9e282b41-7870-4416-9b5f-e873b25cf032
 # ╠═1d6a9361-0473-488d-a56a-914e908b7a83
 # ╠═06fb7b1b-3a36-4cd9-8485-8c2c55eab86c

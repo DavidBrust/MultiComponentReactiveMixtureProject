@@ -82,7 +82,8 @@ function ThermalDemo(dim; nref=nref, W_block=1.0ufac"cm", H_cat=0.05ufac"cm", mc
 		
 		T_gas_in = 273.15 + 100,
 		
-		is_reactive = false,
+		#is_reactive = false,
+		X0 = [0.0,0.0,0.0,0.0,0.0,1.0],
 		#solve_T_equation = false,
 		#Treac = 600.0 + 273.15,
 
@@ -181,7 +182,7 @@ let
 	
 	@printf "%s In: %2.2e \t Out: %2.2e \t React: %2.2e \nIn - Out: %2.4e \nStorage tEnd -t0: %2.4e" name I_in[k] I_out[k] I_reac[k] (I_in+I_out-I_reac)[k] (stored_amount[end]-stored_amount[1])[k]
 
-	vis=GridVisualizer(resolution=(500,800), layout=(4,1), xlabel="Time / s", ylabel="Inflow / Outflow / Reaction Rate")
+	vis=GridVisualizer(resolution=(500,600), layout=(3,1), xlabel="Time / s", ylabel="Inflow / Outflow / Reaction Rate")
 
 	function plot_flows!(k,vis)
 		scalarplot!(vis, solt.t[2:end], stack(inflow_rate, dims=1)[:,k], label="Inflow rate")
@@ -190,10 +191,9 @@ let
 		#scalarplot!(vis, solt.t[2:end], stack(stored_amount, dims=1)[:,k], label="Stored amount", color=:green, clear=false, )
 	end
 
-	plot_flows!(iT,vis[1,1])
-	plot_flows!(ip,vis[2,1])
-	plot_flows!(gni[:H2],vis[3,1])
-	plot_flows!(gni[:CO],vis[4,1])
+	plot_flows!(ip,vis[1,1])
+	plot_flows!(gni[:H2],vis[2,1])
+	plot_flows!(gni[:CO],vis[3,1])
 	
 	reveal(vis)
 end

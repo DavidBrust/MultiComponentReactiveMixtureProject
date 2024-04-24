@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.36
+# v0.19.40
 
 using Markdown
 using InteractiveUtils
@@ -17,7 +17,7 @@ begin
 	using VoronoiFVM
 	using GridVisualize
 	using ExtendableGrids
-	using PlutoVista, Plots
+	using PlutoVista, Plots, Measures
 	using PlutoUI
 	using Interpolations
 
@@ -27,7 +27,7 @@ begin
 end;
 
 # ╔═╡ b4a07bfc-f30e-4970-b301-bed21f50e943
-nom_flux = 60.0
+nom_flux = 40.0
 
 # ╔═╡ 8e4d183d-fc6b-47b5-9c6a-3b18b14c4297
 function readFlux(flux)
@@ -148,8 +148,10 @@ D_levels = Dict(
 function plotBorder(p)
 	Plots.plot!(p, [1.0;11.0], [1.0;1.0], c=:black, lw=2, label=:none)
 	Plots.plot!(p, [1.0;1.0], [1.0;11.0], c=:black, lw=2, label=:none)
-	Plots.plot!(p, [1.0;11.0], [11.0;11.0], c=:black, lw=2, label=:none)
-	Plots.plot!(p, [11.0;11.0], [1.0;11.0], c=:black, lw=2, label=:none)
+	Plots.plot!(p, [1.0;9.3], [11.0;11.0], c=:black, lw=2, label=:none)
+	Plots.plot!(p, [10.5;11.0], [11.0;11.0], c=:black, lw=2, label=:none)
+	Plots.plot!(p, [11.0;11.0], [1.0;6.2], c=:black, lw=2, label=:none)
+	Plots.plot!(p, [11.0;11.0], [7.4;11.0], c=:black, lw=2, label=:none)
 end
 
 # ╔═╡ 6766a4cb-296a-4bbf-8577-a24674243dda
@@ -162,11 +164,11 @@ end
 # ╔═╡ cd6dfa70-db90-4d38-b265-a89da0abb93c
 let
 	(;sc,ec,sr,er) = offsets
-	p = Plots.plot(xlabel="X / cm", ylabel="Y / cm", xlimits=(0,12.0), ylimits=(0,12.0) )
+	p = Plots.plot(xlabel="X / cm", ylabel="Y / cm", xlimits=(0,12.0), ylimits=(0,12.0), size=(450,360), right_margin=10mm)
 
-	Plots.contour!(p,coords.X,coords.Y,M, lw=0, aspect_ratio = 1, fill = true, levels=D_levels[nom_flux], clabels=true, colorbar_title="Flux density / kW/m²")
+	Plots.contour!(p,coords.X,coords.Y,M, lw=0, aspect_ratio = 1, fill = true,  levels=D_levels[nom_flux], clabels=true, tickfontsize=9, colorbar_title="Flux density / kW/m²")
 	plotBorder(p)
-	#Plots.savefig(p, "./out/img/$(Integer(round(nom_flux)))kw_m2.svg")
+	#Plots.savefig(p, "../../../data/out/2024-04-24_JECE_revisions/$(Integer(round(nom_flux)))kw_m2.svg")
 end
 
 # ╔═╡ 832c53d5-c004-4f71-8947-4146529442f7
