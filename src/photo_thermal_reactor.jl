@@ -883,11 +883,11 @@ function PTR_init_system(dim, grid, data::ReactorData)
 			end
 			inival[ibf,:] .= zero(eltype(inival))
 			subg_window = ExtendableGrids.subgrid(grid, top_radiation_boundaries, boundary=true, transform=d3tod2)
-			# W_window = maximum(subg_window[Coordinates][1,:]) - minimum(subg_window[Coordinates][1,:]) # square window
-			# W_domain = maximum(grid[Coordinates][1,:]) - minimum(grid[Coordinates][1,:]) # square prismatic domain
+			W_window = maximum(subg_window[Coordinates][1,:]) - minimum(subg_window[Coordinates][1,:]) # square window
+			W_domain = maximum(grid[Coordinates][1,:]) - minimum(grid[Coordinates][1,:]) # square prismatic domain
 			
-			# coord_offset = 0.5*(W_domain-W_window)
-			# @info coord_offset
+			coord_offset = 0.5*(W_domain-W_window)
+			@info coord_offset
 				
 			for inode in sub[CellNodes]
 				c = subg_window[Coordinates][:,inode]

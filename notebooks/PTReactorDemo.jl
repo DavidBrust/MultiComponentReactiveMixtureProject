@@ -83,9 +83,9 @@ function ThermalDemo(dim; nref=nref, W_block=1.0ufac"cm", H_cat=0.05ufac"cm", mc
 		T_gas_in = 273.15 + 100,
 		
 		#is_reactive = false,
-		X0 = [0.0,0.0,0.0,0.0,0.0,1.0],
-		#solve_T_equation = false,
-		#Treac = 600.0 + 273.15,
+		X0 = [0.0,0.5,0.0,0.0,0.5,0.0],
+		solve_T_equation = false,
+		Treac = 600.0 + 273.15,
 
 		perm=[1.0e-6,1.0,1.0]*1.23e-10*ufac"m^2",
 		
@@ -145,6 +145,21 @@ let
 end
   ╠═╡ =#
 
+# ╔═╡ 4a87482b-55a2-428b-b360-d2c30642e5e0
+let
+	(;catalyst_regions) = data
+	#catalyst_nodes = []
+	#	for reg in catalyst_regions
+	#		catalyst_nodes = vcat(catalyst_nodes, unique(grid[CellNodes][:,grid[CellRegions] .== reg]) )
+	#	end
+	#catalyst_nodes
+
+	unique(grid[CellNodes][:,grid[CellRegions] .== catalyst_regions])
+end
+
+# ╔═╡ 13a3eeca-6cae-4fb1-b754-5b4839835554
+data
+
 # ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
 md"""
 # Setup and transient solution
@@ -167,9 +182,9 @@ let
 	inflow_rate, outflow_rate, reaction_rate, stored_amount, I_in, I_out, I_reac = BoundaryFlows_Integrals(solt, sys, data)
 	(;ng, gn, gni, iT, ip) = data
 
-	#k=gni[:H2]
+	k=gni[:H2]
 	#k=gni[:CO]
-	k=iT
+	#k=iT
 	#k=ip
 
 	if k in 1:ng
@@ -234,9 +249,6 @@ HeatFluxes_outer = HeatFluxes_EB_I(sol,sys,data)
 
 # ╔═╡ f40d7865-1649-4445-86eb-48e2a1a8817b
 HeatFluxes_inner = HeatFluxes_EB_I_inner(sol,sys,data)
-
-# ╔═╡ 8e41eb3d-0305-4556-8bbf-ca1e01f7e3ea
-data
 
 # ╔═╡ e6828f65-fc35-4e2e-aedd-324ccfe4a22c
 function write_sol(sol; desc="")
@@ -531,11 +543,13 @@ Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 # ╟─d3278ac7-db94-4119-8efd-4dd18107e248
 # ╟─b2791860-ae0f-412d-9082-bb2e27f990bc
 # ╠═89bc522c-0423-45a0-acf6-60f130294abe
-# ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
+# ╟─a995f83c-6ff7-4b95-a798-ea636ccb1d88
+# ╠═4a87482b-55a2-428b-b360-d2c30642e5e0
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═a1ea393e-f123-4ad0-affa-885db325cfd5
 # ╠═415f6fa7-d5b5-40a2-806e-3d8a61541c2e
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
+# ╠═13a3eeca-6cae-4fb1-b754-5b4839835554
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 # ╠═b42ce84e-9f97-488a-9311-24c809437623
@@ -548,7 +562,6 @@ Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 # ╠═f810ca08-e9b6-4c8c-b911-18ea909f5232
 # ╠═f40d7865-1649-4445-86eb-48e2a1a8817b
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-# ╠═8e41eb3d-0305-4556-8bbf-ca1e01f7e3ea
 # ╠═e6828f65-fc35-4e2e-aedd-324ccfe4a22c
 # ╠═f99203e7-e53e-4109-b6ff-7fb87d290324
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc

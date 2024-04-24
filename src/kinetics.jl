@@ -268,7 +268,7 @@ function ri(data,T,p_)
     pexp = MVector{nreac(kinpar),eltype(p_)}(undef)
     pexp .= zero(eltype(p_))
     unitc=  one(eltype(p_))
-    atol = one(eltype(p_))*1.0e-12
+    atol = one(eltype(p_))*1.0e-13
     if kinpar == XuFroment
         p ./= ufac"bar"
         unitc *=ufac"mol/(hr*g)"
