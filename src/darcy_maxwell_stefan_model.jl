@@ -131,7 +131,7 @@ Assemble symmetric Maxwell-Stefan diffusivity matrix D. Account for porous mater
 through the constriction and tourtuosity factor γ_τ which lowers the diffusivities
  ~1 order of magnitude compared to diffusion through free space.
 """
-function D_matrix!(D, T, p, data)
+function D_matrix!_post(D, T, p, data)
 	(;m,γ_τ,constant_properties,constant_binary_diff_coeffs)=data
 	ng=ngas(data)
 	ind = 1
@@ -146,7 +146,26 @@ function D_matrix!(D, T, p, data)
 				# Dij *= m[i]*m[j]
             end
 			# Dij *= m[i]*m[j]*γ_τ # eff. diffusivity
-			Dij *= γ_τ # eff. diffusivity
+			Dij *= maximum(γ_τ) # eff. diffusivity
+			D[i,j] = Dij
+			D[j,i] = Dij # M-S diffusion matrix is symmetric
+			ind += 1
+		end
+	end
+end
+
+function D_matrix!(edge, D, T, p, data)
+	(;m,γ_τ,constant_properties,constant_binary_diff_coeffs)=data
+	ng=ngas(data)
+	ind = 1
+	@inbounds for i=1:(ng-1) # i: row index
+		for j=(i+1):ng # j: col index
+            if !constant_properties
+			    Dij = binary_diff_coeff_gas(data.Fluids[i], data.Fluids[j], T, p)
+            else
+				Dij = constant_binary_diff_coeffs[ind]
+            end
+			Dij *= γ_τ[edge.region] # eff. diffusivity
 			D[i,j] = Dij
 			D[j,i] = Dij # M-S diffusion matrix is symmetric
 			ind += 1
@@ -255,87 +274,99 @@ Flux function definition for use with VoronoiFVM.jl for the Darcy-Maxwell-Stefan
     (DMS) model for Multi-component gas transport in porous media.
 """
 function DMS_flux(f,u,edge,data)
-	(;m,ip,iT,dt_hf_enth,solve_T_equation,Tamb,Fluids,include_Soret_Dufour)=data
+	(;m,ip,iT,dt_hf_enth,solve_T_equation,Tamb,permeable_regions,lambdas,Fluids,include_Soret_Dufour)=data
 	ng=ngas(data)
 		
-	F = MVector{ng-1,eltype(u)}(undef)
-	X = MVector{ng,eltype(u)}(undef)
-	W = MVector{ng,eltype(u)}(undef)
-	M = MMatrix{ng-1,ng-1,eltype(u)}(undef)
-	D = MMatrix{ng,ng,eltype(u)}(undef)
-	# allocate storage for Thermo-Diffusion parameters
-	A = MMatrix{ng,ng,eltype(u)}(undef)
-	TDR = MVector{ng,eltype(u)}(undef)
+	# !!! TEST: Partial domain blocking !!!
+	if edge.region in permeable_regions
+		F = MVector{ng-1,eltype(u)}(undef)
+		X = MVector{ng,eltype(u)}(undef)
+		W = MVector{ng,eltype(u)}(undef)
+		M = MMatrix{ng-1,ng-1,eltype(u)}(undef)
+		D = MMatrix{ng,ng,eltype(u)}(undef)
+		# allocate storage for Thermo-Diffusion parameters
+		A = MMatrix{ng,ng,eltype(u)}(undef)
+		TDR = MVector{ng,eltype(u)}(undef)
 
-	pm = 0.5*(u[ip,1]+u[ip,2])
-    Tm = solve_T_equation ? 0.5*(u[iT,1]+u[iT,2]) : one(eltype(u))*Tamb
-	c = pm/(ph"R"*Tm)
-	
-	δp = u[ip,1]-u[ip,2]
-	
-	@inline MoleFrac!(X,u,data)
-	@inline mmix = molarweight_mix(X,data)
-	@inline MassFrac!(X,W,data)
-	
-	if include_Soret_Dufour
-		@inline D_A_matrices!(D, A, Tm, pm, data)
-		@inline ThermalDiffRatio!(TDR, X, A, D, data)	
-	else
-		@inline D_matrix!(D, Tm, pm, data)	
-	end
-	@inline mumix, lambdamix = dynvisc_thermcond_mix(data, Tm, X)
+		pm = 0.5*(u[ip,1]+u[ip,2])
+		Tm = solve_T_equation ? 0.5*(u[iT,1]+u[iT,2]) : one(eltype(u))*Tamb
+		c = pm/(ph"R"*Tm)
 		
-	rho = c*mmix
-	#v = DarcyVelo(u,data,mumix)
-	v = DarcyVelo(u,edge,data,mumix)
-	
-	f[ip] = -rho*v
-
-	@inline M_matrix!(M, W, D, data)
-	
-	@inbounds for i=1:(ng-1)
-
-		F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm )*c/mmix
+		δp = u[ip,1]-u[ip,2]
+		
+		@inline MoleFrac!(X,u,data)
+		@inline mmix = molarweight_mix(X,data)
+		@inline MassFrac!(X,W,data)
+		
 		if include_Soret_Dufour
-			F[i] += (X[i]*TDR[i]*(u[iT,1]-u[iT,2])/Tm )*c/mmix # Soret effect
-		end	
-	end				
+			@inline D_A_matrices!(D, A, Tm, pm, data)
+			@inline ThermalDiffRatio!(TDR, X, A, D, data)	
+		else
+			# !!! TEST: Partial domain blocking !!!
+			# @inline D_matrix!(D, Tm, pm, data)
+			@inline D_matrix!(edge, D, Tm, pm, data)
+			# !!! TEST: Partial domain blocking !!!
 
-	@inline inplace_linsolve!(M,F)
-
-	enthalpy_flux = zero(eltype(u))
-	mass_flux = zero(eltype(u))
-	@inbounds for i=1:(ng-1)
-
-		# convective -diffusive species mass flux
-		f[i] = -(F[i] + c*X[i]*m[i]*v)
-
-		if solve_T_equation
-
-			mass_flux += f[i]
-
-			enthalpy_flux += f[i] * enthalpy_gas_thermal(Fluids[i], Tm) / m[i]
-
-			if include_Soret_Dufour
-				enthalpy_flux += (-F[i])*ph"R"*Tm*TDR[i]/m[i] # Dufour effect
-			end
-
+		end
+		@inline mumix, lambdamix = dynvisc_thermcond_mix(data, Tm, X)
 			
+		rho = c*mmix
+		#v = DarcyVelo(u,data,mumix)
+		v = DarcyVelo(u,edge,data,mumix)
+		
+		f[ip] = -rho*v
+
+		@inline M_matrix!(M, W, D, data)
+		
+		@inbounds for i=1:(ng-1)
+
+			F[i] = ( u[i,1]-u[i,2] + (X[i]-W[i])*δp/pm )*c/mmix
+			if include_Soret_Dufour
+				F[i] += (X[i]*TDR[i]*(u[iT,1]-u[iT,2])/Tm )*c/mmix # Soret effect
+			end	
+		end				
+
+		@inline inplace_linsolve!(M,F)
+
+		enthalpy_flux = zero(eltype(u))
+		mass_flux = zero(eltype(u))
+		@inbounds for i=1:(ng-1)
+			# convective -diffusive species mass flux
+			f[i] = -(F[i] + c*X[i]*m[i]*v)
+
+			if solve_T_equation
+				mass_flux += f[i]
+				enthalpy_flux += f[i] * enthalpy_gas_thermal(Fluids[i], Tm) / m[i]
+
+				if include_Soret_Dufour
+					enthalpy_flux += (-F[i])*ph"R"*Tm*TDR[i]/m[i] # Dufour effect
+				end			
+			end
+		end	
+		
+		if solve_T_equation
+			enthalpy_flux += (f[ip] - mass_flux) * enthalpy_gas_thermal(Fluids[ng], Tm) / m[ng] # species n
+			if include_Soret_Dufour
+				enthalpy_flux += (f[ip] - mass_flux) *ph"R"*Tm*TDR[ng]/m[ng] # Dufour effect species n
+			end
+			# !!! TEST: Partial domain blocking !!!
+			# lambda_bed = kbed(data,lambdamix)*lambdamix
+			lambda_bed = kbed(edge, data, lambdamix)*lambdamix
+			# !!! TEST: Partial domain blocking !!!
+
+			f[iT] = lambda_bed*(u[iT,1]-u[iT,2]) + enthalpy_flux * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth)
 		end
-	end	
-	
-    if solve_T_equation
+	else
+		if solve_T_equation
+			
+			# !!! TEST: Partial domain blocking !!!
+			# lambda_bed = kbed(data,lambdamix)*lambdamix
+			lambda_bed = lambdas
+			# !!! TEST: Partial domain blocking !!!
 
-		enthalpy_flux += (f[ip] - mass_flux) * enthalpy_gas_thermal(Fluids[ng], Tm) / m[ng] # species n
-
-		if include_Soret_Dufour
-			enthalpy_flux += (f[ip] - mass_flux) *ph"R"*Tm*TDR[ng]/m[ng] # Dufour effect species n
+			f[iT] = lambda_bed*(u[iT,1]-u[iT,2])
 		end
-
-        lambda_bed=kbed(data,lambdamix)*lambdamix
-
-		f[iT] = lambda_bed*(u[iT,1]-u[iT,2]) + enthalpy_flux * ramp(edge.time; du=(0.0,1), dt=dt_hf_enth)
-    end
+	end
 end
 
 @doc raw"""
@@ -377,7 +408,8 @@ function DMS_reaction(f,u,node,data)
 
 	if solve_T_equation && include_dpdt
 		f[idpdt] = -u[idpdt]
-		f[iT] += poros*u[idpdt] # dpdt source term in enthalpy eq.		
+		# f[iT] += poros*u[idpdt] # dpdt source term in enthalpy eq.		
+		f[iT] += poros[node.region]*u[idpdt] # dpdt source term in enthalpy eq.		
 	end
 
 	f[ng] = zero(eltype(u))
@@ -395,36 +427,39 @@ function DMS_storage(f,u,node,data)
 	(;ip,iT,idpdt,Tamb,m,poros,rhos,cs,solve_T_equation,include_dpdt,permeable_regions,Fluids)=data
 	ng=ngas(data)
 
-    T = solve_T_equation ? u[iT] : one(eltype(u))*Tamb
-    c = u[ip]/(ph"R"*T)
-    mmix = zero(eltype(u))
-	enthalpy_gas = zero(eltype(u))
-	for i=1:ng
-		f[i]=c*u[i]*m[i]*poros
-        mmix += u[i]*m[i]
-		if solve_T_equation
-			enthalpy_gas += c*u[i]*enthalpy_gas_thermal(Fluids[i], T)
+	# !!! TEST: Partial domain blocking !!!
+	if node.region in permeable_regions
+		T = solve_T_equation ? u[iT] : one(eltype(u))*Tamb
+		c = u[ip]/(ph"R"*T)
+		mmix = zero(eltype(u))
+		enthalpy_gas = zero(eltype(u))
+		for i=1:ng
+			f[i]=c*u[i]*m[i]*poros[node.region]
+			mmix += u[i]*m[i]
+			if solve_T_equation
+				enthalpy_gas += c*u[i]*enthalpy_gas_thermal(Fluids[i], T)
+			end
 		end
-	end
-	
-	# total density / total pressure
-	f[ip] = mmix*c*poros
+		
+		# total density / total pressure
+		f[ip] = mmix*c*poros[node.region]
 
-    if solve_T_equation       
-
-		# !!! TEST: Partial domain blocking !!!
-		if node.region in permeable_regions
-			f[iT] = (u[iT]-298.15) * rhos*cs*(1-poros) + poros * enthalpy_gas
+		if solve_T_equation       
+			f[iT] = (u[iT]-298.15) * rhos*cs*(1-poros[node.region]) + poros[node.region] * enthalpy_gas
 
 			if include_dpdt
 				f[idpdt] = u[ip]
 			end
-		else
-			f[iT] = (u[iT]-298.15) * rhos*cs # impermeable region: poros = 0
 		end
+	else
+		if solve_T_equation       
+			f[iT] = (u[iT]-298.15) * rhos*cs*(1-poros[node.region])
 
-    end
-
+			if include_dpdt
+				f[idpdt] = u[ip]
+			end
+		end
+	end
 	
 end
 

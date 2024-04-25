@@ -229,7 +229,8 @@ function HeatFluxes_EB_I(sol,sys,data)
     Q_conve_34 = sum(Q_conve_34)
 
     # Side boundaries
-    Q_sides = integrate(sys,flux_side,sol; boundary=true)[iT,side_boundaries]
+    # Q_sides = integrate(sys,flux_side,sol; boundary=true)[iT,side_boundaries]
+    Q_sides = integrate(sys,PTR_side_post,sol; boundary=true)[iT,side_boundaries]
     Q_sides = sum(Q_sides)
 
     H_chemical = sum(integrate(sys,sys.physics.reaction,sol), dims=2)[iT]

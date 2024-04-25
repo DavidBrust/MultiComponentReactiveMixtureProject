@@ -39,7 +39,7 @@ function PTR_radiosity_window(f,u,bnode,data)
 end
 
 function Top_HeatFlux(f,u,bnode,data)
-	(;iT,iTw,uc_window, uc_cat, dt_hf_irrad, k_nat_conv, Tamb) = data
+	(;iT,iTw,uc_window, uc_cat, dt_hf_irrad, k_nat_conv, Tamb, nom_flux) = data
 
 	# irrad. exchange between quartz window (1), cat surface (2), masked surface (3)
 	alpha1_vis=uc_window.alpha_vis
@@ -60,7 +60,7 @@ function Top_HeatFlux(f,u,bnode,data)
 	# kconv=Nu*λf/dh*ufac"W/(m^2*K)"
 	# hflux_conv = kconv*(u[iT]-Tm) # convection heatflux through top chamber
 	
-	hf_domain_top = hflux_irrad * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+	hf_domain_top = hflux_irrad * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)	
 
 	# calculate local window temperature from (local) flux balance
 	hflux_conv_top_w = k_nat_conv*(u[iTw]-Tamb)
@@ -128,19 +128,34 @@ Function defining the side boundary condition in the photo thermal catalytic
     reactor (PTR) model.
 """
 function PTR_side(f,u,bnode,data)
-	(;iT,k_nat_conv,delta_gap,Tamb,side_boundaries,solve_T_equation,dt_hf_enth)=data
+	(;dim,iT,k_nat_conv,delta_gap,Tamb,side_boundaries,solve_T_equation,dt_hf_enth,X0)=data
 	ng=ngas(data)
 
 	if solve_T_equation && bnode.region in side_boundaries
-	    X=MVector{ng,eltype(u)}(undef)
-        @inline MoleFrac!(X,u,data)
-        @inline _,λf=dynvisc_thermcond_mix(data, u[iT], X)
-
-		# !!! DEBUG !!!
-        # w/o shell height
-        f[iT] = (u[iT]-Tamb)/(delta_gap/λf+1/k_nat_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
-        # f[iT] = zero(eltype(u))		
-		# !!! DEBUG !!!
+		# !!! TEST: Partial domain blocking !!!
+		nonzero_molefrac = false
+		for i=1:ng
+			@inbounds if u[i] > zero(eltype(u))
+				nonzero_molefrac = true
+				break
+			end
+		end
+		if nonzero_molefrac
+			X=MVector{ng,eltype(u)}(undef)
+			@inline MoleFrac!(X,u,data)
+			@inline _,λf=dynvisc_thermcond_mix(data, u[iT], X)
+		# 	# f[iT] = (u[iT]-Tamb)/(delta_gap/λf+1/k_nat_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
+		else
+			@inline _,λf=dynvisc_thermcond_mix(data, u[iT], X0)
+		end
+		if dim == 2 # dylindrical wall
+			r_i = bnode.coord[1, bnode.index]
+			r_o = r_i + delta_gap
+			f[iT] = (u[iT]-Tamb) / (1/λf*r_i*log(r_o/r_i) + r_i/(r_o*k_nat_conv)) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
+			# f[iT] = (u[iT]-Tamb) / (delta_gap/λf + 1/k_nat_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
+		elseif dim == 3 # plane wall
+        	f[iT] = (u[iT]-Tamb) / (delta_gap/λf + 1/k_nat_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
+		end
     end
 end
 
@@ -291,19 +306,6 @@ end
 #Implementation follows the notation in __VDI Heat Atlas 2010, ch. D6.3 eqs. (5a-5e).__
 #"""
 # calculate fixed bed (porous material) effective thermal conductivity
-
-
-# function kbed(data, lambdaf)
-# 	(;poros,lambdas) = data
-# 	# !!! regularize function to catch poros=1 (pure gas phase) !!!
-# 	ϵ_reg = 1.0e-12
-# 	B=1.25*((1.0-poros)/poros)^(10.0/9.0)
-# 	kp=lambdas/lambdaf
-# 	N=1.0-(B/kp)
-# 	#kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
-# 	kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/(B+ϵ_reg)) - (B+1.0)/2.0 - (B-1.0)/N)
-# 	1.0-sqrt(1.0-poros)+sqrt(1.0-poros)*kc
-# end
 
 # mostly equivalent to VDI Heat Atlas 2010, ch. D6.3 eqs. (5a-5e). with addition
 # of flattening coefficient ψ, that might be relevant for sintered materials
@@ -535,10 +537,16 @@ $(TYPEDFIELDS)
 
 	# VitraPor data
 	dp::Float64=200.0*ufac"μm" # average pore size, por class 0
-	poros::Float64=0.33 # porosity, VitraPor sintetered filter class 0
+	# !!! TEST: Partial domain blocking !!!
+	# poros::Float64=0.33 # porosity, VitraPor sintetered filter class 0
+	poros::Vector{Float64}=[0.33,0.33,0.33] # porosity, VitraPor sintetered filter class 0
+	# !!! TEST: Partial domain blocking !!!
 	
 	perm::Vector{Float64}=[1.0,1.0,1.0]*1.23e-10*ufac"m^2" # perm. of porous medium, use in Darcy Eq.
-	γ_τ::Float64=poros^1.5 # constriction/tourtuosity factor
+	# !!! TEST: Partial domain blocking !!!
+	# γ_τ::Float64=poros^1.5 # constriction/tourtuosity factor
+	γ_τ::Vector{Float64}=poros.^1.5 # constriction/tourtuosity factor
+	# !!! TEST: Partial domain blocking !!!
 	
 	# Solid (non-porous) Borosilica glass (frit material)
 	rhos::Float64=2.23e3*ufac"kg/m^3" # density of non-porous Boro-Solikatglas 3.3
@@ -596,19 +604,33 @@ end
 
 function kbed(data, lambdaf)
 	(;poros,lambdas) = data
-	B=1.25*((1.0-poros)/poros)^(10/9)
-	kp=lambdas/lambdaf
-	N=1-(B/kp)
-	# !!! regularize function to catch poros=1 (pure gas phase) !!!
-	#kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
-	kc=2/N* (B/N^2 * (kp-1)/kp * (log(kp)-rlog(B,data)) - (B+1)/2 - (B-1)/N)
-	# !!! reglog
-	1-sqrt(1-poros)+sqrt(1-poros)*kc
+	ϵ = poros[1] + eps() # regularize for porosity = 0
+	# B=1.25*((1.0-poros)/poros)^(10/9)
+	B = 1.25*((1.0-ϵ)/ϵ)^(10/9)
+	kp = lambdas/lambdaf
+	N = 1-(B/kp)	
+	kc = 2/N* (B/N^2 * (kp-1)/kp * (log(kp)-rlog(B,data)) - (B+1)/2 - (B-1)/N)	
+	# 1-sqrt(1-poros)+sqrt(1-poros)*kc
+	return 1-sqrt(1-ϵ)+sqrt(1-ϵ)*kc
+end
+
+function kbed(edge, data, lambdaf)
+	(;poros,lambdas) = data
+	ϵ = poros[edge.region]
+	# B=1.25*((1.0-poros)/poros)^(10/9)
+	B = 1.25*((1.0-ϵ)/ϵ)^(10/9)
+	kp = lambdas/lambdaf
+	N = 1-(B/kp)	
+	kc = 2/N* (B/N^2 * (kp-1)/kp * (log(kp)-rlog(B,data)) - (B+1)/2 - (B-1)/N)
+	# 1-sqrt(1-poros)+sqrt(1-poros)*kc
+	return 1-sqrt(1-ϵ)+sqrt(1-ϵ)*kc
 end
 
 ngas(::ReactorData{NG,KP}) where {NG,KP} = NG
 
-function PTR_grid_boundaries_regions(dim;nref=0,
+function PTR_grid_boundaries_regions(dim;
+										nref=0,
+										efix=1.0e-2*ufac"cm",
 										W=16.0*ufac"cm",
 										W_block=3.0*ufac"cm",
 										W_window=12.0*ufac"cm",
@@ -635,7 +657,7 @@ function PTR_grid_boundaries_regions(dim;nref=0,
 		nr=W/(1.0ufac"cm")*2^(nref)
 		nblocked = nr*W_block/W
 
-		efix = 1.0e-2*ufac"cm"
+		# efix = 1.0e-2*ufac"cm"
 		# R=(0:(W/nr):W)*ufac"cm"
 
 
@@ -707,6 +729,7 @@ end
 
 function PTR_grid_boundaries_regions!(	dim, data;
 										nref=0,
+										efix=1.0e-2*ufac"cm",
 										W=16.0*ufac"cm",
 										W_block=3.0*ufac"cm",
 										W_window=12.0*ufac"cm",
@@ -730,20 +753,25 @@ function PTR_grid_boundaries_regions!(	dim, data;
 
 		W=W/2 # axisymmetry, half domain is sufficient
 		# nr=W*2^(nref)
-		nr=W/(1.0ufac"cm")*2^(nref)
+		nr=W/(0.5ufac"cm")*2^(nref)
 		nblocked = nr*W_block/W
 
-		efix = 1.0e-2*ufac"cm"
+		# efix = 1.0e-2*ufac"cm"
 		# R=(0:(W/nr):W)*ufac"cm"
 
 
 		R=(0:(W/nr):(W-W_block))
-		R_=((W-W_block):efix:(W-W_block+efix))
-		R=glue(R,R_)
-		R_ = linspace((W-W_block+efix), W-W_block*(nblocked-1)/nblocked, 2)
-		R=glue(R,R_)
-		R_ = linspace(W-W_block*(nblocked-1)/nblocked, W, Integer(nblocked))
-		R=glue(R,R_)
+		# R_=((W-W_block):efix:(W-W_block+efix))
+		if W_block > 0.0*ufac"cm"
+			if efix > 0.0
+				R_=[W-W_block,W-W_block+efix]
+				R=glue(R,R_)
+			end
+			R_ = linspace((W-W_block+efix), W-W_block*(nblocked-1)/nblocked, 2)
+			R=glue(R,R_)
+			R_ = linspace(W-W_block*(nblocked-1)/nblocked, W, Integer(nblocked))
+			R=glue(R,R_)
+		end
 
 
 		grid=simplexgrid(R,Z)
@@ -842,7 +870,12 @@ function PTR_init_system(dim, grid, data::ReactorData)
 							)
 
 	if solve_T_equation
-		enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
+		# !!! TEST: Partial domain blocking !!!
+		# enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
+		enable_species!(sys; species=collect(1:(ng+1)), regions=permeable_regions) # gas phase species xi, ptotal
+		enable_species!(sys; species=iT) # T
+		# !!! TEST: Partial domain blocking !!!
+
 		enable_boundary_species!(sys, iTw, top_radiation_boundaries) # window temperature as boundary species in upper chamber
 		enable_boundary_species!(sys, iTp, bottom_radiation_boundaries) # plate temperature as boundary species in lower chamber
 
@@ -863,14 +896,19 @@ function PTR_init_system(dim, grid, data::ReactorData)
 	end
 
 	inival=unknowns(sys)
-	inival .= 0.0
-	inival[ip,:].=p
-
-
-	for i=1:ng
-		inival[i,:] .= X0[i]
+	# inival .= 0.0
+	inival .= zero(eltype(inival))
+	# !!! TEST: Partial domain blocking !!!
+	for reg in permeable_regions
+		perm_nodes = unique(grid[CellNodes][:,grid[CellRegions] .== reg]) 
+		# inival[ip,:].=p
+		inival[ip,perm_nodes].=p
+		for i=1:ng
+			# inival[i,:] .= X0[i]
+			inival[i,perm_nodes] .= X0[i]
+		end
 	end
-
+	# !!! TEST: Partial domain blocking !!!
 
 	if solve_T_equation
 		inival[[iT,iTw,iTp],:] .= Tamb
