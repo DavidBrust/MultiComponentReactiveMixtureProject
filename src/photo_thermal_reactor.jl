@@ -699,7 +699,7 @@ function PTR_grid_boundaries_regions(dim;
 		bfacemask!(grid, [0,0], [W-W_block,0], Γ_bottom_permeable)
 		outflow_b = [Γ_bottom_permeable]
 		side_b = [Γ_side]
-	else
+	elseif dim == 3
 		Γ_side_1 = 1 
 		Γ_side_2 = 2
 		Γ_side_3 = 3
@@ -729,12 +729,13 @@ end
 
 function PTR_grid_boundaries_regions!(	dim, data;
 										nref=0,
-										efix=1.0e-2*ufac"cm",
-										W=16.0*ufac"cm",
-										W_block=3.0*ufac"cm",
-										W_window=12.0*ufac"cm",
-										H=0.5*ufac"cm",
-										H_cat=0.05*ufac"cm",
+										ufac=ufac"cm",
+										efix=1.0e-2*ufac,
+										W=16.0*ufac,
+										W_block=3.0*ufac,
+										W_window=12.0*ufac,
+										H=0.5*ufac,
+										H_cat=0.05*ufac,
 										Ω_permeable=2, # unblocked region
 										Ω_catalyst=3, # catalyst occupied region
 									)
@@ -753,7 +754,8 @@ function PTR_grid_boundaries_regions!(	dim, data;
 
 		W=W/2 # axisymmetry, half domain is sufficient
 		# nr=W*2^(nref)
-		nr=W/(0.5ufac"cm")*2^(nref)
+		# nr=W/(0.5ufac"cm")*2^(nref)
+		nr=W/(0.5ufac)*2^(nref)
 		nblocked = nr*W_block/W
 
 		# efix = 1.0e-2*ufac"cm"
@@ -762,7 +764,7 @@ function PTR_grid_boundaries_regions!(	dim, data;
 
 		R=(0:(W/nr):(W-W_block))
 		# R_=((W-W_block):efix:(W-W_block+efix))
-		if W_block > 0.0*ufac"cm"
+		if W_block > 0.0*ufac
 			if efix > 0.0
 				R_=[W-W_block,W-W_block+efix]
 				R=glue(R,R_)
@@ -779,7 +781,7 @@ function PTR_grid_boundaries_regions!(	dim, data;
 
 		# cellmask!(grid,[0,0].*ufac"cm",[(W-W_block),H].*ufac"cm",Ω_catalyst) # catalyst layer region
 
-		cellmask!(grid, [0,0], [W-W_block,H-H_cat], Ω_permeable) # catalyst layer region
+		cellmask!(grid, [0,0], [W-W_block,H-H_cat], Ω_permeable) # gas permeable region
 		cellmask!(grid, [0,H-H_cat], [W-W_block,H], Ω_catalyst) # catalyst layer region
 
 		#bfacemask!(grid, [0,0].*ufac"cm",[W-2,0].*ufac"cm",Γ_bottom_permeable)
@@ -802,7 +804,8 @@ function PTR_grid_boundaries_regions!(	dim, data;
 			rad_top_b = [Γ_top_permeable, Γ_top_irradiated]
 		end
 
-		if W_block >= 1.0ufac"cm"
+		# if W_block > 0.0ufac"cm"
+		if W_block > 0.0ufac
 			bfacemask!(grid, [0,0], [W-W_block,0], Γ_bottom_permeable)
 			# bfacemask!(grid, [W-W_block,0], [W-W_block+efix,0], Γ_bottom_block)
 			rad_bottom_b = [Γ_bottom_impermeable, Γ_bottom_permeable]
@@ -812,28 +815,93 @@ function PTR_grid_boundaries_regions!(	dim, data;
 		end
 		outflow_b = [Γ_bottom_permeable]
 		side_b = [Γ_side]
-	else
+	elseif dim == 3
 		Γ_side_1 = 1 
 		Γ_side_2 = 2
 		Γ_side_3 = 3
-		Γ_side_4 = 4		
-		Γ_bottom = 5
-		Γ_top_permeable = 7
-		Γ_top_irradiated = 8
+		Γ_side_4 = 4
+		Γ_bottom_impermeable = 5
+		Γ_bottom_permeable = 7
+		# Γ_bottom = 5
+		Γ_top_permeable = 8
+		Γ_top_irradiated = 9
 
-		nxy=W*2^(nref)
-		X=(0:(W/nxy):W)*ufac"cm"
-		Y=X
+		ΔW = (1.0ufac)/2^(nref)
+		nxy = W/ΔW
+		#nxy = W/(1.0ufac)*2^(nref)
+		nblocked = nxy * W_block/W
+		
+
+		# 0 ... W_Block ... W/2 ... W-W_Block ... W
+		if W_block > 0.0
+
+			ΔWblocked = W_block / nblocked
+			X = linspace(0, ΔWblocked*(nblocked-1), Integer(nblocked))
+
+			if efix > 0.0
+				X_ = [X[end], X[end]+ΔWblocked-efix, X[end]+ΔWblocked]
+				X = glue(X,X_)
+			end
+
+			X_ = linspace(X[end], X[end]+ΔW*(nxy-2*nblocked), Integer(nxy-2*nblocked)+1)
+			X = glue(X,X_)
+
+			if efix > 0.0
+				X_ = [X[end], X[end]+efix, X[end]+ΔWblocked-efix]
+				X = glue(X,X_)
+			end
+
+			X_ = linspace(X[end], X[end]+ΔWblocked*(nblocked-1), Integer(nblocked))
+			X = glue(X,X_)
+		else
+			X = (0:(W/nxy):W)
+		end
+		Y = X
 
 		grid=simplexgrid(X,Y,Z)
 
-		cellmask!(grid,[0,0,9/10*H].*ufac"cm",[W,W,H].*ufac"cm",Ω_catalyst) # catalyst layer region	
-		bfacemask!(grid, [1,1,H].*ufac"cm",[W-1,W-1,H].*ufac"cm",Γ_top_permeable)
-		bfacemask!(grid, [2,2,H].*ufac"cm",[W-2,W-2,H].*ufac"cm",Γ_top_irradiated)
+		cellmask!(grid, [W_block, W_block, 0], [W-W_block, W-W_block, H-H_cat], Ω_permeable) # gas permeable region
+		cellmask!(grid, [W_block, W_block, H-H_cat], [W-W_block, W-W_block, H], Ω_catalyst) # catalyst layer region
+		# cellmask!(grid, [-W/2+W_block, -W/2+W_block, 0], [W/2-W_block, W/2-W_block, H-H_cat], Ω_permeable) # gas permeable region
+		# cellmask!(grid, [-W/2+W_block, -W/2+W_block, H-H_cat], [W/2-W_block, W/2-W_block, H], Ω_catalyst) # catalyst layer region
+		
+		offset_window = (W-W_window)/2
 
-		inflow_b = [Γ_top_permeable, Γ_top_irradiated]
-		rad_top_b = [Γ_top_irradiated]
-		outflow_b = [Γ_bottom]
+		if W-2*W_block > W_window
+			bfacemask!(grid, [W_block, W_block, H], [W-W_block, W-W_block, H], Γ_top_permeable)			
+			bfacemask!(grid, [offset_window, offset_window, H], [W-offset_window, W-offset_window, H], Γ_top_irradiated)
+			# bfacemask!(grid, [-W/2+W_block, -W/2+W_block, H], [W/2-W_block, W/2-W_block, H], Γ_top_permeable)			
+			# bfacemask!(grid, [-W/2+offset_window, -W/2+offset_window, H], [W/2-offset_window, W/2-offset_window, H], Γ_top_irradiated)
+
+			inflow_b = [Γ_top_permeable, Γ_top_irradiated]
+			rad_top_b = [Γ_top_irradiated]
+
+		elseif W-2*W_block == W_window
+			bfacemask!(grid, [offset_window, offset_window, H], [W-offset_window, W-offset_window, H], Γ_top_irradiated)
+			# bfacemask!(grid, [-W/2+offset_window, -W/2+offset_window, H], [W/2-offset_window, W/2-offset_window, H], Γ_top_irradiated)
+			inflow_b = [Γ_top_irradiated]
+			rad_top_b = [Γ_top_irradiated]
+
+		else
+			bfacemask!(grid, [offset_window, offset_window, H], [W-offset_window, W-offset_window, H], Γ_top_irradiated)			
+			bfacemask!(grid, [W_block, W_block, H], [W-W_block, W-W_block, H], Γ_top_permeable)
+			# bfacemask!(grid, [-W/2+offset_window, -W/2+offset_window, H], [W/2-offset_window, W/2-offset_window, H], Γ_top_irradiated)
+			# bfacemask!(grid, [-W/2+W_block, -W/2+W_block, H], [W/2-W_block, W/2-W_block, H], Γ_top_permeable)			
+			inflow_b = [Γ_top_permeable]
+			rad_top_b = [Γ_top_permeable, Γ_top_irradiated]
+		end
+
+		if W_block > 0.0ufac
+			bfacemask!(grid, [W_block, W_block, 0], [W-W_block, W-W_block, 0], Γ_bottom_permeable)
+			# bfacemask!(grid, [-W/2+W_block, -W/2+W_block, 0], [W/2-W_block, W/2-W_block, 0], Γ_bottom_permeable)
+			rad_bottom_b = [Γ_bottom_impermeable, Γ_bottom_permeable]
+		else
+			bfacemask!(grid, [0, 0, 0], [W, W, 0], Γ_bottom_permeable)
+			# bfacemask!(grid, [-W/2, -W/2, 0], [W/2, W/2, 0], Γ_bottom_permeable)
+			rad_bottom_b = [Γ_bottom_permeable]
+		end
+
+		outflow_b = [Γ_bottom_permeable]
 		side_b = [Γ_side_1,Γ_side_2,Γ_side_3,Γ_side_4]
 	end
 
@@ -925,12 +993,13 @@ function PTR_init_system(dim, grid, data::ReactorData)
 			W_domain = maximum(grid[Coordinates][1,:]) - minimum(grid[Coordinates][1,:]) # square prismatic domain
 			
 			coord_offset = 0.5*(W_domain-W_window)
-			@info coord_offset
+			# @info coord_offset
 				
-			for inode in sub[CellNodes]
+			for inode in subg_window[CellNodes]
 				c = subg_window[Coordinates][:,inode]
 				inodeip = subg_window[ExtendableGrids.NodeParents][inode]
-				inival[ibf,inodeip] = FluxIntp(c[1]-0.02, c[2]-0.02)
+				# inival[ibf,inodeip] = FluxIntp(c[1]-0.02, c[2]-0.02)
+				inival[ibf,inodeip] = FluxIntp(c[1]-coord_offset, c[2]-coord_offset)
 			end
 		end
 		if include_dpdt

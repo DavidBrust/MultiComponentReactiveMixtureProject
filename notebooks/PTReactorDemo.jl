@@ -44,7 +44,7 @@ md"""
 # Introduction
 Demonstration notebook for the photo thermal catalytic reactor (PTR) model. Solve energy equation alongside multicomponent species transport. Include reactive gas mixture (CO2,H2,CO,CH4,H2O,N2) with variable physical properties and a Ni based catalyst described with kinetics from published literature.
 
-Select problem dimension: $(@bind dim Select([2,3], default=2))
+Select problem dimension: $(@bind dim Select([2,3], default=3))
 
 Select grid refinement level: $(@bind nref Select([0,1,2,3], default=0))
 
@@ -55,15 +55,17 @@ Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(defau
 begin
 	W_block = 3.0ufac"cm"
 	W_window = 12.0ufac"cm"
-	H_cat = 0.5ufac"mm"
-	mcat = 500ufac"mg"
+	#H_cat = 0.5ufac"mm"
+	H_cat = 5.0ufac"mm"
+	#mcat = 500ufac"mg"
+	mcat = 3000ufac"mg"
 end;
 
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═╡ skip_as_script = true
 #=╠═╡
 if dim == 3
-	@bind xcut Slider(linspace(0,16,17)*ufac"cm",show_value=true,default=8*ufac"cm")
+	@bind xcut PlutoUI.Slider(linspace(0,16,17)*ufac"cm",show_value=true,default=8*ufac"cm")
 end
   ╠═╡ =#
 
@@ -74,7 +76,7 @@ end
 @doc MultiComponentReactiveMixtureProject.DMS_Info_thermal()
 
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
-function ThermalDemo(dim; nref=nref, W_block=1.0ufac"cm", W_window=12.0ufac"cm", H_cat=0.05ufac"cm", mcat=500ufac"mg")
+function ThermalDemo(dim; nref=nref, W_block=1.0ufac"cm", W_window=12.0ufac"cm", H_cat=0.5ufac"mm", mcat=500ufac"mg")
 
 	data = ReactorData(
 		dim=dim,
@@ -136,9 +138,12 @@ end;
 #=╠═╡
 let
 	if dim == 2
-		gridplot(grid, resolution=(660,200), aspect=4.0, linewidth=0.5)
-	else
-		gridplot(grid,  xplane=xcut, resolution=(660,460), zoom=1.8, )
+		vis = GridVisualizer(resolution=(660,200))
+		gridplot!(vis, grid, aspect=4.0, linewidth=0.5,)
+		#GridVisualize.save("2D_grid_cross_blocked.svg", vis)
+		reveal(vis)
+	elseif dim == 3
+		gridplot(grid,resolution=(1000,600), xplane=xcut, zoom=2.0, Plotter=PlutoVista)		
 	end
 end
   ╠═╡ =#
@@ -533,11 +538,13 @@ end
 Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 
 # ╔═╡ Cell order:
+# ╟─beae049d-3de7-48a6-a966-5a29fd420c8b
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─d3278ac7-db94-4119-8efd-4dd18107e248
 # ╟─b2791860-ae0f-412d-9082-bb2e27f990bc
 # ╠═89bc522c-0423-45a0-acf6-60f130294abe
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
+# ╠═3c828e93-8b20-4fd6-9ab4-046a03c8d78b
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═a1ea393e-f123-4ad0-affa-885db325cfd5
 # ╠═415f6fa7-d5b5-40a2-806e-3d8a61541c2e
