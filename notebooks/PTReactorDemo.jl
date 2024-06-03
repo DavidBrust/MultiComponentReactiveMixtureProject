@@ -44,7 +44,7 @@ md"""
 # Introduction
 Demonstration notebook for the photo thermal catalytic reactor (PTR) model. Solve energy equation alongside multicomponent species transport. Include reactive gas mixture (CO2,H2,CO,CH4,H2O,N2) with variable physical properties and a Ni based catalyst described with kinetics from published literature.
 
-Select problem dimension: $(@bind dim Select([2,3], default=3))
+Select problem dimension: $(@bind dim Select([2,3], default=2))
 
 Select grid refinement level: $(@bind nref Select([0,1,2,3], default=0))
 
@@ -538,13 +538,11 @@ end
 Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 
 # ╔═╡ Cell order:
-# ╟─beae049d-3de7-48a6-a966-5a29fd420c8b
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─d3278ac7-db94-4119-8efd-4dd18107e248
 # ╟─b2791860-ae0f-412d-9082-bb2e27f990bc
 # ╠═89bc522c-0423-45a0-acf6-60f130294abe
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
-# ╠═3c828e93-8b20-4fd6-9ab4-046a03c8d78b
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═a1ea393e-f123-4ad0-affa-885db325cfd5
 # ╠═415f6fa7-d5b5-40a2-806e-3d8a61541c2e
