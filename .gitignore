@@ -1,5 +1,5 @@
 img/out*
-data/doc/*
+data/*
 !data/doc/*
 !data/IrradiationFluxProfiles/*
 !data/IJHMT_3D.pvsm
