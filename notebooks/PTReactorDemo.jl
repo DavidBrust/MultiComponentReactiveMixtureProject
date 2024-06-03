@@ -23,12 +23,14 @@ begin
 	using LinearSolve, Pardiso, ExtendableSparse
 	
 	using LessUnitful
-	using PlutoUI, PlutoVista, Plots
+	using PlutoUI, PlutoVista, CairoMakie, Colors, ColorSchemes
 	using CSV, Tables, Dates, Printf
 	using StaticArrays
 	using MultiComponentReactiveMixtureProject
 	
-	GridVisualize.default_plotter!(PlutoVista)
+	#GridVisualize.default_plotter!(PlutoVista)
+	GridVisualize.default_plotter!(CairoMakie)
+	CairoMakie.activate!(; type = "png")
 end;
 
 # ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
@@ -46,7 +48,7 @@ Select problem dimension: $(@bind dim Select([2,3], default=2))
 
 Select grid refinement level: $(@bind nref Select([0,1,2,3], default=0))
 
-Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=true))
+Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=false))
 """
 
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
@@ -64,7 +66,10 @@ end
 let
 	grid, inb,irrb,outb,sb,catr =  PTR_grid_boundaries_regions(dim, nref=nref)
 	if dim == 2
-		gridplot(grid, resolution=(660,300), aspect=4.0, zoom=2.8)
+		vis = GridVisualizer(resolution=(660,200))
+		gridplot!(vis, grid, aspect=4.0, linewidth=0.5,)
+		#GridVisualize.save("2D_grid_cross_unblock.svg", vis)
+		reveal(vis)
 	else
 		gridplot(grid,  xplane=xcut, resolution=(660,460), zoom=1.8, )
 	end

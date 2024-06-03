@@ -431,14 +431,12 @@ $(TYPEDFIELDS)
 	include_Soret_Dufour::Bool = false
 	include_dpdt::Bool = false
 
-	#ip::Int64 = NG+1
     ip::Int64 = ng+1
 	iT::Int64 = ip+1
 	# inlcude window & plate temperatures as boundary species
 	iTw::Int64=iT+1 # index of window Temperature (upper chamber)
 	iTp::Int64=iTw+1 # index of plate Temperature (lower chamber)
 	
-	# ibf::Int64=iTp+1 # index of boundary flux species, workaround to include spatially varying boundary flux
 	ibf::Int64 = dim == 3 ? iTp+1 : iTp # index of boundary flux species, workaround to include spatially varying boundary flux
 
 	idpdt::Int64=ibf+1 # index of auxiliary variable holding dp/dt for use in enthalpy equation
@@ -505,7 +503,7 @@ $(TYPEDFIELDS)
 	shell_h::Float64=20*ufac"mm" # height of heat transfer area adjancent to domain boundary 
 	k_nat_conv::Float64=20.0*ufac"W/(m^2*K)" #17.5*ufac"W/(m^2*K)" # natural+forced convection heat transfer coeff.
 	nom_flux::Float64 = 70.0*ufac"kW/m^2" # nominal irradiation flux density / kW/m^2
-	# FluxIntp::typeof(itp12)=itp12
+
 	# VitraPor data
 	dp::Float64=200.0*ufac"μm" # average pore size, por class 0
 	poros::Float64=0.33 # porosity, VitraPor sintetered filter class 0
