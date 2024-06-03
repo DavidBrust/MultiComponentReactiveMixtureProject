@@ -21,14 +21,14 @@ using DataFrames, CSV, Revise, LessUnitful
 
 
 function PTR_radiosity_window(f,u,bnode,data)
-    (;iTw,G_lamp,Tamb,uc_window,irradiated_boundaries)=data
+    (;iTw,G_lamp,Tamb,uc_window,top_radiation_boundaries)=data
 
     eps1=uc_window.eps
 
     Tglass = u[iTw] # local tempererature of quartz window
     G1_bot_IR = eps1*ph"σ"*(Tglass^4-Tamb^4)+ph"σ"*Tamb^4
 	G1_bot_vis = 0.0
-    if bnode.region in irradiated_boundaries		
+    if bnode.region in top_radiation_boundaries		
 		G1_bot_vis += G_lamp # flux profile measured behind quarz in plane of cat layer
     end
     return G1_bot_vis,G1_bot_IR
@@ -36,9 +36,9 @@ end
 
 # G0_bot, IR/vis : surface radiosities of glass underside
 function flux_window_underside(f,u,bnode,data)
-    (;iT,irradiated_boundaries)=data
+    (;iT,top_radiation_boundaries)=data
     # if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
-    if bnode.region in irradiated_boundaries        
+    if bnode.region in top_radiation_boundaries        
 
         G1_bot_vis, G1_bot_IR = PTR_radiosity_window(f,u,bnode,data)
 
@@ -47,9 +47,9 @@ function flux_window_underside(f,u,bnode,data)
 end
 
 # function irrad_top(f,u,bnode,data)
-#     (;iT,irradiated_boundaries,uc_cat)=data
+#     (;iT,top_radiation_boundaries,uc_cat)=data
 
-#     if bnode.region in irradiated_boundaries
+#     if bnode.region in top_radiation_boundaries
 #         alpha2_vis=uc_cat.alpha_vis
 #         alpha2_IR=uc_cat.alpha_IR
 #         eps2=uc_cat.eps       
@@ -62,9 +62,9 @@ end
 # end
 
 # function irrad_bottom(f,u,bnode,data)
-#     (;iT,iTp,outlet_boundaries,lc_frit,lc_plate)=data
+#     (;iT,iTp,outflow_boundaries,lc_frit,lc_plate)=data
 
-#     if bnode.region in outlet_boundaries
+#     if bnode.region in outflow_boundaries
 #         rho1_IR=lc_frit.rho_IR
 # 		alpha1_IR=lc_frit.alpha_IR
 # 		eps1=lc_frit.eps
@@ -103,8 +103,8 @@ end
 
 # # G2_IR/vis : surface radiosities of catalyst layer 
 function flux_catalyst_layer(f,u,bnode,data)
-    (;iT,uc_cat,irradiated_boundaries)=data
-    if bnode.region in irradiated_boundaries
+    (;iT,uc_cat,top_radiation_boundaries)=data
+    if bnode.region in top_radiation_boundaries
         
         # catalyst layer properties (2)
         rho2_vis=uc_cat.rho_vis
@@ -255,8 +255,8 @@ end
 
 # # convective heat flux through top chamber
 function flux_convection_top(f,u,bnode,data)
-    (;iT,iTw,X0,uc_h,Nu,irradiated_boundaries)=data
-    if bnode.region in irradiated_boundaries
+    (;iT,iTw,X0,uc_h,Nu,top_radiation_boundaries)=data
+    if bnode.region in top_radiation_boundaries
    
         Tm=0.5*(u[iT] +  u[iTw]) # mean temperature
         # thermal conductivity at Tm and inlet composition X0 (H2/CO2 = 1/1)
@@ -294,39 +294,39 @@ end
 # # surface radiosity of underside of frit, facing towards the bottom plate
 # # solely in IR, consists of emission and reflection
 function flux_radiation_frit_bottom(f,u,bnode,data)
-    (;iT,iTp,lc_frit,lc_plate,outlet_boundaries) = data
+    (;iT,iTp,lc_frit,lc_plate,outflow_boundaries) = data
     #if bnode.region==Γ_bottom
-    if bnode.region in outlet_boundaries
+    if bnode.region in outflow_boundaries
 		
 		
-		# irradiation exchange between porous frit (1) and Al bottom plate (2)
-		# porous frit properties (1)
-		eps1=lc_frit.eps;  rho1_IR=lc_frit.rho_IR; 	
+		# irradiation exchange between porous frit (3) and Al bottom plate (4)
+		# porous frit properties (3)
+		eps1=lc_frit.eps;  rho3_IR=lc_frit.rho_IR; 	
 		# Al bottom plate properties (2)
 		eps2=lc_plate.eps; rho2_IR=lc_plate.rho_IR;
 	
         # local plate temperature
         Tplate = u[iTp]
-        G1_IR = (eps1*ph"σ"*u[iT]^4 + rho1_IR*eps2*ph"σ"*Tplate^4)/(1-rho1_IR*rho2_IR)
+        G1_IR = (eps1*ph"σ"*u[iT]^4 + rho3_IR*eps2*ph"σ"*Tplate^4)/(1-rho3_IR*rho2_IR)
 
         f[iT] = G1_IR
     end
 end
 
 function flux_radiation_plate_bottom(f,u,bnode,data)
-    (;iT,iTp,lc_frit,lc_plate,outlet_boundaries) = data
+    (;iT,iTp,lc_frit,lc_plate,outflow_boundaries) = data
     # if bnode.region==Γ_bottom
-    if bnode.region in outlet_boundaries		
+    if bnode.region in outflow_boundaries		
 		
-		# irradiation exchange between porous frit (1) and Al bottom plate (2)
-		# porous frit properties (1)
-		eps1=lc_frit.eps;  rho1_IR=lc_frit.rho_IR; 	
+		# irradiation exchange between porous frit (3) and Al bottom plate (4)
+		# porous frit properties (3)
+		eps1=lc_frit.eps;  rho3_IR=lc_frit.rho_IR; 	
 		# Al bottom plate properties (2)
 		eps2=lc_plate.eps; rho2_IR=lc_plate.rho_IR;
 		
         # local plate temperature
         Tplate = u[iTp]
-        G2_IR = (eps2*ph"σ"*Tplate^4 + rho2_IR*eps1*ph"σ"*u[iT]^4)/(1-rho1_IR*rho2_IR)
+        G2_IR = (eps2*ph"σ"*Tplate^4 + rho2_IR*eps1*ph"σ"*u[iT]^4)/(1-rho3_IR*rho2_IR)
 
         f[iT] = G2_IR
     end
@@ -355,10 +355,10 @@ end
 # end
 
 function flux_convection_bottom(f,u,bnode,data)
-    (;iT,iTp,lc_h,Nu,outlet_boundaries)=data
+    (;iT,iTp,lc_h,Nu,outflow_boundaries)=data
 
     # if bnode.region==Γ_bottom        
-    if bnode.region in outlet_boundaries
+    if bnode.region in outflow_boundaries
         ng=ngas(data)
 
         X=zeros(eltype(u), ng)
@@ -451,8 +451,8 @@ end
 
 #         (;iT,iTp,lc_frit,lc_plate) = data
 		
-# 		# irradiation exchange between porous frit (1) and Al bottom plate (2)
-# 		# porous frit properties (1)
+# 		# irradiation exchange between porous frit (3) and Al bottom plate (4)
+# 		# porous frit properties (3)
 #         eps1=lc_frit.eps
 #         rho1_IR=lc_frit.rho_IR
 #         # Al bottom plate properties (2)
@@ -470,9 +470,9 @@ end
 # end
 
 function flux_enthalpy_top(f,u,bnode,data)
-    (;iT,Fluids,X0,mfluxin,mmix0,T_gas_in,inlet_boundaries) = data
+    (;iT,Fluids,X0,mfluxin,mmix0,T_gas_in,inflow_boundaries) = data
 
-    if bnode.region in inlet_boundaries
+    if bnode.region in inflow_boundaries
         flux_enth_top = mfluxin/mmix0 * enthalpy_mix(Fluids, T_gas_in, X0)
         f[iT]=flux_enth_top
     end
@@ -562,27 +562,27 @@ end
 # end
 
 # function HeatFluxes_Test(solt,grid,sys,data)
-#     (;iT,irradiated_boundaries,outlet_boundaries) = data
+#     (;iT,top_radiation_boundaries,outflow_boundaries) = data
 #     inf_t, outf_t = TotalFlows(solt,grid,sys,data)
 
 #     dE_dt = inf_t + outf_t
 #     sol = solt(solt.t[end])
-#     Qabs_inner_top = integrate(sys,irrad_top,sol; boundary=true)[iT,irradiated_boundaries]
+#     Qabs_inner_top = integrate(sys,irrad_top,sol; boundary=true)[iT,top_radiation_boundaries]
 #     Qabs_inner_top = sum(Qabs_inner_top)
 
-#     QG_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,irradiated_boundaries]
+#     QG_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,top_radiation_boundaries]
 #     QG_01=sum(QG_01)
 
-#     QG_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,irradiated_boundaries]
+#     QG_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,top_radiation_boundaries]
 #     QG_10=sum(QG_10)
 
-#     Qabs_inner_bottom = integrate(sys,irrad_bottom,sol; boundary=true)[iT,outlet_boundaries]
+#     Qabs_inner_bottom = integrate(sys,irrad_bottom,sol; boundary=true)[iT,outflow_boundaries]
 #     Qabs_inner_bottom = sum(Qabs_inner_bottom)
 
-#     QG_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,outlet_boundaries]
+#     QG_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,outflow_boundaries]
 #     QG_34=sum(QG_34)
 #     # #QG_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,Γ_bottom]
-#     QG_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,outlet_boundaries]
+#     QG_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,outflow_boundaries]
 #     QG_43=sum(QG_43)
 
 #     dH_dot = dE_dt - Qabs_inner_top
@@ -594,11 +594,11 @@ end
 
 
 function TotalFlows(solt,grid,sys,data)
-    (;iT,Fluids,inlet_boundaries,outlet_boundaries,mfluxin,mmix0,nflowin, T_gas_in,X0)=data
+    (;iT,Fluids,inflow_boundaries,outflow_boundaries,mfluxin,mmix0,nflowin, T_gas_in,X0)=data
 
     tfact=TestFunctionFactory(sys)	
-	tf_out=testfunction(tfact,inlet_boundaries,outlet_boundaries)
-	tf_in=testfunction(tfact,outlet_boundaries,inlet_boundaries)
+	tf_out=testfunction(tfact,inflow_boundaries,outflow_boundaries)
+	tf_in=testfunction(tfact,outflow_boundaries,inflow_boundaries)
 
     inflow_rate=Float64[]
 	outflow_rate=Float64[]
@@ -618,30 +618,30 @@ end
 
 function HeatFluxes_EB_I(solt,grid,sys,data)
 
-    (;iT,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries)=data
+    (;iT,inflow_boundaries,top_radiation_boundaries,outflow_boundaries,side_boundaries)=data
 
     inf_t, outf_t = TotalFlows(solt,grid,sys,data)
     dE_dt = inf_t + outf_t
     sol = solt(solt.t[end])
 
 
-    Qconv_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,irradiated_boundaries]
+    Qconv_10=integrate(sys,flux_convection_top,sol; boundary=true)[iT,top_radiation_boundaries]
     Qconv_10=sum(Qconv_10)
     
-    QG_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,irradiated_boundaries]
+    QG_01=integrate(sys,flux_window_underside,sol; boundary=true)[iT,top_radiation_boundaries]
     QG_01=sum(QG_01)
 
-    QG_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,irradiated_boundaries]
+    QG_10=integrate(sys,flux_catalyst_layer,sol; boundary=true)[iT,top_radiation_boundaries]
     QG_10=sum(QG_10)
 
         
-    QG_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,outlet_boundaries]
+    QG_34=integrate(sys,flux_radiation_frit_bottom,sol; boundary=true)[iT,outflow_boundaries]
     QG_34=sum(QG_34)
     
-    QG_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,outlet_boundaries]
+    QG_43=integrate(sys,flux_radiation_plate_bottom,sol; boundary=true)[iT,outflow_boundaries]
     QG_43=sum(QG_43)
 
-    Qconv_34=integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,outlet_boundaries]
+    Qconv_34=integrate(sys,flux_convection_bottom,sol; boundary=true)[iT,outflow_boundaries]
     Qconv_34=sum(Qconv_34)
 
     # # Qsides=integrate(sys,side,sol; boundary=true)[iT,[Γ_side_right,Γ_side_back,Γ_side_front,Γ_side_left]]

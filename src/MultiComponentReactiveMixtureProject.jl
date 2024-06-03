@@ -21,11 +21,11 @@ export M_matrix!, D_matrix!, D_A_matrices!, DarcyVelo, MoleFrac!, MassFrac!, The
 export DMS_flux, DMS_reaction, DMS_storage, DMS_boutflow
 
 include("photo_thermal_reactor.jl")
-export PTR_top, PTR_side, PTR_bottom, PTR_bcond, PTR_bflux, PTR_bstorage, PTR_grid_boundaries_regions, PTR_init_system
+export PTR_top, PTR_side, PTR_bottom, PTR_bcond, PTR_bflux, PTR_bstorage, PTR_grid_boundaries_regions, PTR_grid_boundaries_regions!, PTR_init_system
 export RePrPe, kbed, kbed_VDI_flattening, lambda_eff_AC, SurfaceOpticalProps, ReactorData, ngas, bareas
 
 
 include("postprocess.jl")
-export HeatFluxes_EB_I, BoundaryFlows_Integrals, Print_summary, Print_summary_ext, WriteSolution3D
+export HeatFluxes_EB_I, HeatFluxes_EB_I_inner, BoundaryFlows_Integrals, Print_summary, Print_summary_ext, WriteSolution3D
 
 end

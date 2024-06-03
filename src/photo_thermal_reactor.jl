@@ -4,15 +4,15 @@ Helper function to calculate radiation emitted from the window towards the surfa
     reactor (PTR) model.
 """
 function PTR_radiosity_window(f,u,bnode,data)
-    # (;dim,iTw,G_lamp,nom_flux,FluxIntp,Tamb,uc_window,irradiated_boundaries)=data
-	# (;dim,iTw,ibf,nom_flux,Tamb,uc_window,irradiated_boundaries,constant_irradiation_flux_bc,sp)=data
-	(;dim,iTw,ibf,nom_flux,Tamb,uc_window,irradiated_boundaries,constant_irradiation_flux_bc,sp)=data
+    # (;dim,iTw,G_lamp,nom_flux,FluxIntp,Tamb,uc_window,top_radiation_boundaries)=data
+	# (;dim,iTw,ibf,nom_flux,Tamb,uc_window,top_radiation_boundaries,constant_irradiation_flux_bc,sp)=data
+	(;dim,iTw,ibf,nom_flux,Tamb,uc_window,top_radiation_boundaries,constant_irradiation_flux_bc)=data
 	
     # irrad. exchange between quartz window (1), cat surface (2), masked sruface (3) 
-    tau1_vis=uc_window.tau_vis
-    rho1_vis=uc_window.rho_vis
-    tau1_IR=uc_window.tau_IR
-    rho1_IR=uc_window.rho_IR
+    # tau1_vis=uc_window.tau_vis
+    # rho1_vis=uc_window.rho_vis
+    # tau1_IR=uc_window.tau_IR
+    # rho1_IR=uc_window.rho_IR
     eps1=uc_window.eps
 	
 	G_lamp = zero(eltype(u))
@@ -27,28 +27,19 @@ function PTR_radiosity_window(f,u,bnode,data)
 			G_lamp += u[ibf]
 		end
 	end
-	# !!! SENSITIVITY !!!
-	# sp = parameters(u)
-	G_lamp *= (1 + sp[1])
-	# !!! SENSITIVITY !!!
 
     Tglass = u[iTw] # local tempererature of quartz window
     G1_bot_IR = eps1*ph"σ"*(Tglass^4-Tamb^4)+ph"σ"*Tamb^4
 	#G1_bot_IR = ph"σ"*Tamb^4
 	G1_bot_vis = zero(eltype(u))
-    if bnode.region in irradiated_boundaries		
+    if bnode.region in top_radiation_boundaries		
 		G1_bot_vis += G_lamp # flux profile measured behind quarz in plane of cat layer
     end
     return G1_bot_vis,G1_bot_IR
 end
 
-@doc raw"""
-Function defining the top/inlet boundary condition in the photo thermal catalytic
-    reactor (PTR) model.
-"""
-function PTR_top(f,u,bnode,data)
-	(;ip,iT,iTw,Tamb,T_gas_in,mfluxin,X0,W0,mmix0,uc_window,uc_cat,uc_h,Nu,k_nat_conv,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,solve_T_equation,Fluids)=data
-	ng=ngas(data)
+function Top_HeatFlux(f,u,bnode,data)
+	(;iT,iTw,uc_window, uc_cat, dt_hf_irrad, k_nat_conv, Tamb, nom_flux) = data
 
 	# irrad. exchange between quartz window (1), cat surface (2), masked surface (3)
 	alpha1_vis=uc_window.alpha_vis
@@ -59,8 +50,39 @@ function PTR_top(f,u,bnode,data)
 	alpha2_vis=uc_cat.alpha_vis
 	alpha2_IR=uc_cat.alpha_IR
 	eps2=uc_cat.eps
+	@inline G1_vis, G1_IR = PTR_radiosity_window(f,u,bnode,data)			
+
+	hflux_irrad = (-eps2*ph"σ"*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR) # irradiation heatflux 
 	
-	if bnode.region in inlet_boundaries
+	# Tm=0.5*(u[iT] + u[iTw]) # mean temperature: catalyst layer and window
+	# @inline _,λf=dynvisc_thermcond_mix(data, Tm, X0) # thermal conductivity at Tm and inlet composition X0
+	# dh=2*uc_h
+	# kconv=Nu*λf/dh*ufac"W/(m^2*K)"
+	# hflux_conv = kconv*(u[iT]-Tm) # convection heatflux through top chamber
+	
+	hf_domain_top = hflux_irrad * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)	
+
+	# calculate local window temperature from (local) flux balance
+	hflux_conv_top_w = k_nat_conv*(u[iTw]-Tamb)
+	G2_vis = rho2_vis*G1_vis		
+	G2_IR = eps2*ph"σ"*u[iT]^4 + rho2_IR*G1_IR
+	hflux_abs_w = alpha1_vis*G2_vis + alpha1_IR*G2_IR + alpha1_IR*ph"σ"*Tamb^4
+	hflux_emit_w = uc_window.eps*ph"σ"*u[iTw]^4
+
+	hf_window = hflux_abs_w - hflux_conv_top_w -2*hflux_emit_w
+
+	return hf_domain_top, hf_window
+end
+
+@doc raw"""
+Function defining the top/inlet boundary condition in the photo thermal catalytic
+    reactor (PTR) model.
+"""
+function PTR_top(f,u,bnode,data)
+	(;iT,ip,iTw,T_gas_in,mfluxin,X0,W0,mmix0,dt_mf,dt_hf_enth,inflow_boundaries,top_radiation_boundaries,solve_T_equation)=data
+	ng=ngas(data)
+	
+	if bnode.region in inflow_boundaries
 		r_mfluxin = mfluxin*ramp(bnode.time; du=(0.1,1), dt=dt_mf)
 		
 		f[ip] = -r_mfluxin # Neumann bc. for total mass flux
@@ -71,61 +93,32 @@ function PTR_top(f,u,bnode,data)
 	end
 
 	if solve_T_equation
-		if bnode.region in inlet_boundaries
+		if bnode.region in inflow_boundaries
+
 			# heatflux from enthalpy inflow
-			# !!! DEBUG !!!
-            # @inline r_hf_enth = mfluxin/mmix0 * enthalpy_mix(data, T_gas_in, X0) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
-			# Tfilm = (T_gas_in+u[iT])
-			# @inline hin = heatcap_mix(data, Tfilm, X0) * (Tfilm - 298.15)
 			hin = zero(eltype(u))
 			@inbounds for i=1:ng
-				hin += enthalpy_gas_thermal(Fluids[i],T_gas_in)
+				# hin += enthalpy_gas_thermal(Fluids[i],T_gas_in)
+				hin += X0[i]*enthalpy_gas_thermal(data.Fluids[i],T_gas_in)
 			end
-			# @inline hin = heatcap_mix(data, T_gas_in, X0) * (T_gas_in - Tref)
+
 			r_hf_enth = mfluxin/mmix0 * hin
+			# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
 			f[iT] = -r_hf_enth * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
-			# !!! DEBUG !!!
-			
-			if bnode.region in irradiated_boundaries
-				@inline G1_vis, G1_IR = PTR_radiosity_window(f,u,bnode,data)
-
-				hflux_irrad = (-eps2*ph"σ"*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR) # irradiation heatflux 
-				#hflux_irrad = (-eps2*ph"σ"*(u[iT]^4-Tamb^4) + alpha2_vis*G1_vis) # irradiation heatflux 
-				
-				Tm=0.5*(u[iT] + u[iTw]) # mean temperature: catalyst layer and window
-		        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X0) # thermal conductivity at Tm and inlet composition X0
-				dh=2*uc_h
-				kconv=Nu*λf/dh*ufac"W/(m^2*K)"
-				hflux_conv = kconv*(u[iT]-Tm) # convection heatflux through top chamber
-				
-				# !!! DEBUG !!!
-				# f[iT] += (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
-				f[iT] -= hflux_irrad * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
-				# f[iT] -= hflux_irrad 
-				# !!! DEBUG !!!
-				
-				# f[iT] += zero(eltype(u))
-				# f[iT] += (-hflux_irrad) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
-
-				
-				
-				# calculate local window temperature from (local) flux balance
-				hflux_conv_top_w = k_nat_conv*(u[iTw]-Tamb)
-				G2_vis = rho2_vis*G1_vis		
-				G2_IR = eps2*ph"σ"*u[iT]^4 + rho2_IR*G1_IR
-				hflux_abs_w = alpha1_vis*G2_vis + alpha1_IR*G2_IR + alpha1_IR*ph"σ"*Tamb^4
-				hflux_emit_w = uc_window.eps*ph"σ"*u[iTw]^4
-				# !!! DEBUG !!!
-				# f[iTw] = -hflux_conv -hflux_abs_w +hflux_conv_top_w +2*hflux_emit_w
-				# f[iTw] *= ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
-				f[iTw] = -hflux_abs_w +hflux_conv_top_w +2*hflux_emit_w
-                # f[iTw] = zero(eltype(u))
-				# !!! DEBUG !!!
+						
+			if bnode.region in top_radiation_boundaries
+				@inline hf_domain_top, hf_window = Top_HeatFlux(f,u,bnode,data)
+				f[iT] -= hf_domain_top
+				f[iTw] = -hf_window
+			end
+		else
+			if bnode.region in top_radiation_boundaries
+				@inline hf_domain_top, hf_window = Top_HeatFlux(f,u,bnode,data)
+				f[iT] = -hf_domain_top
+				f[iTw] = -hf_window
 			end
 		end
-		# !!! DEBUG !!!
-		# f[iT] = u[iT] - (273.15 + 650.0)
-		# !!! DEBUG !!!
+
 	end
 	
 end
@@ -135,20 +128,98 @@ Function defining the side boundary condition in the photo thermal catalytic
     reactor (PTR) model.
 """
 function PTR_side(f,u,bnode,data)
-	(;iT,k_nat_conv,delta_gap,Tamb,side_boundaries,solve_T_equation,dt_hf_enth)=data
+	(;dim,iT,k_nat_conv,delta_gap,Tamb,side_boundaries,solve_T_equation,dt_hf_enth,X0)=data
 	ng=ngas(data)
 
 	if solve_T_equation && bnode.region in side_boundaries
-	    X=MVector{ng,eltype(u)}(undef)
-        @inline MoleFrac!(X,u,data)
-        @inline _,λf=dynvisc_thermcond_mix(data, u[iT], X)
-
-		# !!! DEBUG !!!
-        # w/o shell height
-        f[iT] = (u[iT]-Tamb)/(delta_gap/λf+1/k_nat_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
-        # f[iT] = zero(eltype(u))		
-		# !!! DEBUG !!!
+		# !!! TEST: Partial domain blocking !!!
+		nonzero_molefrac = false
+		for i=1:ng
+			@inbounds if u[i] > zero(eltype(u))
+				nonzero_molefrac = true
+				break
+			end
+		end
+		if nonzero_molefrac
+			X=MVector{ng,eltype(u)}(undef)
+			@inline MoleFrac!(X,u,data)
+			@inline _,λf=dynvisc_thermcond_mix(data, u[iT], X)
+		# 	# f[iT] = (u[iT]-Tamb)/(delta_gap/λf+1/k_nat_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
+		else
+			@inline _,λf=dynvisc_thermcond_mix(data, u[iT], X0)
+		end
+		if dim == 2 # dylindrical wall
+			r_i = bnode.coord[1, bnode.index]
+			r_o = r_i + delta_gap
+			f[iT] = (u[iT]-Tamb) / (1/λf*r_i*log(r_o/r_i) + r_i/(r_o*k_nat_conv)) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
+			# f[iT] = (u[iT]-Tamb) / (delta_gap/λf + 1/k_nat_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
+		elseif dim == 3 # plane wall
+        	f[iT] = (u[iT]-Tamb) / (delta_gap/λf + 1/k_nat_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
+		end
     end
+end
+
+function Bottom_HeatFlux(f,u,bnode,data)
+
+	(;iT,iTp,k_nat_conv,Tamb,lc_h,Nu,dt_hf_irrad,lc_frit,lc_plate) = data
+	ng=ngas(data)
+
+	# optical parameters for radiation heat exchange
+
+	# surface 3: frit lower chamber
+	rho3_IR = lc_frit.rho_IR
+	alpha3_IR = lc_frit.alpha_IR
+	eps3 = lc_frit.eps
+	# surface 4: Al plate lower chamber
+	rho4_IR = lc_plate.rho_IR
+	alpha4_IR = lc_plate.alpha_IR
+	eps4 = lc_plate.eps
+	
+
+
+	# heatflux from irradiation exchange with bottom plate
+	T4 = u[iTp]	# plate temperature
+	T3 = u[iT]	# frit temperature
+
+
+	G34_IR = (eps3*ph"σ"*T3^4 + rho3_IR*eps4*ph"σ"*T4^4)/(1-rho3_IR*rho4_IR)
+
+	G43_IR = rho4_IR*G34_IR + eps4*ph"σ"*T4^4
+
+
+	# heat flux balance around frit in lower chamber (surface 3), positive sign entering, negative sign exiting
+	# net_hflux_irrad_3 = -eps3*ph"σ"*T3^4 + alpha3_IR/(1-rho3_IR*rho4_IR) * (eps4*ph"σ"*T4^4 + rho4_IR*eps3*ph"σ"*T3^4)
+	net_hflux_irrad_3 = -eps3*ph"σ"*T3^4 + alpha3_IR*G43_IR
+
+	# heatflux from convective/conductive heat exchange with bottom plate
+	# Tm=0.5*(u[iT] + Tplate)
+	# X=MVector{ng,eltype(u)}(undef)
+	# @inline MoleFrac!(X,u,data)
+	
+	# @inline _,λf=dynvisc_thermcond_mix(data, Tm, X) # thermal conductivity at Tm and outlet composition X
+	# dh=2*lc_h
+	# kconv=Nu*λf/dh*ufac"W/(m^2*K)"
+	# hflux_conv = kconv*(u[iT]-Tm) # positive flux in negative z coord. (towards plate)
+
+	# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
+	# f[iT] = (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+	net_hflux_3 = net_hflux_irrad_3 * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+
+	# calculate (local) plate temperature from (local) flux balance
+	hflux_conv_bot_p = k_nat_conv * (T4-Tamb)
+	hflux_emit_p = eps4*ph"σ"*T4^4
+	
+	# hflux_abs_p = alpha4_IR*G34_IR + alpha4_IR*ph"σ"*Tamb^4
+	# !!! Include transmitted visible radiation from upper chamber
+	hflux_abs_p = alpha4_IR*G34_IR + alpha4_IR*ph"σ"*Tamb^4
+
+	# f[iTp] = -hflux_conv -hflux_abs_p +2*hflux_emit_p +hflux_conv_bot_p
+	# f[iTp] *= ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
+	# f[iTp] = -hflux_abs_p + 2*hflux_emit_p +hflux_conv_bot_p
+
+	net_hflux_4 = hflux_abs_p - 2*hflux_emit_p - hflux_conv_bot_p
+
+	return net_hflux_3, net_hflux_4
 end
 
 @doc raw"""
@@ -156,58 +227,16 @@ Function defining the bottom/outlet boundary condition in the photo thermal cata
     reactor (PTR) model.
 """
 function PTR_bottom(f,u,bnode,data)
-	(;iT,iTp,k_nat_conv,Tamb,lc_h,Nu,dt_hf_irrad,lc_frit,lc_plate,solve_T_equation,outlet_boundaries) = data
-	ng=ngas(data)
+
+	(;iT,iTp,solve_T_equation,bottom_radiation_boundaries) = data
 	
-	if solve_T_equation && bnode.region in outlet_boundaries
+	if solve_T_equation && bnode.region in bottom_radiation_boundaries
 
-		# irradiation heat flux
-		rho1_IR=lc_frit.rho_IR
-		alpha1_IR=lc_frit.alpha_IR
-		eps1=lc_frit.eps
-		rho2_IR=lc_plate.rho_IR
-		alpha2_IR=lc_plate.alpha_IR
-		eps2=lc_plate.eps
-
-		# heatflux from irradiation exchange with bottom plate
-		Tplate = u[iTp]	
-		hflux_irrad = -eps1*ph"σ"*u[iT]^4 + alpha1_IR/(1-rho1_IR*rho2_IR)*(eps2*ph"σ"*Tplate^4+rho2_IR*eps1*ph"σ"*u[iT]^4)
-	
-		# heatflux from convective/conductive heat exchange with bottom plate
-		Tm=0.5*(u[iT] + Tplate)
-
-		X=MVector{ng,eltype(u)}(undef)
-		@inline MoleFrac!(X,u,data)
-        
-        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X) # thermal conductivity at Tm and outlet composition X
-        dh=2*lc_h
-		kconv=Nu*λf/dh*ufac"W/(m^2*K)"
-		hflux_conv = kconv*(u[iT]-Tm) # positive flux in negative z coord. (towards plate)
+		@inline hf_domain_bottom, hf_plate = Bottom_HeatFlux(f,u,bnode,data)
 
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
-
-		# !!! DEBUG
-        # f[iT] = (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
-		f[iT] = -hflux_irrad * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
-		# f[iT] = -hflux_irrad
-		# f[iT] = zero(eltype(u))
-		# !!! DEBUG
-
-		# f[iT] = (-hflux_irrad) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
-		# f[iT] = zero(eltype(u))
-
-		# calculate (local) plate temperature from (local) flux balance
-		hflux_conv_bot_p = k_nat_conv*(u[iTp]-Tamb)
-		hflux_emit_p = lc_plate.eps*ph"σ"*u[iTp]^4
-		G1_IR = (eps1*ph"σ"*u[iT]^4 + rho1_IR*eps2*ph"σ"*u[iTp]^4)/(1-rho1_IR*rho2_IR)
-		hflux_abs_p = alpha2_IR*G1_IR + alpha2_IR*ph"σ"*Tamb^4
-
-		# !!! DEBUG
-		# f[iTp] = -hflux_conv -hflux_abs_p +2*hflux_emit_p +hflux_conv_bot_p
-		# f[iTp] *= ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
-		f[iTp] = -hflux_abs_p + 2*hflux_emit_p +hflux_conv_bot_p
-        # f[iTp] = zero(eltype(u))
-		# !!! DEBUG
+		f[iT] = -hf_domain_bottom
+		f[iTp] = -hf_plate
 
 	end
 end
@@ -217,12 +246,12 @@ Wrapper function defining the boundary conditions in the photo thermal catalytic
     reactor (PTR) model. Used with the VoronoiFVM.jl package
 """
 function PTR_bcond(f,u,bnode,data)
-	(;p,ip,outlet_boundaries)=data
+	(;p,ip,outflow_boundaries)=data
 	
     PTR_top(f,u,bnode,data)
     PTR_side(f,u,bnode,data)
     PTR_bottom(f,u,bnode,data)
-    for boundary in outlet_boundaries
+    for boundary in outflow_boundaries
         boundary_dirichlet!(f,u,bnode, species=ip,region=boundary,value=p)
     end	
 end
@@ -233,14 +262,15 @@ Function defining the flux function in the boundary species in the photo thermal
     bottom plate respectively. Only relevant if temperature equation is solved.
 """
 function PTR_bflux(f,u,bedge,data)
-	(;irradiated_boundaries,outlet_boundaries)=data
-
-	if bedge.region in irradiated_boundaries # window, upper chamber
-		(;iTw,lambda_window) = data
-		f[iTw] = lambda_window * (u[iTw, 1] - u[iTw, 2])
-	elseif bedge.region in outlet_boundaries # bottom plate, lower chamber
-		(;iTp,lambda_Al) = data
-		f[iTp] = lambda_Al * (u[iTp, 1] - u[iTp, 2])
+	(;top_radiation_boundaries,bottom_radiation_boundaries,solve_T_equation)=data
+	if solve_T_equation
+		if bedge.region in top_radiation_boundaries # window, upper chamber
+			(;iTw,lambda_window) = data
+			f[iTw] = lambda_window * (u[iTw, 1] - u[iTw, 2])
+		elseif bedge.region in bottom_radiation_boundaries # bottom plate, lower chamber
+			(;iTp,lambda_Al) = data
+			f[iTp] = lambda_Al * (u[iTp, 1] - u[iTp, 2])
+		end
 	end
 end
 
@@ -251,16 +281,16 @@ Function defining the storage function of the boundary species in the photo
     Only relevant if temperature equation is solved.
 """
 function PTR_bstorage(f,u,bnode,data)
-	(;irradiated_boundaries,outlet_boundaries,solve_T_equation,constant_irradiation_flux_bc,dim)=data
+	(;top_radiation_boundaries,bottom_radiation_boundaries,solve_T_equation,constant_irradiation_flux_bc,dim)=data
 	if solve_T_equation
-		if bnode.region in irradiated_boundaries # window, upper chamber
+		if bnode.region in top_radiation_boundaries # window, upper chamber
 			(;iTw) = data
 			f[iTw] = u[iTw]
 			if dim == 3 && !constant_irradiation_flux_bc
 				(;ibf) = data
 				f[ibf] = u[ibf]
 			end
-		elseif bnode.region in outlet_boundaries # bottom plate, lower chamber
+		elseif bnode.region in bottom_radiation_boundaries # bottom plate, lower chamber
 			(;iTp) = data
 			f[iTp] = u[iTp]
 		end
@@ -276,19 +306,6 @@ end
 #Implementation follows the notation in __VDI Heat Atlas 2010, ch. D6.3 eqs. (5a-5e).__
 #"""
 # calculate fixed bed (porous material) effective thermal conductivity
-
-
-# function kbed(data, lambdaf)
-# 	(;poros,lambdas) = data
-# 	# !!! regularize function to catch poros=1 (pure gas phase) !!!
-# 	ϵ_reg = 1.0e-12
-# 	B=1.25*((1.0-poros)/poros)^(10.0/9.0)
-# 	kp=lambdas/lambdaf
-# 	N=1.0-(B/kp)
-# 	#kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
-# 	kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/(B+ϵ_reg)) - (B+1.0)/2.0 - (B-1.0)/N)
-# 	1.0-sqrt(1.0-poros)+sqrt(1.0-poros)*kc
-# end
 
 # mostly equivalent to VDI Heat Atlas 2010, ch. D6.3 eqs. (5a-5e). with addition
 # of flattening coefficient ψ, that might be relevant for sintered materials
@@ -338,7 +355,8 @@ const uc_cat = SurfaceOpticalProps(
 	alpha_IR=0.56, # measurement (ideally at high T) integrated over IR
 	tau_IR=0.0, # opaque surface
 	alpha_vis=0.47, # measurement (ideally at high T) integrated over vis
-	tau_vis=0.13 
+	# tau_vis=0.13 
+	tau_vis=0.0 
 )
 
 # optical parameters for uncoated frit in upper chamber (uc)
@@ -346,7 +364,8 @@ const uc_mask = SurfaceOpticalProps(
 	alpha_IR=0.55, # measurement (ideally at high T) integrated over IR
 	tau_IR=0.0, # opaque surface
 	alpha_vis=0.16, # measurement (ideally at high T) integrated over vis
-	tau_vis=0.13 
+	# tau_vis=0.13 
+	tau_vis=0.0 
 )
 
 # optical parameters for uncoated frit in lower chamber (lc) = frit in upper chamber
@@ -414,7 +433,7 @@ Mutable data structure to hold modeling parameters of photo-thermal reactor
 $(TYPEDFIELDS)
 """
 
-@kwdef mutable struct ReactorData{NG, KP, Tv}
+@kwdef mutable struct ReactorData{NG, KP}
     "Spatial dimension, default=2"
 	dim::Int64 = 2
     # time constants for ramp functions
@@ -423,12 +442,13 @@ $(TYPEDFIELDS)
     dt_hf_irrad::Tuple{Float64, Float64}=(3.0,10.0)
     
     # vectors holding boundary information
-    inlet_boundaries::Vector{Int64} = Int64[]
-    irradiated_boundaries::Vector{Int64} = Int64[]
-    outlet_boundaries::Vector{Int64} = Int64[]
+    inflow_boundaries::Vector{Int64} = Int64[]
+    top_radiation_boundaries::Vector{Int64} = Int64[]
+    outflow_boundaries::Vector{Int64} = Int64[]
+	bottom_radiation_boundaries::Vector{Int64} = Int64[]
     side_boundaries::Vector{Int64} = Int64[]
-    catalyst_regions::Vector{Int64} =[3]
-    permeable_regions::Vector{Int64} =[2,3]
+    catalyst_regions::Vector{Int64} = [3]
+    permeable_regions::Vector{Int64} = [2,3]
 
     kinpar::KP = XuFroment
     ng::Int64 = kinpar.ng
@@ -436,19 +456,18 @@ $(TYPEDFIELDS)
     # switches to control the simulation
 	is_reactive::Bool = true
     solve_T_equation::Bool = true
-	constant_irradiation_flux_bc = true
+	constant_irradiation_flux_bc::Bool = true
     constant_properties::Bool = false
 	include_Soret_Dufour::Bool = false
 	include_dpdt::Bool = false
 
-	#ip::Int64 = NG+1
+	
     ip::Int64 = ng+1
 	iT::Int64 = ip+1
 	# inlcude window & plate temperatures as boundary species
 	iTw::Int64=iT+1 # index of window Temperature (upper chamber)
 	iTp::Int64=iTw+1 # index of plate Temperature (lower chamber)
 	
-	# ibf::Int64=iTp+1 # index of boundary flux species, workaround to include spatially varying boundary flux
 	ibf::Int64 = dim == 3 ? iTp+1 : iTp # index of boundary flux species, workaround to include spatially varying boundary flux
 
 	idpdt::Int64=ibf+1 # index of auxiliary variable holding dp/dt for use in enthalpy equation
@@ -515,13 +534,19 @@ $(TYPEDFIELDS)
 	shell_h::Float64=20*ufac"mm" # height of heat transfer area adjancent to domain boundary 
 	k_nat_conv::Float64=20.0*ufac"W/(m^2*K)" #17.5*ufac"W/(m^2*K)" # natural+forced convection heat transfer coeff.
 	nom_flux::Float64 = 70.0*ufac"kW/m^2" # nominal irradiation flux density / kW/m^2
-	# FluxIntp::typeof(itp12)=itp12
+
 	# VitraPor data
 	dp::Float64=200.0*ufac"μm" # average pore size, por class 0
-	poros::Float64=0.33 # porosity, VitraPor sintetered filter class 0
-	# perm::Float64=1.23e-10*ufac"m^2" # perm. of porous medium, use in Darcy Eq.
-	perm::Vector{Float64}=[1.0e-6,1.0,1.0]*1.23e-10*ufac"m^2" # perm. of porous medium, use in Darcy Eq.
-	γ_τ::Float64=poros^1.5 # constriction/tourtuosity factor
+	# !!! TEST: Partial domain blocking !!!
+	# poros::Float64=0.33 # porosity, VitraPor sintetered filter class 0
+	poros::Vector{Float64}=[0.33,0.33,0.33] # porosity, VitraPor sintetered filter class 0
+	# !!! TEST: Partial domain blocking !!!
+	
+	perm::Vector{Float64}=[1.0,1.0,1.0]*1.23e-10*ufac"m^2" # perm. of porous medium, use in Darcy Eq.
+	# !!! TEST: Partial domain blocking !!!
+	# γ_τ::Float64=poros^1.5 # constriction/tourtuosity factor
+	γ_τ::Vector{Float64}=poros.^1.5 # constriction/tourtuosity factor
+	# !!! TEST: Partial domain blocking !!!
 	
 	# Solid (non-porous) Borosilica glass (frit material)
 	rhos::Float64=2.23e3*ufac"kg/m^3" # density of non-porous Boro-Solikatglas 3.3
@@ -534,12 +559,12 @@ $(TYPEDFIELDS)
 
 	logreg::Float64=1.0e-20
 
-    function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,include_Soret_Dufour,include_dpdt,ip,iT,iTw,iTp,ibf,idpdt,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs,constant_species_viscosities,constant_species_thermal_conductivities,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,logreg)
+    function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inflow_boundaries,top_radiation_boundaries,outflow_boundaries,bottom_radiation_boundaries,side_boundaries,catalyst_regions,permeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_irradiation_flux_bc,constant_properties,include_Soret_Dufour,include_dpdt,ip,iT,iTw,iTp,ibf,idpdt,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs,constant_species_viscosities,constant_species_thermal_conductivities,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,logreg)
         KP = MultiComponentReactiveMixtureProject.KinData{nreac(kinpar)}
-		Tv = eltype(sp)
+		# Tv = eltype(sp)
 		# FluxIntp = flux_interpol(nom_flux)
 		# flux_inner, flux_outer = flux_inner_outer(nom_flux)
-        new{ng,KP}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,include_Soret_Dufour,include_dpdt,ip,iT,iTw,iTp,ibf,idpdt,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs,constant_species_viscosities,constant_species_thermal_conductivities,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,logreg)
+        new{ng,KP}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inflow_boundaries,top_radiation_boundaries,outflow_boundaries,bottom_radiation_boundaries,side_boundaries,catalyst_regions,permeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_irradiation_flux_bc,constant_properties,include_Soret_Dufour,include_dpdt,ip,iT,iTw,iTp,ibf,idpdt,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs,constant_species_viscosities,constant_species_thermal_conductivities,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,logreg)
 
     end
 end
@@ -548,7 +573,7 @@ end
 """
 Regularized logarithm:
 ```
-   rlog(u,data)= log(u+electrolyte.logreg)
+   rlog(u,data)= log(u+data.logreg)
 ```
 """
 rlog(x,data::ReactorData)=rlog(x,data.logreg)
@@ -579,110 +604,102 @@ end
 
 function kbed(data, lambdaf)
 	(;poros,lambdas) = data
-	B=1.25*((1.0-poros)/poros)^(10/9)
-	kp=lambdas/lambdaf
-	N=1-(B/kp)
-	# !!! regularize function to catch poros=1 (pure gas phase) !!!
-	#kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
-	kc=2/N* (B/N^2 * (kp-1)/kp * (log(kp)-rlog(B,data)) - (B+1)/2 - (B-1)/N)
-	# !!! reglog
-	1-sqrt(1-poros)+sqrt(1-poros)*kc
+	ϵ = poros[1] + eps() # regularize for porosity = 0
+	# B=1.25*((1.0-poros)/poros)^(10/9)
+	B = 1.25*((1.0-ϵ)/ϵ)^(10/9)
+	kp = lambdas/lambdaf
+	N = 1-(B/kp)	
+	kc = 2/N* (B/N^2 * (kp-1)/kp * (log(kp)-rlog(B,data)) - (B+1)/2 - (B-1)/N)	
+	# 1-sqrt(1-poros)+sqrt(1-poros)*kc
+	return 1-sqrt(1-ϵ)+sqrt(1-ϵ)*kc
 end
 
-
-"""
-Regularized logarithm:
-```
-   rlog(u,data)= log(u+electrolyte.logreg)
-```
-"""
-rlog(x,data::ReactorData)=rlog(x,data.logreg)
-
-function rlog(x,eps)
-    if x<eps
-        return log(eps)+(x-eps)/eps
-    else
-        return log(x)
-    end
-end
-
-"""
-    rexp(x;trunc=500.0)
-
-Regularized exponential. Linear continuation for `x>trunc`,  
-returns 1/rexp(-x) for `x<-trunc`.
-"""
-function rexp(x; trunc = 20.0)
-    if x < -trunc
-        1.0 / rexp(-x; trunc)
-    elseif x <= trunc
-        exp(x)
-    else
-        exp(trunc) * (x - trunc + 1)
-    end
-end
-
-function kbed(data, lambdaf)
+function kbed(edge, data, lambdaf)
 	(;poros,lambdas) = data
-	B=1.25*((1.0-poros)/poros)^(10/9)
-	kp=lambdas/lambdaf
-	N=1-(B/kp)
-	# !!! regularize function to catch poros=1 (pure gas phase) !!!
-	#kc=2.0/N* (B/N^2.0*(kp-1.0)/kp*log(kp/B) - (B+1.0)/2.0 - (B-1.0)/N)
-	kc=2/N* (B/N^2 * (kp-1)/kp * (log(kp)-rlog(B,data)) - (B+1)/2 - (B-1)/N)
-	# !!! reglog
-	1-sqrt(1-poros)+sqrt(1-poros)*kc
+	ϵ = poros[edge.region]
+	# B=1.25*((1.0-poros)/poros)^(10/9)
+	B = 1.25*((1.0-ϵ)/ϵ)^(10/9)
+	kp = lambdas/lambdaf
+	N = 1-(B/kp)	
+	kc = 2/N* (B/N^2 * (kp-1)/kp * (log(kp)-rlog(B,data)) - (B+1)/2 - (B-1)/N)
+	# 1-sqrt(1-poros)+sqrt(1-poros)*kc
+	return 1-sqrt(1-ϵ)+sqrt(1-ϵ)*kc
 end
 
 ngas(::ReactorData{NG,KP}) where {NG,KP} = NG
 
-function PTR_grid_boundaries_regions(dim;nref=0)
-	Ω_high_perm = 2 # high permeability, unblocked region
-	Ω_catalyst = 3
-	W=16
-	H=0.5
-
+function PTR_grid_boundaries_regions(dim;
+										nref=0,
+										efix=1.0e-2*ufac"cm",
+										W=16.0*ufac"cm",
+										W_block=3.0*ufac"cm",
+										W_window=12.0*ufac"cm",
+										H=0.5*ufac"cm",
+										H_cat=0.05*ufac"cm",
+										Ω_high_perm=2, # high permeability, unblocked region
+										Ω_catalyst=3, # catalyst occupied region
+									)
 	nz = 10*2^(nref)
-	Z=(0:(H/nz):H)*ufac"cm"
+	# Z=(0:(H/nz):H)*ufac"cm"
+	Z=(0:(H/nz):H)
 
 	if dim == 2
-		# Γ_bottom = 1
-		#Γ_bottom_insulating = 7
+		Γ_bottom_impermeable = 1
+		#Γ_bottom_rim = 8
 		Γ_side = 2
 		Γ_sym = 4		
-		# Γ_top_permeable = 5
 		Γ_bottom_permeable = 5
 		Γ_top_irradiated = 6
+		Γ_top_permeable = 7		
 
 		W=W/2 # axisymmetry, half domain is sufficient
-		nr=W*2^(nref)
+		# nr=W*2^(nref)
+		nr=W/(1.0ufac"cm")*2^(nref)
+		nblocked = nr*W_block/W
 
-		efix = 1.0e-2
+		# efix = 1.0e-2*ufac"cm"
 		# R=(0:(W/nr):W)*ufac"cm"
-		R1=(0:(W/nr):(W-2))*ufac"cm"
-		R2=((W-2):efix:(W-2+efix))*ufac"cm"
-		R3=(W-2+efix:((2-efix)/2^(nref+1)):W)*ufac"cm"
-		R = glue(R1,R2)
-		R = glue(R,R3)
 
-		
+
+		R=(0:(W/nr):(W-W_block))
+		R_=((W-W_block):efix:(W-W_block+efix))
+		R=glue(R,R_)
+		R_ = linspace((W-W_block+efix), W-W_block*(nblocked-1)/nblocked, 2)
+		R=glue(R,R_)
+		R_ = linspace(W-W_block*(nblocked-1)/nblocked, W, Integer(nblocked))
+		R=glue(R,R_)
+
+	
 		grid=simplexgrid(R,Z)
 		circular_symmetric!(grid)
 	
-		# cellmask!(grid,[0,0].*ufac"cm",[6/8*W,9/10*H].*ufac"cm",Ω_high_perm) # gas permeable region
-		# cellmask!(grid,[0,9/10*H].*ufac"cm",[6/8*W,H].*ufac"cm",Ω_catalyst) # catalyst layer region
-		
-		cellmask!(grid,[0,0].*ufac"cm",[6/8*W,H].*ufac"cm",Ω_catalyst) # catalyst layer region
+		# cellmask!(grid,[0,0].*ufac"cm",[(W-W_block),H].*ufac"cm",Ω_catalyst) # catalyst layer region
 
-		bfacemask!(grid, [0,0].*ufac"cm",[W-2,0].*ufac"cm",Γ_bottom_permeable)
-		bfacemask!(grid, [0,H].*ufac"cm",[W-2,H].*ufac"cm",Γ_top_irradiated) 
-				
-		# inb = [Γ_top_permeable,Γ_top_irradiated]
-		inb = [Γ_top_irradiated]
-		irrb = [Γ_top_irradiated]
-		outb = [Γ_bottom_permeable]
-		sb = [Γ_side]
-	else
+		cellmask!(grid, [0,0], [W-W_block,H-H_cat], Ω_high_perm) # catalyst layer region
+		cellmask!(grid, [0,H-H_cat], [W-W_block,H], Ω_catalyst) # catalyst layer region
+
+		#bfacemask!(grid, [0,0].*ufac"cm",[W-2,0].*ufac"cm",Γ_bottom_permeable)
+
+		if W-W_block > W_window/2
+			bfacemask!(grid, [0,H], [W-W_block,H], Γ_top_permeable)
+			bfacemask!(grid, [0,H], [W_window/2,H], Γ_top_irradiated)
+			inflow_b = [Γ_top_permeable, Γ_top_irradiated]
+			rad_top_b = [Γ_top_irradiated]
+		elseif W-W_block == W_window/2
+			bfacemask!(grid, [0,H], [W-W_block,H], Γ_top_irradiated)
+			inflow_b = [Γ_top_irradiated]
+			rad_top_b = [Γ_top_irradiated]
+		else
+			bfacemask!(grid, [0,H], [W_window/2,H], Γ_top_irradiated)
+			bfacemask!(grid, [0,H], [W-W_block,H], Γ_top_permeable)
+			inflow_b = [Γ_top_permeable]
+			rad_top_b = [Γ_top_permeable, Γ_top_irradiated]
+		end
+		rad_bottom_b = [Γ_bottom_impermeable, Γ_bottom_permeable]
+		bfacemask!(grid, [0,0], [W-W_block,0], Γ_bottom_permeable)
+		outflow_b = [Γ_bottom_permeable]
+		side_b = [Γ_side]
+	elseif dim == 3
 		Γ_side_1 = 1 
 		Γ_side_2 = 2
 		Γ_side_3 = 3
@@ -701,24 +718,212 @@ function PTR_grid_boundaries_regions(dim;nref=0)
 		bfacemask!(grid, [1,1,H].*ufac"cm",[W-1,W-1,H].*ufac"cm",Γ_top_permeable)
 		bfacemask!(grid, [2,2,H].*ufac"cm",[W-2,W-2,H].*ufac"cm",Γ_top_irradiated)
 
-		inb = [Γ_top_permeable,Γ_top_irradiated]
-		irrb = [Γ_top_irradiated]
-		outb = [Γ_bottom]
-		sb = [Γ_side_1,Γ_side_2,Γ_side_3,Γ_side_4]
+		inflow_b = [Γ_top_permeable, Γ_top_irradiated]
+		rad_top_b = [Γ_top_irradiated]
+		outflow_b = [Γ_bottom]
+		side_b = [Γ_side_1,Γ_side_2,Γ_side_3,Γ_side_4]
 	end
 
-	# return grid, inb, irrb, outb, sb, [Ω_catalyst]
-	return grid, inb, irrb, outb, sb, [Ω_catalyst], [Ω_high_perm, Ω_catalyst]
+	return grid, inflow_b, rad_top_b, outflow_b, rad_bottom_b, side_b, [Ω_catalyst], [Ω_high_perm, Ω_catalyst]
 end
 
-function PTR_init_system(dim, grid, data::ReactorData; assembly=:edgewise, unknown_storage=:dense)
+function PTR_grid_boundaries_regions!(	dim, data;
+										nref=0,
+										ufac=ufac"cm",
+										efix=1.0e-2*ufac,
+										W=16.0*ufac,
+										W_block=3.0*ufac,
+										W_window=12.0*ufac,
+										H=0.5*ufac,
+										H_cat=0.05*ufac,
+										Ω_permeable=2, # unblocked region
+										Ω_catalyst=3, # catalyst occupied region
+									)
+	nz = 10*2^(nref)
+	Z=(0:(H/nz):H)
 
-	(;p,ip,Tamb,iT,iTw,iTp,ibf,idpdt,inlet_boundaries,irradiated_boundaries,outlet_boundaries,catalyst_regions,permeable_regions,X0,solve_T_equation,include_dpdt,nom_flux,constant_irradiation_flux_bc,sp) = data
+	if dim == 2
+		Γ_bottom_impermeable = 1
+		
+		Γ_side = 2
+		Γ_sym = 4		
+		Γ_bottom_permeable = 5
+		Γ_top_irradiated = 6
+		Γ_top_permeable = 7
+		Γ_bottom_block = 8
+
+		W=W/2 # axisymmetry, half domain is sufficient
+		# nr=W*2^(nref)
+		# nr=W/(0.5ufac"cm")*2^(nref)
+		nr=W/(0.5ufac)*2^(nref)
+		nblocked = nr*W_block/W
+
+		# efix = 1.0e-2*ufac"cm"
+		# R=(0:(W/nr):W)*ufac"cm"
+
+
+		R=(0:(W/nr):(W-W_block))
+		# R_=((W-W_block):efix:(W-W_block+efix))
+		if W_block > 0.0*ufac
+			if efix > 0.0
+				R_=[W-W_block,W-W_block+efix]
+				R=glue(R,R_)
+			end
+			R_ = linspace((W-W_block+efix), W-W_block*(nblocked-1)/nblocked, 2)
+			R=glue(R,R_)
+			R_ = linspace(W-W_block*(nblocked-1)/nblocked, W, Integer(nblocked))
+			R=glue(R,R_)
+		end
+
+
+		grid=simplexgrid(R,Z)
+		circular_symmetric!(grid)
+
+		# cellmask!(grid,[0,0].*ufac"cm",[(W-W_block),H].*ufac"cm",Ω_catalyst) # catalyst layer region
+
+		cellmask!(grid, [0,0], [W-W_block,H-H_cat], Ω_permeable) # gas permeable region
+		cellmask!(grid, [0,H-H_cat], [W-W_block,H], Ω_catalyst) # catalyst layer region
+
+		#bfacemask!(grid, [0,0].*ufac"cm",[W-2,0].*ufac"cm",Γ_bottom_permeable)
+
+		if W-W_block > W_window/2
+			bfacemask!(grid, [0,H], [W-W_block,H], Γ_top_permeable)
+			bfacemask!(grid, [0,H], [W_window/2,H], Γ_top_irradiated)
+			inflow_b = [Γ_top_permeable, Γ_top_irradiated]
+			rad_top_b = [Γ_top_irradiated]
+		elseif W-W_block == W_window/2
+			bfacemask!(grid, [0,H], [W-W_block,H], Γ_top_irradiated)
+			inflow_b = [Γ_top_irradiated]
+			rad_top_b = [Γ_top_irradiated]
+		else
+			bfacemask!(grid, [0,H], [W_window/2,H], Γ_top_irradiated)
+			# bfacemask!(grid, [W-W_block+efix,H], [W_window/2,H], Γ_top_irradiated)
+			
+			bfacemask!(grid, [0,H], [W-W_block,H], Γ_top_permeable)
+			inflow_b = [Γ_top_permeable]
+			rad_top_b = [Γ_top_permeable, Γ_top_irradiated]
+		end
+
+		# if W_block > 0.0ufac"cm"
+		if W_block > 0.0ufac
+			bfacemask!(grid, [0,0], [W-W_block,0], Γ_bottom_permeable)
+			# bfacemask!(grid, [W-W_block,0], [W-W_block+efix,0], Γ_bottom_block)
+			rad_bottom_b = [Γ_bottom_impermeable, Γ_bottom_permeable]
+		else
+			bfacemask!(grid, [0,0], [W,0], Γ_bottom_permeable)
+			rad_bottom_b = [Γ_bottom_permeable]
+		end
+		outflow_b = [Γ_bottom_permeable]
+		side_b = [Γ_side]
+	elseif dim == 3
+		Γ_side_1 = 1 
+		Γ_side_2 = 2
+		Γ_side_3 = 3
+		Γ_side_4 = 4
+		Γ_bottom_impermeable = 5
+		Γ_bottom_permeable = 7
+		# Γ_bottom = 5
+		Γ_top_permeable = 8
+		Γ_top_irradiated = 9
+
+		ΔW = (1.0ufac)/2^(nref)
+		nxy = W/ΔW
+		#nxy = W/(1.0ufac)*2^(nref)
+		nblocked = nxy * W_block/W
+		
+
+		# 0 ... W_Block ... W/2 ... W-W_Block ... W
+		if W_block > 0.0
+
+			ΔWblocked = W_block / nblocked
+			X = linspace(0, ΔWblocked*(nblocked-1), Integer(nblocked))
+
+			if efix > 0.0
+				X_ = [X[end], X[end]+ΔWblocked-efix, X[end]+ΔWblocked]
+				X = glue(X,X_)
+			end
+
+			X_ = linspace(X[end], X[end]+ΔW*(nxy-2*nblocked), Integer(nxy-2*nblocked)+1)
+			X = glue(X,X_)
+
+			if efix > 0.0
+				X_ = [X[end], X[end]+efix, X[end]+ΔWblocked-efix]
+				X = glue(X,X_)
+			end
+
+			X_ = linspace(X[end], X[end]+ΔWblocked*(nblocked-1), Integer(nblocked))
+			X = glue(X,X_)
+		else
+			X = (0:(W/nxy):W)
+		end
+		Y = X
+
+		grid=simplexgrid(X,Y,Z)
+
+		cellmask!(grid, [W_block, W_block, 0], [W-W_block, W-W_block, H-H_cat], Ω_permeable) # gas permeable region
+		cellmask!(grid, [W_block, W_block, H-H_cat], [W-W_block, W-W_block, H], Ω_catalyst) # catalyst layer region
+		# cellmask!(grid, [-W/2+W_block, -W/2+W_block, 0], [W/2-W_block, W/2-W_block, H-H_cat], Ω_permeable) # gas permeable region
+		# cellmask!(grid, [-W/2+W_block, -W/2+W_block, H-H_cat], [W/2-W_block, W/2-W_block, H], Ω_catalyst) # catalyst layer region
+		
+		offset_window = (W-W_window)/2
+
+		if W-2*W_block > W_window
+			bfacemask!(grid, [W_block, W_block, H], [W-W_block, W-W_block, H], Γ_top_permeable)			
+			bfacemask!(grid, [offset_window, offset_window, H], [W-offset_window, W-offset_window, H], Γ_top_irradiated)
+			# bfacemask!(grid, [-W/2+W_block, -W/2+W_block, H], [W/2-W_block, W/2-W_block, H], Γ_top_permeable)			
+			# bfacemask!(grid, [-W/2+offset_window, -W/2+offset_window, H], [W/2-offset_window, W/2-offset_window, H], Γ_top_irradiated)
+
+			inflow_b = [Γ_top_permeable, Γ_top_irradiated]
+			rad_top_b = [Γ_top_irradiated]
+
+		elseif W-2*W_block == W_window
+			bfacemask!(grid, [offset_window, offset_window, H], [W-offset_window, W-offset_window, H], Γ_top_irradiated)
+			# bfacemask!(grid, [-W/2+offset_window, -W/2+offset_window, H], [W/2-offset_window, W/2-offset_window, H], Γ_top_irradiated)
+			inflow_b = [Γ_top_irradiated]
+			rad_top_b = [Γ_top_irradiated]
+
+		else
+			bfacemask!(grid, [offset_window, offset_window, H], [W-offset_window, W-offset_window, H], Γ_top_irradiated)			
+			bfacemask!(grid, [W_block, W_block, H], [W-W_block, W-W_block, H], Γ_top_permeable)
+			# bfacemask!(grid, [-W/2+offset_window, -W/2+offset_window, H], [W/2-offset_window, W/2-offset_window, H], Γ_top_irradiated)
+			# bfacemask!(grid, [-W/2+W_block, -W/2+W_block, H], [W/2-W_block, W/2-W_block, H], Γ_top_permeable)			
+			inflow_b = [Γ_top_permeable]
+			rad_top_b = [Γ_top_permeable, Γ_top_irradiated]
+		end
+
+		if W_block > 0.0ufac
+			bfacemask!(grid, [W_block, W_block, 0], [W-W_block, W-W_block, 0], Γ_bottom_permeable)
+			# bfacemask!(grid, [-W/2+W_block, -W/2+W_block, 0], [W/2-W_block, W/2-W_block, 0], Γ_bottom_permeable)
+			rad_bottom_b = [Γ_bottom_impermeable, Γ_bottom_permeable]
+		else
+			bfacemask!(grid, [0, 0, 0], [W, W, 0], Γ_bottom_permeable)
+			# bfacemask!(grid, [-W/2, -W/2, 0], [W/2, W/2, 0], Γ_bottom_permeable)
+			rad_bottom_b = [Γ_bottom_permeable]
+		end
+
+		outflow_b = [Γ_bottom_permeable]
+		side_b = [Γ_side_1,Γ_side_2,Γ_side_3,Γ_side_4]
+	end
+
+	data.inflow_boundaries = inflow_b
+	data.top_radiation_boundaries = rad_top_b
+	data.outflow_boundaries = outflow_b
+	data.bottom_radiation_boundaries = rad_bottom_b
+	data.side_boundaries = side_b
+	data.catalyst_regions = [Ω_catalyst]
+	data.permeable_regions = [Ω_permeable, Ω_catalyst]
+	# return grid, inflow_b, rad_top_b, outflow_b, rad_bottom_b, side_b, [Ω_catalyst], [Ω_high_perm, Ω_catalyst]
+	return grid
+end
+
+function PTR_init_system(dim, grid, data::ReactorData)
+
+	(;p,ip,Tamb,iT,iTw,iTp,ibf,idpdt,inflow_boundaries,top_radiation_boundaries,outflow_boundaries,bottom_radiation_boundaries,catalyst_regions,permeable_regions,X0,solve_T_equation,include_dpdt,nom_flux,constant_irradiation_flux_bc) = data
 	ng=ngas(data)
-	Tv = eltype(sp)
+	# Tv = eltype(sp)
 
 	sys=VoronoiFVM.System( 	grid;
-							valuetype = Tv,
+							# valuetype = Tv,
 							data=data,
 							flux=DMS_flux,
 							reaction=DMS_reaction,
@@ -727,48 +932,51 @@ function PTR_init_system(dim, grid, data::ReactorData; assembly=:edgewise, unkno
 							bflux=PTR_bflux,
 							bstorage=PTR_bstorage,
 							boutflow=DMS_boutflow,
-							outflowboundaries=outlet_boundaries,
+							outflowboundaries=outflow_boundaries,
 							assembly=:edgewise,
 							unknown_storage=:dense
 							)
 
 	if solve_T_equation
-		enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
-		enable_boundary_species!(sys, iTw, irradiated_boundaries) # window temperature as boundary species in upper chamber
-		enable_boundary_species!(sys, iTp, outlet_boundaries) # plate temperature as boundary species in lower chamber
+		# !!! TEST: Partial domain blocking !!!
+		# enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
+		enable_species!(sys; species=collect(1:(ng+1)), regions=permeable_regions) # gas phase species xi, ptotal
+		enable_species!(sys; species=iT) # T
+		# !!! TEST: Partial domain blocking !!!
+
+		enable_boundary_species!(sys, iTw, top_radiation_boundaries) # window temperature as boundary species in upper chamber
+		enable_boundary_species!(sys, iTp, bottom_radiation_boundaries) # plate temperature as boundary species in lower chamber
 
 		# for 3 dimensional domain, apply measured irradiation flux density as boundary condition
 		if dim == 3 && !constant_irradiation_flux_bc
 			# boundary flux species, workaround to implement spatially varying irradiation
-			enable_boundary_species!(sys, ibf, irradiated_boundaries)
+			enable_boundary_species!(sys, ibf, top_radiation_boundaries)
 		end
 		if include_dpdt
 			enable_species!(sys; species=idpdt) # auxiliary variable holding dpdt term
 		end
 		
 	else
-		enable_species!(sys; species=collect(1:(ng+1))) # gas phase species xi, ptotal
+		# !!! TEST: Partial domain blocking !!!
+		# enable_species!(sys; species=collect(1:(ng+1))) # gas phase species xi, ptotal
+		enable_species!(sys; species=collect(1:(ng+1)), regions=permeable_regions) # gas phase species xi, ptotal
+		# !!! TEST: Partial domain blocking !!!
 	end
 
 	inival=unknowns(sys)
-	inival .= 0.0
-	inival[ip,:].=p
-
-	# if dim > 1
-	# 	permeable_nodes = []
-	# 	for reg in permeable_regions
-	# 		permeable_nodes = vcat(permeable_nodes, unique(grid[CellNodes][:,grid[CellRegions] .== reg]) )
-	# 	end
-	# end
-	for i=1:ng
-		inival[i,:] .= X0[i]
-		# inival[i,permeable_nodes] .= X0[i]
+	# inival .= 0.0
+	inival .= zero(eltype(inival))
+	# !!! TEST: Partial domain blocking !!!
+	for reg in permeable_regions
+		perm_nodes = unique(grid[CellNodes][:,grid[CellRegions] .== reg]) 
+		# inival[ip,:].=p
+		inival[ip,perm_nodes].=p
+		for i=1:ng
+			# inival[i,:] .= X0[i]
+			inival[i,perm_nodes] .= X0[i]
+		end
 	end
-
-	# for inert gas (pure N2), set is_reactive to false
-	if !any(X0[1:(ng-1)] .> 0.0)
-		data.is_reactive = false
-	end
+	# !!! TEST: Partial domain blocking !!!
 
 	if solve_T_equation
 		inival[[iT,iTw,iTp],:] .= Tamb
@@ -780,12 +988,18 @@ function PTR_init_system(dim, grid, data::ReactorData; assembly=:edgewise, unkno
 				a[2]=b[2]
 			end
 			inival[ibf,:] .= zero(eltype(inival))
-			sub=ExtendableGrids.subgrid(grid,irradiated_boundaries,boundary=true, transform=d3tod2 )
+			subg_window = ExtendableGrids.subgrid(grid, top_radiation_boundaries, boundary=true, transform=d3tod2)
+			W_window = maximum(subg_window[Coordinates][1,:]) - minimum(subg_window[Coordinates][1,:]) # square window
+			W_domain = maximum(grid[Coordinates][1,:]) - minimum(grid[Coordinates][1,:]) # square prismatic domain
+			
+			coord_offset = 0.5*(W_domain-W_window)
+			# @info coord_offset
 				
-			for inode in sub[CellNodes]
-				c = sub[Coordinates][:,inode]
-				inodeip = sub[ExtendableGrids.NodeParents][inode]
-				inival[ibf,inodeip] = FluxIntp(c[1]-0.02, c[2]-0.02)
+			for inode in subg_window[CellNodes]
+				c = subg_window[Coordinates][:,inode]
+				inodeip = subg_window[ExtendableGrids.NodeParents][inode]
+				# inival[ibf,inodeip] = FluxIntp(c[1]-0.02, c[2]-0.02)
+				inival[ibf,inodeip] = FluxIntp(c[1]-coord_offset, c[2]-coord_offset)
 			end
 		end
 		if include_dpdt
@@ -803,7 +1017,7 @@ function PTR_init_system(dim, grid, data::ReactorData; assembly=:edgewise, unkno
 
 		data.lcat = data.mcat/cat_vol
 		local Ain = 0.0
-		for boundary in inlet_boundaries
+		for boundary in inflow_boundaries
 			Ain += bareas(boundary,sys,grid)
 		end
 		data.mfluxin = data.mflowin / Ain

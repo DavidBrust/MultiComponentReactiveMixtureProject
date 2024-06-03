@@ -11,7 +11,7 @@ using MultiComponentReactiveMixtureProject
 
 function run(;dim=3, constant_irradiation_flux_bc=false, times=[0,20.0], nref=0, verbose="nae")
 
-    grid, inlet_boundaries, irradiated_boundaries, outlet_boundaries, side_boundaries, catalyst_regions = PTR_grid_boundaries_regions(dim,nref=nref)
+    grid, inflow_boundaries, top_radiation_boundaries, outflow_boundaries, side_boundaries, catalyst_regions = PTR_grid_boundaries_regions(dim,nref=nref)
 
     data=ReactorData(
         dim=dim,
@@ -23,9 +23,9 @@ function run(;dim=3, constant_irradiation_flux_bc=false, times=[0,20.0], nref=0,
 		Nu = 0.0,
 		X0 = [0,0.5,0,0,0.5,0.0], # H2 / CO2 = 1/1
         constant_irradiation_flux_bc=constant_irradiation_flux_bc,
-        inlet_boundaries=inlet_boundaries,
-        irradiated_boundaries=irradiated_boundaries,
-        outlet_boundaries=outlet_boundaries,
+        inflow_boundaries=inflow_boundaries,
+        top_radiation_boundaries=top_radiation_boundaries,
+        outflow_boundaries=outflow_boundaries,
         side_boundaries=side_boundaries,
         catalyst_regions=catalyst_regions,
         rhos=5.0*ufac"kg/m^3" # set solid density to low value to reduce thermal inertia of system
@@ -92,9 +92,9 @@ function run_sensititivity(;dim=2,constant_irradiation_flux_bc=true)
                 Nu = data.Nu,
                 X0 = data.X0,
                 constant_irradiation_flux_bc = data.constant_irradiation_flux_bc,
-                inlet_boundaries = data.inlet_boundaries,
-                irradiated_boundaries = data.irradiated_boundaries,
-                outlet_boundaries = data.outlet_boundaries,
+                inflow_boundaries = data.inflow_boundaries,
+                top_radiation_boundaries = data.top_radiation_boundaries,
+                outflow_boundaries = data.outflow_boundaries,
                 side_boundaries = data.side_boundaries,
                 catalyst_regions = data.catalyst_regions,
                 rhos = data.rhos, 
@@ -141,9 +141,9 @@ function run_sensititivity(;dim=2,constant_irradiation_flux_bc=true)
                 Nu = data.Nu,
                 X0 = data.X0,
                 constant_irradiation_flux_bc = data.constant_irradiation_flux_bc,
-                inlet_boundaries = data.inlet_boundaries,
-                irradiated_boundaries = data.irradiated_boundaries,
-                outlet_boundaries = data.outlet_boundaries,
+                inflow_boundaries = data.inflow_boundaries,
+                top_radiation_boundaries = data.top_radiation_boundaries,
+                outflow_boundaries = data.outflow_boundaries,
                 side_boundaries = data.side_boundaries,
                 catalyst_regions = data.catalyst_regions,
                 rhos = data.rhos, 
@@ -219,7 +219,7 @@ end
 
 function PTR_init_system_sens(dim, grid, data::ReactorData; assembly=:edgewise, unknown_storage=:dense)
 
-	(;p,ip,Tamb,iT,iTw,iTp,ibf,inlet_boundaries,irradiated_boundaries,outlet_boundaries,catalyst_regions,X0,solve_T_equation,nom_flux,constant_irradiation_flux_bc,sp)=data
+	(;p,ip,Tamb,iT,iTw,iTp,ibf,inflow_boundaries,top_radiation_boundaries,outflow_boundaries,catalyst_regions,X0,solve_T_equation,nom_flux,constant_irradiation_flux_bc,sp)=data
 	ng=ngas(data)
 	Tv = eltype(sp)
 
@@ -233,7 +233,7 @@ function PTR_init_system_sens(dim, grid, data::ReactorData; assembly=:edgewise, 
 							bflux=PTR_bflux,
 							bstorage=PTR_bstorage,
 							boutflow=DMS_boutflow,
-							outflowboundaries=outlet_boundaries,
+							outflowboundaries=outflow_boundaries,
 							assembly=assembly,
 							unknown_storage=unknown_storage,
                             nparams=1
@@ -241,14 +241,14 @@ function PTR_init_system_sens(dim, grid, data::ReactorData; assembly=:edgewise, 
 
 	if solve_T_equation
 		enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
-		enable_boundary_species!(sys, iTw, irradiated_boundaries) # window temperature as boundary species in upper chamber
+		enable_boundary_species!(sys, iTw, top_radiation_boundaries) # window temperature as boundary species in upper chamber
 
 		# for 3 dimensional domain, apply measured irradiation flux density as boundary condition
 		if dim == 3 && !constant_irradiation_flux_bc
 			# boundary flux species, workaround to implement spatially varying irradiation
-			enable_boundary_species!(sys, ibf, irradiated_boundaries)
+			enable_boundary_species!(sys, ibf, top_radiation_boundaries)
 		end
-		enable_boundary_species!(sys, iTp, outlet_boundaries) # plate temperature as boundary species in lower chamber
+		enable_boundary_species!(sys, iTp, outflow_boundaries) # plate temperature as boundary species in lower chamber
 	else
 		enable_species!(sys; species=collect(1:(ng+1))) # gas phase species xi, ptotal
 	end
@@ -270,7 +270,7 @@ function PTR_init_system_sens(dim, grid, data::ReactorData; assembly=:edgewise, 
 				a[2]=b[2]
 			end
 			inival[ibf,:] .= 0.0
-			sub=ExtendableGrids.subgrid(grid,irradiated_boundaries,boundary=true, transform=d3tod2 )
+			sub=ExtendableGrids.subgrid(grid,top_radiation_boundaries,boundary=true, transform=d3tod2 )
 				
 			for inode in sub[CellNodes]
 				c = sub[Coordinates][:,inode]
@@ -290,7 +290,7 @@ function PTR_init_system_sens(dim, grid, data::ReactorData; assembly=:edgewise, 
 
 		data.lcat = data.mcat/cat_vol
 		local Ain = 0.0
-		for boundary in inlet_boundaries
+		for boundary in inflow_boundaries
 			Ain += bareas(boundary,sys,grid)
 		end
 		data.mfluxin = data.mflowin / Ain

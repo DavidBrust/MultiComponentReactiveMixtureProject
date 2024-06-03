@@ -23,12 +23,14 @@ begin
 	using LinearSolve, Pardiso, ExtendableSparse
 	
 	using LessUnitful
-	using PlutoUI, PlutoVista, Plots
+	using PlutoUI, PlutoVista, CairoMakie, Colors, ColorSchemes
 	using CSV, Tables, Dates, Printf
 	using StaticArrays
 	using MultiComponentReactiveMixtureProject
 	
-	GridVisualize.default_plotter!(PlutoVista)
+	#GridVisualize.default_plotter!(PlutoVista)
+	GridVisualize.default_plotter!(CairoMakie)
+	CairoMakie.activate!(; type = "png")
 end;
 
 # ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
@@ -42,32 +44,28 @@ md"""
 # Introduction
 Demonstration notebook for the photo thermal catalytic reactor (PTR) model. Solve energy equation alongside multicomponent species transport. Include reactive gas mixture (CO2,H2,CO,CH4,H2O,N2) with variable physical properties and a Ni based catalyst described with kinetics from published literature.
 
-Select problem dimension: $(@bind dim Select([2,3], default=2))
+Select problem dimension: $(@bind dim Select([2,3], default=3))
 
 Select grid refinement level: $(@bind nref Select([0,1,2,3], default=0))
 
-Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=false))
+Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=true))
 """
+
+# ╔═╡ 89bc522c-0423-45a0-acf6-60f130294abe
+begin
+	W_block = 3.0ufac"cm"
+	W_window = 12.0ufac"cm"
+	#H_cat = 0.5ufac"mm"
+	H_cat = 5.0ufac"mm"
+	#mcat = 500ufac"mg"
+	mcat = 3000ufac"mg"
+end;
 
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═╡ skip_as_script = true
 #=╠═╡
 if dim == 3
-	@bind xcut Slider(linspace(0,16,17)*ufac"cm",show_value=true,default=8*ufac"cm")
-end
-  ╠═╡ =#
-
-# ╔═╡ a995f83c-6ff7-4b95-a798-ea636ccb1d88
-# ╠═╡ show_logs = false
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	grid, inb,irrb,outb,sb,catr,accr =  PTR_grid_boundaries_regions(dim, nref=nref)
-	if dim == 2
-		gridplot(grid, resolution=(660,300), aspect=4.0, zoom=2.8)
-	else
-		gridplot(grid,  xplane=xcut, resolution=(660,460), zoom=1.8, )
-	end
+	@bind xcut PlutoUI.Slider(linspace(0,16,17)*ufac"cm",show_value=true,default=8*ufac"cm")
 end
   ╠═╡ =#
 
@@ -77,40 +75,40 @@ end
 # ╔═╡ 415f6fa7-d5b5-40a2-806e-3d8a61541c2e
 @doc MultiComponentReactiveMixtureProject.DMS_Info_thermal()
 
-# ╔═╡ 1638178e-840b-4abe-9f46-8b0bbe3d606a
-Wolf_rWGS
-
 # ╔═╡ 480e4754-c97a-42af-805d-4eac871f4919
-function ThermalDemo(dim; nref=nref)
-
-	grid, inb, irrb, outb, sb, catr, permr =  PTR_grid_boundaries_regions(dim, nref=nref)
+function ThermalDemo(dim; nref=nref, W_block=1.0ufac"cm", W_window=12.0ufac"cm", H_cat=0.5ufac"mm", mcat=500ufac"mg")
 
 	data = ReactorData(
 		dim=dim,
-		kinpar=Wolf_rWGS,
-		#kinpar=XuFroment,
-		p = 3.5*ufac"bar",
-		#nflowin = 7.4*ufac"mol/hr",
-		nflowin = 3.5*7.4*ufac"mol/hr",
+		kinpar=XuFroment,
+		#nom_flux = 1.0*ufac"kW/m^2",
 		nom_flux = 70.0*ufac"kW/m^2",
-		mcat = 3000*ufac"mg",
-		dt_hf_irrad = (2.0, 10.0),
-		dt_hf_enth = (2.0, 3.0),
-		T_gas_in = 273.15 + 25,
-		
-		X0 = [0,0.5,0,0,0.5,0.0], # H2 / CO2 = 1/1
-		inlet_boundaries=inb,
-		irradiated_boundaries=irrb,
-		outlet_boundaries=outb,
-		side_boundaries=sb,
-		catalyst_regions=catr,
-		permeable_regions=permr,
 
-		include_dpdt=true
+		T_gas_in = 273.15 + 25,
+
+		X0 = [0.0,0.5,0.0,0.0,0.5,0.0],
+		#X0 = [0.0,0.0,0.0,0.0,0.0,1.0],
+
+		perm = [0.0,1.0,1.0]*1.23e-10*ufac"m^2",
+		poros = [0.0,0.33,0.33],
+				
+		#p = 3.5*ufac"bar",
+		p = 1.0*ufac"bar",
+		#nflowin = 3.5*7.4*ufac"mol/hr",
+		nflowin = 7.4*ufac"mol/hr",
+		
+		#mcat = 3000*ufac"mg",
+		mcat = mcat,
+
+		Nu = 0.0,		
+		include_dpdt=true		
 	)
+
+	grid = PTR_grid_boundaries_regions!(dim,data; nref=nref, W_block=W_block, W_window=W_window, H_cat=H_cat)
+	
 	
 	inival,sys = PTR_init_system(dim, grid, data)
-
+	
 	if dim == 2
 		times = [0,1000.0]
 		control = SolverControl(nothing, sys;)
@@ -124,20 +122,35 @@ function ThermalDemo(dim; nref=nref)
 	control.handle_exceptions=true
 	control.Δu_opt=100
 	control.Δt_max=100
-		
-	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="aen",log=true)
-	
+
+	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="aen",log=true)	
 	return solt,grid,sys,data
 end
 
 # ╔═╡ fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 if RunSim
-	solt,grid,sys,data=ThermalDemo(dim);
+	solt,grid,sys,data=ThermalDemo(dim,nref=nref,W_block=W_block,W_window=W_window,H_cat=H_cat, mcat=mcat);
 end;
+
+# ╔═╡ a995f83c-6ff7-4b95-a798-ea636ccb1d88
+# ╠═╡ show_logs = false
+# ╠═╡ skip_as_script = true
+#=╠═╡
+let
+	if dim == 2
+		vis = GridVisualizer(resolution=(660,200))
+		gridplot!(vis, grid, aspect=4.0, linewidth=0.5,)
+		#GridVisualize.save("2D_grid_cross_blocked.svg", vis)
+		reveal(vis)
+	elseif dim == 3
+		gridplot(grid,resolution=(1000,600), xplane=xcut, zoom=2.0, Plotter=PlutoVista)		
+	end
+end
+  ╠═╡ =#
 
 # ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
 md"""
-# Initialisation and Solve
+# Setup and transient solution
 The simulation is setup as a transient simulation. An initialisation strategy is employed where different physics are enabled step by step once a stationary state is established. Initially, no heat is transported and no chemical reactions take place. 
 
 1. Velocity field (mass flow is ramped up from 1-100 % in T=$(data.dt_mf) s)
@@ -150,12 +163,6 @@ The mass flow boundary condition into the reactor domain is "ramped up" starting
 # ╔═╡ 1cc9d6c4-e2d6-4501-ae4d-d7568dee1e8f
 plothistory(solt)
 
-# ╔═╡ 3207839f-48a9-49b6-9861-e5e74bc593a4
-# ╠═╡ skip_as_script = true
-#=╠═╡
-MultiComponentReactiveMixtureProject.Print_summary_ext(solt,grid,sys,data)
-  ╠═╡ =#
-
 # ╔═╡ 5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╠═╡ skip_as_script = true
 #=╠═╡
@@ -163,10 +170,10 @@ let
 	inflow_rate, outflow_rate, reaction_rate, stored_amount, I_in, I_out, I_reac = BoundaryFlows_Integrals(solt, sys, data)
 	(;ng, gn, gni, iT, ip) = data
 
-	#k=gni[:H2]
+	k=gni[:H2]
 	#k=gni[:CO]
 	#k=iT
-	k=ip
+	#k=ip
 
 	if k in 1:ng
 		name = gn[k]
@@ -212,6 +219,17 @@ end
 # ╔═╡ e148f083-4d4e-4fe8-960d-bccd00689c9b
 sol_ss = run_ss(solt,sys);
 
+# ╔═╡ 3207839f-48a9-49b6-9861-e5e74bc593a4
+# ╠═╡ skip_as_script = true
+#=╠═╡
+MultiComponentReactiveMixtureProject.Print_summary_ext(sol_ss,sys,data)
+#MultiComponentReactiveMixtureProject.Print_summary_ext(t,solt,sys,data)
+  ╠═╡ =#
+
+# ╔═╡ f40d7865-1649-4445-86eb-48e2a1a8817b
+HeatFluxes_inner = HeatFluxes_EB_I_inner(sol_ss,sys,data)
+#HeatFluxes_inner = HeatFluxes_EB_I_inner(t,solt,sys,data)
+
 # ╔═╡ e6828f65-fc35-4e2e-aedd-324ccfe4a22c
 function write_sol(sol; desc="")
 	
@@ -230,6 +248,127 @@ end
 # ╔═╡ f99203e7-e53e-4109-b6ff-7fb87d290324
 #write_sol(solt(3.0), desc="include_dpdt=$(data.include_dpdt)")
 
+# ╔═╡ 98468f9e-6dee-4b0b-8421-d77ac33012cc
+md"""
+## Temperature
+"""
+
+# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
+@bind t PlutoUI.Slider(solt.t,show_value=true,default=solt.t[end])
+
+# ╔═╡ b42ce84e-9f97-488a-9311-24c809437623
+sol = solt(t);
+
+# ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
+# ╠═╡ show_logs = false
+# ╠═╡ skip_as_script = true
+#=╠═╡
+let
+	(;iT,iTw,iTp,top_radiation_boundaries,outflow_boundaries)=data
+	vis=GridVisualizer(layout=(1,1), resolution=(700,200))
+	scalarplot!(vis[1,1],grid, sol_ss[iT,:] .- 273.15, aspect=4.0, linewidth=0.5)
+	reveal(vis)
+end
+  ╠═╡ =#
+
+# ╔═╡ 8de4b22d-080c-486f-a6a9-41e8a5489966
+# ╠═╡ show_logs = false
+let
+	if dim == 2
+		(;iT,iTw,iTp,top_radiation_boundaries,bottom_radiation_boundaries) = data
+		vis=GridVisualizer(layout=(2,2), resolution=(680,600))
+		function _2to1(a,b)
+			a[1]=b[2]
+		end
+		#_grid,_,_,_,_,_ = PTR_grid_boundaries_regions(dim,nref=nref)
+		_grid = PTR_grid_boundaries_regions!(dim,data; nref=nref, W_block=W_block, H_cat=H_cat)
+		
+		newreg = num_bfaceregions(_grid) + 1
+		bfacemask!(_grid, [0.0,0.0].*ufac"cm",[0.0,0.5].*ufac"cm",newreg)
+		grid1D = subgrid(_grid, [newreg]; boundary = true, transform = _2to1)
+		sol1D=view(sol_ss[iT, :], grid1D)
+		scalarplot!(vis[1,1],grid1D, sol1D .-273.15, clear=false, xlabel="z / m", ylabel="T / °C", title="r=0, z=[0; 5 mm]")
+	
+		function __2to1(a,b)
+			a[1]=b[1]
+		end
+				
+		grid1D = subgrid(grid, bottom_radiation_boundaries; boundary = true, transform = __2to1)
+		sol1D=view(sol_ss[iT, :], grid1D)
+		scalarplot!(vis[2,1],grid1D, sol1D .-273.15, clear=false, xlabel="r / m", ylabel="T / °C", title="z=0, r=[0; 8 cm]")
+		
+	    # window
+		bgridw = subgrid(grid, top_radiation_boundaries; boundary = true, transform = __2to1)
+		bsolw=view(sol_ss[iTw, :], bgridw)
+		scalarplot!(vis[1,2],bgridw, bsolw.-273.15, xlabel="r / m", ylabel="T / °C", title="window, r=[0; 6 cm]")
+		# bottom plate
+		bgridp = subgrid(grid, bottom_radiation_boundaries; boundary = true, transform = __2to1)
+		bsolp=view(sol_ss[iTp, :], bgridp)
+		scalarplot!(vis[2,2],bgridp, bsolp.-273.15, xlabel="r / m", ylabel="T / °C", title="bottom plate, r=[0; 8 cm]")
+		reveal(vis)
+	end
+end
+
+# ╔═╡ c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
+md"""
+## Molar fractions
+"""
+
+# ╔═╡ 111b1b1f-51a5-4069-a365-a713c92b79f4
+# ╠═╡ show_logs = false
+# ╠═╡ skip_as_script = true
+#=╠═╡
+let
+	(;ip,p,gn,gni) = data
+	ng=ngas(data)
+	
+	function lims(spec;sol=sol_ss)
+		tmp = sol[spec,:]
+		tmp_ = tmp[tmp .!= 0.0]
+	 	minimum(tmp_),maximum(tmp_)
+	end
+	if dim == 2
+		vis=GridVisualizer(layout=(4,1), resolution=(650,800), linewidth=0.5)
+		#scalarplot!(vis[1,1], grid, sol_ss[gni[:CO],:], aspect = 4.0,zoom = 3.2)
+		scalarplot!(vis[1,1], grid, sol_ss[gni[:CO],:], limits=lims(gni[:CO]), aspect=4.0, title="CO molar fraction", xlabel="r / m", ylabel="z / m")
+		scalarplot!(vis[2,1], grid, sol_ss[gni[:CH4],:], limits=lims(gni[:CH4]), aspect=4.0, title="CH4 molar fraction", xlabel="r / m", ylabel="z / m")
+		scalarplot!(vis[3,1], grid, sol_ss[gni[:CO2],:], limits=lims(gni[:CO2]), aspect=4.0, title="CO2 molar fraction", xlabel="r / m", ylabel="z / m")
+		
+		#scalarplot!(vis[3,1], grid, sol[gni[:N2],:], aspect = 4.0,zoom = 2.8) # N2
+
+		
+		cols =ColorSchemes.:Dark2_6
+		# plot species molar fractions along frit thickness (along y axis)
+		function _2to1(a,b)
+			a[1]=b[2]
+		end
+		#_grid,_,_,_,_,_ = PTR_grid_boundaries_regions(dim,nref=nref)
+		_grid = PTR_grid_boundaries_regions!(dim,data; nref=nref, W_block=W_block, H_cat=H_cat)
+		n_max_reg = grid[NumBFaceRegions] + 1
+		bfacemask!(_grid, [3.0,0.0].*ufac"cm",[3.0,0.5].*ufac"cm", n_max_reg)
+	    grid1D = subgrid(_grid, [n_max_reg]; boundary = true, transform = _2to1)
+		
+		for i=1:ng
+			sol1D=view(sol[i, :], grid1D)
+			scalarplot!(vis[4,1],grid1D, sol1D, label=String(gn[i]), color=cols[i],clear=false,linewidth=2,legend = :lt, xlabel="z / m", ylabel="Molar fraction / -")
+		end
+		#reveal(vis)
+	
+	else
+		vis=GridVisualizer(layout=(3,1), resolution=(400,1200), outlinealpha=0.0)
+		scalarplot!(vis[1,1], grid, sol[1,:])
+		scalarplot!(vis[2,1], grid, sol[2,:])
+		scalarplot!(vis[3,1], grid, sol[3,:])
+	end	
+	reveal(vis)
+end
+  ╠═╡ =#
+
+# ╔═╡ cefa0637-d397-4870-8838-828d41232b1a
+md"""
+## Reaction rate
+"""
+
 # ╔═╡ dbb6346c-e08a-4ad0-a985-3052272cf6c7
 function Test_RR(sol_ss, sys, data)
 	(;gni, m) = data
@@ -246,215 +385,61 @@ elseif dim == 3
 	@test isapprox(Test_RR(sol_ss, sys, data), 0.7774951984340692)
 end
 
-# ╔═╡ 98468f9e-6dee-4b0b-8421-d77ac33012cc
-md"""
-### Temperature
-1) Porous frit + catalyst layer domain
-2) Window inner surface
-3) Bottom plate
-"""
-
-# ╔═╡ 58c0b05d-bb0e-4a3f-af05-71782040c8b9
-if dim == 2
-md"""
-- (1,1): T-profile at r=0
-- (2,1): T-profile at z=0
-- (1,2): Window T-profile
-- (2,2): Bottom Plate T-profile
-"""
-end
-
-# ╔═╡ c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
-md"""
-### Molar fractions
-1) CO
-2) CO2
-3) CH4
-"""
-
 # ╔═╡ eb9dd385-c4be-42a2-8565-cf3cc9b2a078
 md"""
-### Flow field
+## Flow field
 1. Pressure
 2. Density
 3. Velocity X
-4. Velocity Y
+4. Velocity Y (positive sign in negative Y direction)
 """
-
-# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-@bind t Slider(solt.t,show_value=true,default=solt.t[end])
-
-# ╔═╡ 5588790a-73d4-435d-950f-515ae2de923c
-sol = solt(t);
-
-# ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
-MultiComponentReactiveMixtureProject.Print_summary(sol,grid,sys,data)
-
-# ╔═╡ 99b59260-7651-45d0-b364-4f86db9927f8
-# ╠═╡ show_logs = false
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	(;iT,iTw,iTp,irradiated_boundaries,outlet_boundaries)=data
-	#vis=GridVisualizer(layout=(3,1), resolution=(680,900))
-	vis=GridVisualizer(layout=(1,1), resolution=(680,300))
-	scalarplot!(vis[1,1],grid, sol_ss[iT,:] .- 273.15, zoom = 2.8, aspect=4.0, show=true)
-end
-  ╠═╡ =#
-
-# ╔═╡ 58c0b05d-bb0e-4a3f-af05-71782040c8b9
-if dim == 2
-md"""
-- (1,1): T-profile at r=0
-- (2,1): T-profile at z=0
-- (1,2): Window T-profile
-- (2,2): Bottom Plate T-profile
-"""
-end
-
-# ╔═╡ c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
-md"""
-### Molar fractions
-1) CO
-2) CO2
-"""
-
-# ╔═╡ eb9dd385-c4be-42a2-8565-cf3cc9b2a078
-md"""
-### Flow field
-1. Pressure
-2. Density
-3. Velocity X
-4. Velocity Y
-"""
-
-# ╔═╡ 107b390f-f9e6-4879-89a7-ec1373bafb52
-md"""
-### Source term in Enthalpy Eq
-Visualize distribution of magnitude of source term from $\partial p / \partial t$ [W/m³]:
-"""
-
-# ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-@bind t Slider(solt.t,show_value=true,default=solt.t[end])
-
-# ╔═╡ b42ce84e-9f97-488a-9311-24c809437623
-sol = solt(t);
-
-# ╔═╡ 994d4a87-3f27-4a51-b061-6111c3346d60
-MultiComponentReactiveMixtureProject.Print_summary(sol,grid,sys,data)
-
-# ╔═╡ 8de4b22d-080c-486f-a6a9-41e8a5489966
-# ╠═╡ show_logs = false
-let
-	if dim == 2
-		(;iT,iTw,iTp,irradiated_boundaries,outlet_boundaries) = data
-		vis=GridVisualizer(layout=(2,2), resolution=(680,600))
-		function _2to1(a,b)
-			a[1]=b[2]
-		end
-		_grid,_,_,_,_,_ = PTR_grid_boundaries_regions(dim,nref=nref)
-		newreg = num_bfaceregions(grid) + 1
-		bfacemask!(_grid, [0.0,0.0].*ufac"cm",[0.0,0.5].*ufac"cm",newreg)
-		grid1D = subgrid(_grid, [newreg]; boundary = true, transform = _2to1)
-		sol1D=view(sol[iT, :], grid1D)
-		scalarplot!(vis[1,1],grid1D, sol1D .-273.15, label="Temperature along Y-axis", clear=false)
-	
-		function __2to1(a,b)
-			a[1]=b[1]
-		end
-		grid1D = subgrid(grid, outlet_boundaries; boundary = true, transform = __2to1)
-		sol1D=view(sol[iT, :], grid1D)
-		scalarplot!(vis[2,1],grid1D, sol1D .-273.15, label="Temperature along X-axis", clear=false)
-		
-	    # window
-		bgridw = subgrid(grid, irradiated_boundaries; boundary = true, transform = __2to1)
-		bsolw=view(sol[iTw, :], bgridw)
-		scalarplot!(vis[1,2],bgridw, bsolw.-273.15,)
-		# bottom plate
-		bgridp = subgrid(grid, outlet_boundaries; boundary = true, transform = __2to1)
-		bsolp=view(sol[iTp, :], bgridp)
-		scalarplot!(vis[2,2],bgridp, bsolp.-273.15,show=true)
-	end
-end
-
-# ╔═╡ 111b1b1f-51a5-4069-a365-a713c92b79f4
-# ╠═╡ show_logs = false
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	(;ip,p,gn,gni) = data
-	ng=ngas(data)
-	if dim == 2
-		#vis=GridVisualizer(layout=(4,1), resolution=(680,900))
-		vis=GridVisualizer(layout=(3,1), resolution=(680,900))
-		scalarplot!(vis[1,1], grid, sol[gni[:CO],:], aspect = 4.0,zoom = 2.8) # CO
-		scalarplot!(vis[2,1], grid, sol[gni[:CO2],:], aspect = 4.0,zoom = 2.8) # CO2
-		#scalarplot!(vis[3,1], grid, sol[gni[:N2],:], aspect = 4.0,zoom = 2.8) # N2
-
-		cols = distinguishable_colors(ng)
-		# plot species molar fractions along frit thickness (along y axis)
-		function _2to1(a,b)
-			a[1]=b[2]
-		end
-		_grid,_,_,_,_,_ = PTR_grid_boundaries_regions(dim,nref=nref)
-		n_max_reg = grid[NumBFaceRegions] + 1
-		bfacemask!(_grid, [3.0,0.0].*ufac"cm",[3.0,0.5].*ufac"cm", n_max_reg)
-	    grid1D = subgrid(_grid, [n_max_reg]; boundary = true, transform = _2to1)
-		for i=1:ng
-			sol1D=view(sol[i, :], grid1D)
-			#scalarplot!(vis[4,1],grid1D, sol1D, label=gn[i], color=cols[i],clear=false)
-			scalarplot!(vis[3,1],grid1D, sol1D, label=gn[i], color=cols[i],clear=false)
-		end
-		reveal(vis)
-	
-	else
-		vis=GridVisualizer(layout=(3,1), resolution=(400,1200), outlinealpha=0.0)
-		scalarplot!(vis[1,1], grid, sol[1,:])
-		scalarplot!(vis[2,1], grid, sol[2,:])
-		scalarplot!(vis[3,1], grid, sol[3,:])
-	end	
-	reveal(vis)
-end
-  ╠═╡ =#
-
-# ╔═╡ 5547b97e-5adf-48ec-9fb9-55d54c1503a4
-let
-	(;idpdt, include_dpdt) = data
-	if include_dpdt
-		vis=GridVisualizer(resolution=(680,300))
-		scalarplot!(vis,grid, sol[idpdt,:], zoom = 1.5, aspect=4.0, show=true)
-	end
-end
 
 # ╔═╡ de69f808-2618-4add-b092-522a1d7e0bb7
 # ╠═╡ show_logs = false
 # ╠═╡ skip_as_script = true
 #=╠═╡
 let
-	(;p,m,ip,iT,Tamb,mfluxin) = data
+	(;m,ip,solve_T_equation,iT,Tamb,mfluxin) = data
+	
 	ng = ngas(data)
 	mmix = []
-	for j in 1:length(sol[1,:])
+	
+	for j in 1:length(sol_ss[1,:])
 		_mmix=0
 		for i=1:ng
-			_mmix += sol[i,j]*m[i]
+			_mmix += sol_ss[i,j] * m[i]
 		end
 		push!(mmix, _mmix)
 	end
 	
-	ps = sol[ip,:]
-	Ts = sol[iT,:]
-	#rho = @. ps * mmix /(ph"R"*T)
-	rho = @. ps * mmix /(ph"R"*Ts)
+	p = sol_ss[ip,:]
+	if solve_T_equation
+		T = sol_ss[iT,:]
+	else
+		T = Tamb
+	end
 	
+	rho = @. p * mmix /(ph"R"*T)
+
+	p_ = p[p .!= 0.0]
+	rho_ = rho[rho .!= 0.0]
+
 	if dim == 2
-		vis=GridVisualizer(layout=(4,1), resolution=(600,800))
-		scalarplot!(vis[1,1], grid, ps, aspect=4.0, zoom=3.5) # Total pressure
-		scalarplot!(vis[2,1], grid, rho, aspect=4.0, zoom=3.5) # Total Density
-		nf = nodeflux(sys, sol)
+		vis=GridVisualizer(layout=(4,1), resolution=(700,800), linewidth=0.5)
+		scalarplot!(vis[1,1], grid, p, limits=(minimum(p_),maximum(p_)), aspect=4.0) # Total pressure
+		scalarplot!(vis[2,1], grid, rho, limits=(minimum(rho_),maximum(rho_)), aspect=4.0) # Total Density
+		
+		nf = nodeflux(sys, sol_ss)
 		massflux = nf[:,ip,:]
-		scalarplot!(vis[3,1], grid, massflux[1,:]./rho, aspect=4.0, zoom=3.5) # Velocity - X
-		scalarplot!(vis[4,1], grid, massflux[2,:]./rho, aspect=4.0, zoom=3.5) # Velocity - Y
+		vel_x = massflux[1,:]./rho
+		vel_x[rho .== 0.0] .= 0.0
+		vel_y = -massflux[2,:]./rho
+		vel_y[rho .== 0.0] .= 0.0
+		vel_y_ = vel_y[vel_y .!= 0.0]
+		scalarplot!(vis[3,1], grid, vel_x, aspect=4.0) # Velocity - X
+		#scalarplot!(vis[3,1], grid, massflux[1,:], aspect=4.0, zoom=3.5) # Velocity - X
+		scalarplot!(vis[4,1], grid, vel_y, limits=(minimum(vel_y_),maximum(vel_y_)), aspect=4.0) # Velocity - Y
+		#scalarplot!(vis[4,1], grid, massflux[2,:], aspect=4.0, zoom=3.5) # Velocity - Y
 	else
 		vis=GridVisualizer(layout=(2,1), resolution=(400,800), outlinealpha=0.0)
 		scalarplot!(vis[1,1], grid, ps, title="Total Pressure")
@@ -464,6 +449,22 @@ let
 	reveal(vis)
 end
   ╠═╡ =#
+
+# ╔═╡ 107b390f-f9e6-4879-89a7-ec1373bafb52
+md"""
+## Source term in Enthalpy Eq
+Visualize distribution of magnitude of source term from $\partial p / \partial t$ [W/m³]:
+"""
+
+# ╔═╡ 5547b97e-5adf-48ec-9fb9-55d54c1503a4
+let
+	(;idpdt, solve_T_equation, include_dpdt) = data
+	if solve_T_equation && include_dpdt
+		vis=GridVisualizer(resolution=(700,200), linewidth=1)
+		scalarplot!(vis,grid, sol[idpdt,:], aspect=4.0)
+		reveal(vis)
+	end
+end
 
 # ╔═╡ bcaae53b-d58b-4e36-9b79-471b02acaea6
 md"""
@@ -522,7 +523,7 @@ function RePrPeKn(T, p, data)
 	Pe_h = L*u0*dens*heat_cap/(mmix0*therm_cond) # Peclet heat transport
 
 	D = zeros(Float64,ng,ng,)
-	D_matrix!(D, T, p, data)	
+	MultiComponentReactiveMixtureProject.D_matrix!_post(D, T, p, data)	
 	
 	Pe_m = L*u0/maximum(D)
 	
@@ -537,40 +538,42 @@ end
 Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 
 # ╔═╡ Cell order:
+# ╟─beae049d-3de7-48a6-a966-5a29fd420c8b
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─d3278ac7-db94-4119-8efd-4dd18107e248
 # ╟─b2791860-ae0f-412d-9082-bb2e27f990bc
+# ╠═89bc522c-0423-45a0-acf6-60f130294abe
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88
+# ╠═3c828e93-8b20-4fd6-9ab4-046a03c8d78b
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═a1ea393e-f123-4ad0-affa-885db325cfd5
 # ╠═415f6fa7-d5b5-40a2-806e-3d8a61541c2e
-# ╠═1638178e-840b-4abe-9f46-8b0bbe3d606a
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
+# ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 # ╠═b42ce84e-9f97-488a-9311-24c809437623
-# ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═1cc9d6c4-e2d6-4501-ae4d-d7568dee1e8f
-# ╠═994d4a87-3f27-4a51-b061-6111c3346d60
-# ╠═3207839f-48a9-49b6-9861-e5e74bc593a4
 # ╟─5d5ac33c-f738-4f9e-bcd2-efc43b638109
 # ╟─560ad300-42fc-4528-a3ec-95bcd66cdbce
 # ╠═70cdb28c-4b23-4ea4-8cd4-5eb97a3b930a
 # ╠═e148f083-4d4e-4fe8-960d-bccd00689c9b
+# ╠═3207839f-48a9-49b6-9861-e5e74bc593a4
+# ╠═f40d7865-1649-4445-86eb-48e2a1a8817b
 # ╠═e6828f65-fc35-4e2e-aedd-324ccfe4a22c
 # ╠═f99203e7-e53e-4109-b6ff-7fb87d290324
-# ╠═dbb6346c-e08a-4ad0-a985-3052272cf6c7
-# ╠═380c74fb-66c4-43fb-a3f5-9c942b13fa0d
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
+# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╠═99b59260-7651-45d0-b364-4f86db9927f8
-# ╟─58c0b05d-bb0e-4a3f-af05-71782040c8b9
 # ╟─8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
-# ╠═111b1b1f-51a5-4069-a365-a713c92b79f4
+# ╟─111b1b1f-51a5-4069-a365-a713c92b79f4
+# ╟─cefa0637-d397-4870-8838-828d41232b1a
+# ╠═dbb6346c-e08a-4ad0-a985-3052272cf6c7
+# ╠═380c74fb-66c4-43fb-a3f5-9c942b13fa0d
 # ╟─eb9dd385-c4be-42a2-8565-cf3cc9b2a078
+# ╠═de69f808-2618-4add-b092-522a1d7e0bb7
 # ╟─107b390f-f9e6-4879-89a7-ec1373bafb52
 # ╠═5547b97e-5adf-48ec-9fb9-55d54c1503a4
-# ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-# ╟─de69f808-2618-4add-b092-522a1d7e0bb7
 # ╟─bcaae53b-d58b-4e36-9b79-471b02acaea6
 # ╠═1196e9ed-024a-4469-95cf-a8622ecaf413
 # ╟─b519541f-9ccd-4032-bc51-9a1abaecadba

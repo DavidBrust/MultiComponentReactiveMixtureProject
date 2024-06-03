@@ -203,9 +203,9 @@ function MinDemo(dim; times=nothing, mfluxin = nothing)
 )
 	
 	mydata = ReactorData(;
-		inlet_boundaries=inb,
-		irradiated_boundaries=irrb,
-		outlet_boundaries=outb,
+		inflow_boundaries=inb,
+		top_radiation_boundaries=irrb,
+		outflow_boundaries=outb,
 		side_boundaries=sb,
 		kinpar=MinKin,
 		lcat = 1.0,
@@ -291,7 +291,7 @@ sol = solt(t);
 # ╔═╡ e29848dd-d787-438e-9c32-e9c2136aec4f
 # ╠═╡ skip_as_script = true
 #=╠═╡
-MultiComponentReactiveMixtureProject._checkinout(sol,sys,data)
+MultiComponentReactiveMixtureProject.BoundaryFluxes(sol,sys,data)
   ╠═╡ =#
 
 # ╔═╡ 862bf54f-8700-4956-9024-07fdf809c922

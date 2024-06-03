@@ -211,7 +211,7 @@ data = ReactorData(
 	γ_τ = 1.0,
 	poros=1.0,
 
-	perm = 1.23e-10*ufac"m^2" * 1.0e6,
+	perm = ones(3)*1.23e-10*ufac"m^2" * 1.0e6,
 	
 	constant_binary_diff_coeffs = constant_binary_diff_coeffs,
 	constant_newman_soret_diff_coeffs = constant_newman_soret_diff_coeffs
@@ -274,7 +274,7 @@ Plot the stationary solution corresponding to Figure 8:
 # ╔═╡ 65dbb492-4795-44ca-afcb-fb2a2c925d92
 md"""
 # References
-1) Van_Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599                                  .
+1) Van_Brunt, Alexander; Farrell, Patrick E.; Monroe, Charles W. (2022): Consolidated theory of fluid thermodiffusion. In: AIChE Journal 68 (5), Artikel e17599. DOI: 10.1002/aic.17599                                   .
 1) Giovangigli, Vincent (2016): Solutions for Models of Chemically Reacting Mixtures. In: Yoshikazu Giga und Antonin Novotny (Hg.): Handbook of Mathematical Analysis in Mechanics of Viscous Fluids. Cham: Springer International Publishing, S. 1–52.
 """
 
@@ -335,7 +335,7 @@ end;
 
 # ╔═╡ 93970c02-91c6-499a-9318-f7f632604bb5
 function bcondition(f,u,bnode,data)
-	(;p,ip,iT,Tamb,inlet_boundaries,dt_hf_enth)=data
+	(;p,ip,iT,Tamb,inflow_boundaries,dt_hf_enth)=data
 
 	eps_=1/1e-4
 	boundary_robin!(f,u,bnode, species=iT,region=Γ_left,value=Tamb*eps_,factor=eps_)
@@ -351,7 +351,7 @@ end
 
 # ╔═╡ 1e51701d-a893-4056-8336-a3772b85abe4
 function setup_run_sim(grid, data)
-	(;ng, ip, iT, Tamb, p, X0, outlet_boundaries) = data
+	(;ng, ip, iT, Tamb, p, X0, outflow_boundaries) = data
 	sys=VoronoiFVM.System(
 		grid;
 		data=data,

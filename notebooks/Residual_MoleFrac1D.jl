@@ -63,7 +63,7 @@ function grid1D(;nref=0)
 	X=(0:h:1)*ufac"cm"
 	grid=simplexgrid(X)
 	# catalyst region
-	cellmask!(grid,[0.4]*ufac"cm",[0.6]*ufac"cm",2)	
+	cellmask!(grid,[0.4]*ufac"cm",[0.6]*ufac"cm",3)	
 	grid
 end
 
@@ -148,9 +148,9 @@ function make_data()
 	
 	data = ReactorData(;
 		dim = 1,
-		inlet_boundaries = [Γ_left],
-		outlet_boundaries = [Γ_right],
-		irradiated_boundaries = [],
+		inflow_boundaries = [Γ_left],
+		outflow_boundaries = [Γ_right],
+		top_radiation_boundaries = [],
 		side_boundaries = [],
 		solve_T_equation = false,
 		constant_properties = true,
@@ -189,6 +189,9 @@ begin
 	end	 	
 end
   ╠═╡ =#
+
+# ╔═╡ ad893d4a-ebc4-452a-be62-2d7dbd8940e1
+make_data()
 
 # ╔═╡ abedcbf9-c99c-4969-b97a-3bc0295061bb
 # ╠═╡ skip_as_script = true
@@ -239,6 +242,7 @@ end;
 # ╠═3f56ffca-8ab8-4c32-b2b1-f2ec28ccf8b7
 # ╟─184f70a9-f049-4017-ad28-027ae606d0ca
 # ╠═bb2ef3c0-96fc-4a90-a714-a0cfa08ac178
+# ╠═ad893d4a-ebc4-452a-be62-2d7dbd8940e1
 # ╠═a5e9ffdb-083a-4192-bd8e-6f0ccb79598e
 # ╠═abedcbf9-c99c-4969-b97a-3bc0295061bb
 # ╟─7dd363bf-d6e0-4dfb-b29f-85aa1fb62429

@@ -324,8 +324,8 @@ function flux_radiation_frit_bottom(f,u,bnode,data)
     if bnode.region==Γ_bottom
 		(;iT,iTp,lc_frit,lc_plate) = data
 		
-		# irradiation exchange between porous frit (1) and Al bottom plate (2)
-		# porous frit properties (1)
+		# irradiation exchange between porous frit (3) and Al bottom plate (4)
+		# porous frit properties (3)
 		eps1=lc_frit.eps;  rho1_IR=lc_frit.rho_IR; 	
 		# Al bottom plate properties (2)
 		eps2=lc_plate.eps; rho2_IR=lc_plate.rho_IR;
@@ -342,8 +342,8 @@ function flux_radiation_plate_bottom(f,u,bnode,data)
     if bnode.region==Γ_bottom
 		(;iT,iTp,lc_frit,lc_plate) = data
 		
-		# irradiation exchange between porous frit (1) and Al bottom plate (2)
-		# porous frit properties (1)
+		# irradiation exchange between porous frit (3) and Al bottom plate (4)
+		# porous frit properties (3)
 		eps1=lc_frit.eps;  rho1_IR=lc_frit.rho_IR; 	
 		# Al bottom plate properties (2)
 		eps2=lc_plate.eps; rho2_IR=lc_plate.rho_IR;
@@ -474,8 +474,8 @@ function flux_abs_bottom(f,u,bnode,data)
 
         (;iT,iTp,lc_frit,lc_plate) = data
 		
-		# irradiation exchange between porous frit (1) and Al bottom plate (2)
-		# porous frit properties (1)
+		# irradiation exchange between porous frit (3) and Al bottom plate (4)
+		# porous frit properties (3)
         eps1=lc_frit.eps
         rho1_IR=lc_frit.rho_IR
         # Al bottom plate properties (2)

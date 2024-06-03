@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.25
+# v0.19.40
 
 using Markdown
 using InteractiveUtils
@@ -7,7 +7,7 @@ using InteractiveUtils
 # ╔═╡ 5f58cde0-0b62-11ee-3544-1524261952f1
 begin
 	using Pkg
-	Pkg.activate(joinpath(@__DIR__,".."))
+	Pkg.activate(joinpath(@__DIR__,"../.."))
 	using Revise
 	using VoronoiFVM, VoronoiFVM.SolverStrategies
 	using ExtendableGrids, GridVisualize,ExtendableSparse,SparseArrays
@@ -46,14 +46,14 @@ Utilize kinetics published in  __Riedel, T., et al. (2001).__ "Kinetics of CO2 H
 # ╔═╡ be27eabe-abc7-406c-bbda-e81e46809ab6
 md"""
 ## Rate Equation
-$(LocalResource("../img/RWGS_RR_eq.png")) 
+$(LocalResource("../../img/RWGS_RR_eq.png")) 
 """
 
 # ╔═╡ 044ac89d-3b61-4d5d-ad29-ddb0127b52a4
 md"""
 ## Temperature Dependence / Arrhenius
 The temperature effect on the kinetic rate coefficient kj was assumed to follow the Arrhenius law:
-$(LocalResource("../img/Arrhenius.png")) 
+$(LocalResource("../../img/Arrhenius.png")) 
 """
 
 # ╔═╡ edad4a40-969d-4122-83fe-bee6af9985fa
@@ -63,7 +63,7 @@ md"""
 
 # ╔═╡ ad6d2019-082c-44e9-826e-bd101a95647c
 md"""
-$(LocalResource("../img/kinetics_par.png")) 
+$(LocalResource("../../img/kinetics_par.png")) 
 """
 
 # ╔═╡ 8a012774-4d41-4c13-9de2-0790b2fd67de
@@ -73,7 +73,7 @@ Equatino from __Zimmerman, W. H.; Bukur, D. B.__ Reaction Kinetics Over
 Iron Catalysts Used for the Fischer-Tropsch Synthesis. Can. J.
 Chem. Eng. 1990, 68, 292.
 
-$(LocalResource("../img/RWGS_Kequil.png"))
+$(LocalResource("../../img/RWGS_Kequil.png"))
 """
 
 # ╔═╡ 36aecfd9-dd75-4ab2-b192-f54f69310125
@@ -125,7 +125,7 @@ In wolf 2016, intrinsic kinetics, obtained from experiments with crushed catalys
 
 # ╔═╡ a3830cd2-5c29-4bd6-98f2-80840281811d
 md"""
-$(LocalResource("../img/rWGS_kinetics/Wolf2016/intrinsic_forwar_RR.png")) 
+$(LocalResource("../../img/rWGS_kinetics/Wolf2016/intrinsic_forwar_RR.png")) 
 """
 
 # ╔═╡ 82234a76-903f-49fd-ba91-4bd69f970b39
@@ -136,7 +136,7 @@ Obtain the net rate by substracting the reverse rate (WGS) from the forward rate
 
 # ╔═╡ 52757d44-a2c3-41a6-abab-4afbe290c98a
 md"""
-$(LocalResource("../img/rWGS_kinetics/Wolf2016/net_rate.png")) 
+$(LocalResource("../../img/rWGS_kinetics/Wolf2016/net_rate.png")) 
 """
 
 # ╔═╡ 1716cfca-0b51-41c0-943f-17bffcb6fd05
@@ -146,7 +146,7 @@ md"""
 
 # ╔═╡ 687c5159-c91c-4f2d-aec7-0117e20f8d40
 md"""
-$(LocalResource("../img/rWGS_kinetics/Wolf2016/kinetic_constants.png")) 
+$(LocalResource("../../img/rWGS_kinetics/Wolf2016/kinetic_constants.png")) 
 """
 
 # ╔═╡ 384b1551-52ee-4c33-8ae2-50809f7923db
@@ -157,7 +157,7 @@ Calculation according to formulation proposed by Twigg
 
 # ╔═╡ 39459b80-d652-4703-a2fc-2cb351a9c6ac
 md"""
-$(LocalResource("../img/rWGS_kinetics/Wolf2016/k_equil.png")) 
+$(LocalResource("../../img/rWGS_kinetics/Wolf2016/k_equil.png")) 
 """
 
 # ╔═╡ 51ba6385-1ceb-4978-84cf-10247bb3978f
@@ -351,7 +351,7 @@ md"""
 
 # ╔═╡ e8113023-5c2c-4db6-bbe2-153b07ee6181
 md"""
-$(LocalResource("../img/rWGS_kinetics/Wolf2016/InletComp.png")) 
+$(LocalResource("../../img/rWGS_kinetics/Wolf2016/InletComp.png")) 
 """
 
 # ╔═╡ 8f8af545-0de2-449c-aa98-669f364b611e
@@ -361,7 +361,7 @@ Extracted data from article
 
 # ╔═╡ dd111a2f-2bf6-4294-b9fe-f27dc6c7f122
 begin
-	Wolf2016 = CSV.read("../data/Wolf2016/IntrinsicKin.csv", DataFrame, delim=";")
+	Wolf2016 = CSV.read("../../data/Wolf2016/IntrinsicKin.csv", DataFrame, delim=";")
 end;
 
 # ╔═╡ 3033f460-9bab-4030-9ce0-3526e5385100

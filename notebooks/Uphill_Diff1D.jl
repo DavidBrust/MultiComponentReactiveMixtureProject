@@ -47,7 +47,7 @@ function grid1D(nref=0)
     h=1/nx
 	X=(0:h:1)*ufac"cm"
 	grid=simplexgrid(X)
-	cellmask!(grid,[0.4]*ufac"cm",[0.6]*ufac"cm",2)	# catalyst region
+	cellmask!(grid,[0.4]*ufac"cm",[0.6]*ufac"cm",3)	# catalyst region
 	grid
 end
 
@@ -88,9 +88,9 @@ nflowin(flowrate) = flowrate == :high ? 0.005 : 0.0001
 
 # ╔═╡ a56afd30-76ad-404a-9510-5f2d1b5dcf5d
 data = ReactorData(
-		inlet_boundaries=[Γ_left],
-		outlet_boundaries=[Γ_right],
-		irradiated_boundaries=[],
+		inflow_boundaries=[Γ_left],
+		outflow_boundaries=[Γ_right],
+		top_radiation_boundaries=[],
 		side_boundaries=[],
 		solve_T_equation=false,
 		nflowin=nflowin(flowrate),
@@ -182,9 +182,9 @@ let
 	flowrate = :high
 	
 	data = ReactorData(
-		inlet_boundaries=[Γ_left],
-		outlet_boundaries=[Γ_right],
-		irradiated_boundaries=[],
+		inflow_boundaries=[Γ_left],
+		outflow_boundaries=[Γ_right],
+		top_radiation_boundaries=[],
 		side_boundaries=[],
 		solve_T_equation=false,
 		nflowin=nflowin(flowrate),
