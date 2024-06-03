@@ -301,6 +301,46 @@ function HeatFluxes_EB_I_inner(sol,sys,data)
     )
 end
 
+function fcn_identity(f,u,bnode,data)
+	(;ip,iT) = data
+	ng=ngas(data)
+
+    for i=1:ng
+	    f[i] = u[i]
+    end
+    f[ip] = u[ip]
+    f[iT] = u[iT]
+end
+
+function avg_in_out(sol,sys,grid,data)
+
+    (;inflow_boundaries, outflow_boundaries) = data
+    Area_inb = 0.0
+    Area_outb = 0.0
+    for ib in inflow_boundaries
+        Area_inb += bareas(ib,sys,grid)
+    end
+
+    for ob in outflow_boundaries
+        Area_outb += bareas(ob,sys,grid)
+    end
+
+
+    Avg_inb = integrate(sys,fcn_identity,sol; boundary=true)[:,inflow_boundaries]
+    Avg_inb ./= Area_inb
+
+    Avg_outb = integrate(sys,fcn_identity,sol; boundary=true)[:,outflow_boundaries]
+    Avg_outb ./= Area_outb
+
+    return (
+            Avg_inb=Avg_inb,
+            # Area_inb=Area_inb,
+            Avg_outb=Avg_outb,
+            # Area_outb=Area_outb
+        )
+
+end
+
 function BoundaryFlows_Integrals(sol, sys, data) 
 	(;outflow_boundaries,inflow_boundaries)=data
 	
