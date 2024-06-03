@@ -1,5 +1,8 @@
 img/out*
-data/out/*
+data/*
+!data/doc/*
+!data/IrradiationFluxProfiles/*
+!data/IJHMT_3D.pvsm
 notebooks/experimental
 Manifest.toml
 docs/build
