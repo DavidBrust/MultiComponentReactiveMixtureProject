@@ -10,7 +10,7 @@ include("physprops.jl")
 export AbstractFluidProps, FluidProps, AbstractPropsCoeffs, PropsCoeffs
 export dynvisc_gas, thermcond_gas, heatcap_gas, density_idealgas, binary_diff_coeff_gas, enthalpy_gas, enthalpy_gas_thermal
 export dynvisc_mix, heatcap_mix, molarweight_mix, dynvisc_thermcond_mix, enthalpy_mix
-export Air, N2, Ar, H2, CO2, CO, H2O, CH4, He, Kr
+export Air, N2, O2, Ar, H2, CO2, CO, H2O, CH4, He, Kr
 
 include("kinetics.jl")
 export KinData, ri, S3P, XuFroment, Riedel_rWGS, Wolf_rWGS

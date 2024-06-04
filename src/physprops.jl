@@ -87,6 +87,43 @@ N2=FluidProps(
 );
 
 # all values taken from VDI heat atlas 2010 chapter D3
+O2=FluidProps(
+    name="O2",
+	# D3.1 Table 1
+	MW=32.00*ufac"g/mol",
+    # standard enthalpy of formation taken from Aspen Plus V10, for ideal gas at 25 °C and 1 atm pressure (1.01325 bar) 
+    ΔHform=0.0*ufac"kJ/mol",
+    # Group contributions for the diffusion volumes in the Fuller method from VDI heat atlas 2010, D1 Table 9 (p.150)
+    ΔvF=16.3, 
+	# D3.1 Table 6
+	HeatCap=PropsCoeffs(
+	A=2122.2098,
+	B=3.5302,
+	C=-7.1076,
+	D=-1.4542,
+	E=30.6057,
+	F=-83.6696,
+	G=79.4375
+	),
+	# D3.1 Table 10
+	ThermCond=PropsCoeffs(
+	A=-1.285e-3,
+	B=0.107e-3,
+	C=-0.052630e-6,
+	D=0.025680e-9,
+	E=-0.005040e-12
+	),
+	# D3.1 Table 8
+	DynVisc= PropsCoeffs(
+	A=-0.10257e-5,
+	B=0.92625e-7,
+	C=-0.80657e-10,
+	D=0.05113e-12,
+	E=-0.01295e-15
+)
+);
+
+# all values taken from VDI heat atlas 2010 chapter D3
 Air=FluidProps(
     name="Air",
 	# D3.1 Table 1
