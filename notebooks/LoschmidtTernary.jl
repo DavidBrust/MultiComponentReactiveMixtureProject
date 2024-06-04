@@ -55,32 +55,24 @@ md"""
 Reiterating the presented modeling equations from Section 2.3, the species mass balances are solved for the isothermal conditions for the ternary gas mixture in the Loschmidt diffusion cell:
 ```math
 \begin{align}
-    \partial_t \rho_i +\nabla\cdot(\rho_i \vec v) + \nabla \cdot \vec J_i  = r_i(\varrho),\qquad i=1,\dots,n.
+    \partial_t \rho_i + \nabla \cdot \vec J_i  = 0,\qquad i=1,\dots,n.
     \end{align}   
 ```
 """
 
 # ╔═╡ 43148504-814c-46ec-985a-2d790e1265e4
 md"""
-To close the model, expressions for the convective velocity $\vec v$, diffusive species mass fluxes $J_i$ and diffusive thermal energy flux $\vec Q$ are introduced corresponding to equations in Section 2.3:
-
-Convective velocity $\vec v$:
-```math
-    \begin{align}
-         \vec v  = -\frac{\kappa}{\nu} \nabla p
-    \end{align}
-```
+To complete close the model, expressions for the diffusive species mass fluxes $J_i$ are introduced corresponding to equations in Section 2.3:
 
 Diffusive speceis mass fluxes $J_i$:
 ```math
 \begin{equation}
 \begin{split}
-	\frac{p}{RT}\frac{1}{M_{\rm mix}}\mathsf{\vec d}_i' &=-\sum_{j:j\not=i}\frac{w_j\vec J_i-w_i\vec J_j}{M_iM_jD_{ij}},\qquad i=1,\dots,n,\\
-	\mathsf{\vec d}_i'&=\mathsf{\vec d}_i+x_i\widetilde{\mathcal{X}_i}\nabla\log T\\&=\nabla x_i+(x_i{-}w_i)\nabla \log p+x_i\widetilde{\mathcal{X}_i} \nabla\log T,\qquad i=1,\dots,n. 
+	\frac{p}{RT}\frac{1}{M_{\rm mix}}\mathsf{\vec d}_i &=-\sum_{j:j\not=i}\frac{w_j\vec J_i-w_i\vec J_j}{M_iM_jD_{ij}},\qquad i=1,\dots,n,\\
+	\mathsf{\vec d}_i&=\mathsf{\vec d}_i
+	\\&=\nabla x_i+(x_i{-}w_i)\nabla \log p ,\qquad i=1,\dots,n. 
 \end{split}
 \end{equation}
-```
-
 ```
 """
 
@@ -111,11 +103,19 @@ The one-dimensional modeling domain corresponds to Loschmidt diffusion cell of L
 It consists of two chambers of $(L/2/ufac"cm") cm length each and is shown below.
 """
 
-# ╔═╡ 6b3bc830-92b2-4d1a-8e87-ceca93af8c9f
+# ╔═╡ 138b4d12-af0f-4a1c-a4aa-4f55e6038664
 begin
-	Ω_bottom = 1
-	Ω_top = 2
+	const Γ_left = 1
+	const Γ_right = 2
+	const Ω_bottom = 1
+	const Ω_top = 2	
 end;
+
+# ╔═╡ 6939978d-9590-407b-80dc-54721c3f672d
+md"""
+Select grid refinement level: $(@bind nref Select([0,1,2,3], default=1))
+
+"""
 
 # ╔═╡ bfebc943-28ef-477b-bc15-6cab9d398d92
 function grid_1D(;nref=0,L=L)
@@ -131,13 +131,15 @@ function grid_1D(;nref=0,L=L)
 	return grid
 end
 
-# ╔═╡ 6939978d-9590-407b-80dc-54721c3f672d
-md"""
-Select problem dimension: $(@bind dim Select([1, 2], default=1))
+# ╔═╡ 869652e5-f15e-43d4-8fbc-724e866892b6
+grid = grid_1D(nref=nref)
 
-Select grid refinement level: $(@bind nref Select([0,1,2,3], default=0))
-
-"""
+# ╔═╡ b55537bf-9982-4997-8a2a-1972127bdd86
+let
+	vis = GridVisualizer(resolution=(450,225))
+	gridplot!(vis, grid, zoom=2, linewidth=1)
+	reveal(vis)
+end
 
 # ╔═╡ e9cb07eb-cfbb-4802-bc7f-6de7a6ad8ac6
 md"""
@@ -176,7 +178,7 @@ constant_binary_diff_coeffs = [21.57, 77.16, 83.35] * ufac"mm^2/s"
 
 # ╔═╡ 7f1d9cf8-7785-48c1-853c-74680188121f
 data = ReactorData(
-	dim = dim,
+	dim = 1,
 	X0 = [1.0,1.0,1.0],
 	kinpar = CH4ArH2,
 	Tamb = 25.0 + 273.15,
@@ -242,6 +244,12 @@ md"""
 # ╔═╡ 3a063481-d447-4bf5-9c49-ecde37a0fcea
 md"""
 Setup the system of equations as a transient system, solve the system and return the transient solution:
+"""
+
+# ╔═╡ 9274b233-687d-471d-8bac-e14e9a0cb7c0
+md"""
+## Comparison with published literature
+The time evolution of the species mole fraction averaged over the Bottom and Top parts of the Loschmidt diffusion cell as shown in [1], Figure 5.7 is reproduced below using the model and implementation presented in this work.
 """
 
 # ╔═╡ c40265d6-a9e0-443f-bfec-ca70418d8361
@@ -320,46 +328,11 @@ function setup_run_sim(grid, data)
 	control = SolverControl(nothing, sys;)
 	control.handle_exceptions=true
 	control.Δt_max=100.0
-	#control.Δt_min = 1.0e-4
-	#control.Δt = 1.0e-3
-	
 
 	times=[0,2ufac"hr"]
 	
 	sol=VoronoiFVM.solve(sys;inival=inival,times,control,log=true)
 	return (sol,sys)
-end
-
-# ╔═╡ ff501186-d8a0-4666-8991-fe576f8ff6ad
-function grid_2D(;nref=0)
-	X = collect(0:(1/2^nref):18)*ufac"cm"
-    Y = collect(0:(0.5/2^nref):8)*ufac"cm"
-    grid = simplexgrid(X, Y)
-    
-	rect!(grid, [4, 0]*ufac"cm", [14, 2.5]*ufac"cm"; region = 2)
-	rect!(grid, [4, 5.5]*ufac"cm", [14, 8]*ufac"cm"; region = 2, bregions= [3, 3, 3, 3])
-	bfacemask!(grid, [0, 0]*ufac"cm", [4, 0]*ufac"cm", 4)
-	bfacemask!(grid, [0, 8]*ufac"cm", [4, 8]*ufac"cm", 4)
-	
-	subgrid(grid, [1])
-end
-
-# ╔═╡ 138b4d12-af0f-4a1c-a4aa-4f55e6038664
-if dim == 1
-	grid = grid_1D(nref=nref)
-	const Γ_left = 1
-	const Γ_right = 2
-elseif dim == 2
-	grid = grid_2D(nref=nref)
-	const Γ_left = 4
-	const Γ_right = 2
-end;
-
-# ╔═╡ b55537bf-9982-4997-8a2a-1972127bdd86
-let
-	vis = GridVisualizer(resolution=(450,225))
-	gridplot!(vis, grid, zoom=2, linewidth=1)
-	reveal(vis)
 end
 
 # ╔═╡ 035d4123-7092-4429-8cfd-1e5926e84493
@@ -368,8 +341,13 @@ solt, sys = setup_run_sim(grid, data);
 # ╔═╡ 5a0900cc-df10-4176-b903-358b3e00415c
 md"""
 Move the slider to change $t$: $(if isa(solt, TransientSolution)
-	@bind t PlutoUI.Slider(solt.t,show_value=true,default=solt.t[end])	
+	@bind t PlutoUI.Slider(solt.t,show_value=false,default=solt.t[end])	
 end)
+"""
+
+# ╔═╡ 076b4a28-be0f-46f0-9857-e6f886c4b118
+md"""
+Plot the transient solution at time $t=$ $(round(t)):
 """
 
 # ╔═╡ 26bab6eb-7457-4fb7-b8e2-5148769891ff
@@ -384,11 +362,6 @@ let
 
 	reveal(vis)
 end
-
-# ╔═╡ 076b4a28-be0f-46f0-9857-e6f886c4b118
-md"""
-Plot the transient solution at time $t=$ $(round(t)):
-"""
 
 # ╔═╡ 0aef8cc3-daea-4dd0-98bc-4188b1baffc9
 function fcn_identity(f,u,node,data)
@@ -457,54 +430,6 @@ let
 	f	
 end
 
-# ╔═╡ 3c4ae416-a47b-451d-b870-fa10166d97de
-function plotting_movie(; filename = "plotting_video.gif", Plotter = default_plotter())
-    vis =GridVisualizer(layout=(2,2), resolution=(1000,600))
-
-	(; gni,iT,ip) = data;
-    movie(vis; file = filename) do vis
-        for t in solt.t
-            scalarplot!(vis[1, 1],
-                        grid,
-                        solt(t)[gni[:He],:];
-                        clear = true,
-                        title = "He molar fraction, t=$(Integer(round(t))) s",
-                        limits = (0.32,0.345),
-                        levels = 7,
-                        colormap = :coolwarm)
-            scalarplot!(vis[1, 2],
-                        grid,
-                        solt(t)[gni[:Kr],:];
-                        clear = true,
-                        title = "Kr molar fraction, t=$(Integer(round(t))) s",
-                        limits = (0.325,0.34),
-                        levels = 7,
-                        colormap = :coolwarm)
-			scalarplot!(vis[2, 1],
-                        grid,
-                        solt(t)[iT,:];
-                        clear = true,
-                        title = "Temperature (K), t=$(Integer(round(t))) s",
-                        limits = (300.0,400.0),
-                        levels = 7,
-                        colormap = :gist_heat)
-
-			t0, tend = solt.t[1], solt.t[end]
-			pmax = round(maximum(solt(t)[ip,:]))
-			f = map((x, y) -> pmax, grid)
-			scalarplot!(vis[2, 2],
-                        grid,
-                        f;
-                        clear = true,
-                        title = "Pressure (Pa), t=$(Integer(round(t))) s",
-                        limits = (solt(t0)[ip,1],solt(tend)[ip,1]),
-                        levels = 7,
-                        colormap = :viridis)
-            reveal(vis)
-        end
-    end
-end
-
 # ╔═╡ Cell order:
 # ╠═349e7220-dc69-11ee-13d2-8f95e6ee5c96
 # ╠═0f102f06-3ff3-4bcc-8892-8d9190a87849
@@ -516,16 +441,13 @@ end
 # ╟─b3a6fe03-be46-4159-96ab-477a42d0eec5
 # ╟─c3dbf8b3-fc5f-44ff-be2c-ca4200f5bd6c
 # ╠═e31b7177-1005-4a33-b876-58cbc9870495
-# ╠═26bab6eb-7457-4fb7-b8e2-5148769891ff
 # ╟─f4286a46-ceb4-40b2-8ce5-7fcd231e3168
-# ╠═6b3bc830-92b2-4d1a-8e87-ceca93af8c9f
-# ╠═bfebc943-28ef-477b-bc15-6cab9d398d92
-# ╠═b55537bf-9982-4997-8a2a-1972127bdd86
-# ╟─6939978d-9590-407b-80dc-54721c3f672d
-# ╠═7f1d9cf8-7785-48c1-853c-74680188121f
-# ╠═ae6e4bb7-46e8-4f95-b337-0b4589c43cbf
-# ╟─5a0900cc-df10-4176-b903-358b3e00415c
 # ╠═138b4d12-af0f-4a1c-a4aa-4f55e6038664
+# ╠═869652e5-f15e-43d4-8fbc-724e866892b6
+# ╟─b55537bf-9982-4997-8a2a-1972127bdd86
+# ╟─6939978d-9590-407b-80dc-54721c3f672d
+# ╠═bfebc943-28ef-477b-bc15-6cab9d398d92
+# ╠═7f1d9cf8-7785-48c1-853c-74680188121f
 # ╟─e9cb07eb-cfbb-4802-bc7f-6de7a6ad8ac6
 # ╟─f008f30f-0137-4c54-8d4e-a6f589c4a952
 # ╠═e7ca4902-0e14-48ca-bcc6-96b06c85a39d
@@ -540,15 +462,17 @@ end
 # ╟─7b0a84b5-60d3-4dd9-89e9-29c88282cb25
 # ╟─3a063481-d447-4bf5-9c49-ecde37a0fcea
 # ╠═035d4123-7092-4429-8cfd-1e5926e84493
+# ╟─5a0900cc-df10-4176-b903-358b3e00415c
 # ╟─076b4a28-be0f-46f0-9857-e6f886c4b118
-# ╟─9ba456c7-f6ed-49c5-9878-d9e0deb96384
+# ╟─ae6e4bb7-46e8-4f95-b337-0b4589c43cbf
+# ╠═26bab6eb-7457-4fb7-b8e2-5148769891ff
+# ╟─9274b233-687d-471d-8bac-e14e9a0cb7c0
 # ╟─c40265d6-a9e0-443f-bfec-ca70418d8361
-# ╠═af0a2719-3e0a-420e-9c8c-4cbbcb828cb1
+# ╟─9ba456c7-f6ed-49c5-9878-d9e0deb96384
+# ╟─af0a2719-3e0a-420e-9c8c-4cbbcb828cb1
 # ╟─65dbb492-4795-44ca-afcb-fb2a2c925d92
 # ╟─e8425c71-666a-462e-9c4d-fc480810f922
 # ╠═379dc67a-41c8-479d-b86f-afa3b77594b1
 # ╠═1e51701d-a893-4056-8336-a3772b85abe4
-# ╠═ff501186-d8a0-4666-8991-fe576f8ff6ad
 # ╠═0aef8cc3-daea-4dd0-98bc-4188b1baffc9
 # ╠═cf0f4137-17a4-4859-8058-ec76b1f28290
-# ╟─3c4ae416-a47b-451d-b870-fa10166d97de
