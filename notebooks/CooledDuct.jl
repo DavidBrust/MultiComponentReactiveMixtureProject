@@ -21,7 +21,7 @@ begin
 	using PlutoUI
 	using LessUnitful
 	using VoronoiFVM
-	using ExtendableGrids, GridVisualize, CairoMakie
+	using ExtendableGrids, GridVisualize, CairoMakie, ColorSchemes
 	using CSV, DataFrames
 	using Revise
 	using MultiComponentReactiveMixtureProject
@@ -92,13 +92,23 @@ md"""
 ## Modeling domain
 """
 
+# ╔═╡ 9da82e5a-169e-4758-8e50-73fa8793aa80
+begin
+	const L = 80ufac"mm"
+	const H = 10ufac"mm"
+	const mflowin = 1.0e-3ufac"kg/m^3"
+end;
+
 # ╔═╡ 138b4d12-af0f-4a1c-a4aa-4f55e6038664
 begin
 	const Γ_bottom = 1
 	const Γ_right = 2
 	const Γ_top = 3
 	const Γ_left = 4
-	const Γ_right_outflow = 5
+	const Γ_left_inflow = 5
+	const Γ_right_outflow = 6
+
+	const Γ_Nu = 7 # aux. internal boundary for Nu calc. 
 	
 	const Ω_permeable = 2
 	# const Ω_free = 1
@@ -111,7 +121,7 @@ Select grid refinement level: $(@bind nref Select([0,1,2,3], default=0))
 """
 
 # ╔═╡ 7be1c79e-08d8-493c-bce0-114c0c003dd7
-function grid_2D(;nref=0, L=80ufac"mm", H=10ufac"mm", efix=0.01ufac"mm")
+function grid_2D(;nref=0, L=L, H=H, efix=0.01ufac"mm")
 
 	nx = 20*2^nref
 	ny = 10*2^nref
@@ -141,6 +151,7 @@ function grid_2D(;nref=0, L=80ufac"mm", H=10ufac"mm", efix=0.01ufac"mm")
 	
     grid = simplexgrid(X, Y)
 	cellmask!(grid, [0,0], [L,H], Ω_permeable) # gas permeable region
+	bfacemask!(grid, [0,0], [0,H], Γ_left_inflow)
 	bfacemask!(grid, [L,0], [L,H], Γ_right_outflow)
 
 	grid
@@ -152,7 +163,7 @@ grid = grid_2D(nref=nref)
 # ╔═╡ b55537bf-9982-4997-8a2a-1972127bdd86
 let
 	vis = GridVisualizer(resolution=(600,150))
-	gridplot!(vis, grid, linewidth=0.5, aspect=2.0)
+	gridplot!(vis, grid, linewidth=0.2, aspect=2.0)
 	reveal(vis)
 end
 
@@ -161,12 +172,14 @@ md"""
 ## Simulation parameters
 """
 
+# ╔═╡ 3954d223-efb2-4aed-8560-263efe5a480e
+
+
 # ╔═╡ f008f30f-0137-4c54-8d4e-a6f589c4a952
 md"""
-Setup data structure corresponding to the ernary gas mixture consisting of the noble gases:
-1) Methane (CH4)
-2) Argon (Ar)
-3) Hydrogen (H2)
+Setup data structure corresponding to Air:
+1) Oxygen (O2)
+2) Nitrogen (N2)
 """
 
 # ╔═╡ e7ca4902-0e14-48ca-bcc6-96b06c85a39d
@@ -183,11 +196,12 @@ Air = KinData{}(;
 # ╔═╡ 7f1d9cf8-7785-48c1-853c-74680188121f
 data = ReactorData(
 	dim = 2,
-	inflow_boundaries = [Γ_left],
+	inflow_boundaries = [Γ_left_inflow],
 	outflow_boundaries = [Γ_right_outflow],
 	permeable_regions = [Ω_permeable],
 	X0 = [0.21,0.79],
-	mflowin = 2.0e-3,
+	mflowin = mflowin,
+	mfluxin = mflowin/(H*1.0ufac"m"),
 	kinpar = Air,
 	Tamb = 50.0 + 273.15,
 	#T_gas_in = 50.0 + 273.15,
@@ -195,6 +209,8 @@ data = ReactorData(
 	
 	p = 101.3*ufac"kPa",
 
+	constant_properties = true,
+	
 	solve_T_equation = true,
 	is_reactive = false,
 	include_Soret_Dufour = false,
@@ -269,11 +285,6 @@ md"""
 # Solving and plotting
 """
 
-# ╔═╡ a4fd9977-577e-45c9-a5c3-c0cd8a5dd012
-md"""
-Following the imposed boundray conditions for the thermal energy equation, a temperature gradient of 100 K establishes over the length of the domain that is the driving force for thermodiffusion, leading to a partial separation of the initially uniform, equimolar mixture.
-"""
-
 # ╔═╡ 7b0a84b5-60d3-4dd9-89e9-29c88282cb25
 md"""
 ## Transient solution
@@ -284,45 +295,46 @@ md"""
 Setup the system of equations as a transient system, solve the system and return the transient solution:
 """
 
+# ╔═╡ bf036015-80a1-4b5a-9ddd-9bfc939979e0
+md"""
+## Stationary solution
+"""
+
 # ╔═╡ 9274b233-687d-471d-8bac-e14e9a0cb7c0
 md"""
 ## Comparison with published literature
-The time evolution of the species mole fraction averaged over the Bottom and Top parts of the Loschmidt diffusion cell as shown in [1], Figure 5.7 is reproduced below using the model and implementation presented in this work.
+__Taken from [1]__: $br
+Fig. 4. Temperature distribution (K) in the two-dimensional fluid domain partially
+filled by a porous solid. Total mass flow rate of the gas mixture: 4E-3 kg/s.
 """
 
-# ╔═╡ af0a2719-3e0a-420e-9c8c-4cbbcb828cb1
-begin
-	path = "../data/Goell2012/Loschmidt/"
-	xAr_Bottom = DataFrame(
-		CSV.File(
-			path*"xAr_Bottom.csv",
-			delim=';',
-			header=["time", "xAr_Bottom"]),		
-	)
-	xAr_Top = DataFrame(
-		CSV.File(
-			path*"xAr_Top.csv",
-			delim=';',
-			header=["time", "xAr_Top"]),		
-	)
-	xCH4_Bottom = DataFrame(
-		CSV.File(
-			path*"xCH4_Bottom.csv",
-			delim=';',
-			header=["time", "xCH4_Bottom"]),		
-	)
-	xCH4_Top = DataFrame(
-		CSV.File(
-			path*"xCH4_Top.csv",
-			delim=';',
-			header=["time", "xCH4_Top"]),		
-	)
-end;
+# ╔═╡ c9c931d9-0a2a-47de-9bee-493c472def48
+md"""
+$(LocalResource("../data/Goell2012/Goell2012_CooledDuct_cut.png", :width => 600))
+"""
+
+# ╔═╡ 665c5826-4516-4ffa-a9d8-def8e3985ddb
+md"""
+__This work__: $br
+"""
+
+# ╔═╡ 5abe4d49-f398-4d0a-8055-9c4b1014e74f
+md"""
+### Nusselt number
+
+```math
+	\mathrm{Nu}=\frac{2H}{T_{\mathrm w}-T_{\mathrm m}} \left. \frac{\partial T}{\partial y} \right|_{\mathrm w}
+```
+Where $T_{\mathrm m}$ is the mass flux weighted, mean temperature over the cross-section of the duct:
+
+```math
+	T_{\mathrm m} = \frac{\int_0^H (\rho v T) dy}{\int_0^H (\rho v) dy} 
+```
+"""
 
 # ╔═╡ 65dbb492-4795-44ca-afcb-fb2a2c925d92
 md"""
 # References
-1) __Taylor, Ross; Krishna, Rajamani (1993)__: Multicomponent mass transfer. Wiley, New York.
 1) __Göll, Stephan; Piesche, Manfred (2012)__: Multi-component gas transport in micro-porous domains: Multidimensional simulation at the macroscale. In: International Journal of Heat and Mass Transfer 55 (1-3), S. 480–487. DOI: 10.1016/j.ijheatmasstransfer.2011.09.049.
 """
 
@@ -330,6 +342,17 @@ md"""
 md"""
 # Function definitions
 """
+
+# ╔═╡ 056119e3-ec74-4860-abb4-b75f6b16878d
+function quad_trap(v,coord) 
+    N = size(coord,1)
+	int = 0.0
+    for i=1:N-1
+        xk = coord[i+1] - coord[i]
+        int = int + (v[i]+v[i+1])/2*xk
+    end
+    int
+end
 
 # ╔═╡ 1e51701d-a893-4056-8336-a3772b85abe4
 function setup_run_sim(grid, data)
@@ -372,7 +395,7 @@ function setup_run_sim(grid, data)
 	control = SolverControl(nothing, sys;)
 	control.handle_exceptions=true
 	control.Δt_max=100.0
-	control.Δu_opt=200.0
+	control.Δu_opt=500.0
 	
 
 	times=[0,3000.0]
@@ -402,13 +425,18 @@ sol = solt(t);
 # ╔═╡ ae6e4bb7-46e8-4f95-b337-0b4589c43cbf
 let
 	(;iT,ip,gni) = data
-	vis =GridVisualizer(layout=(4,1), resolution=(600,600))
-	scalarplot!(vis[1,1], grid, sol[gni[:O2],:], title = "O2 molar fraction",)
-	scalarplot!(vis[2,1], grid, sol[gni[:N2],:], title = "N2 molar fraction",)
+	vis =GridVisualizer(layout=(3,1), resolution=(600,450))
+	x_O2_ = sol[gni[:O2],:]
+	x_O2_ = x_O2_[x_O2_ .!= 0.0]
+	x_N2_ = sol[gni[:N2],:]
+	x_N2_ = x_N2_[x_N2_ .!= 0.0]
+	
+	scalarplot!(vis[1,1], grid, sol[gni[:O2],:], limits=(minimum(x_O2_), maximum(x_O2_)), title = "O2 molar fraction",)
+	scalarplot!(vis[2,1], grid, sol[gni[:N2],:], limits=(minimum(x_N2_), maximum(x_N2_)), title = "N2 molar fraction",)
 	scalarplot!(vis[3,1], grid, sol[iT,:], title = "Temperature",)
-	scalarplot!(vis[4,1], grid, sol[ip,:], title = "Pressure",)
 
 	reveal(vis)
+	
 end
 
 # ╔═╡ 48366e85-cffb-4c5c-ac3a-807e47f858c7
@@ -423,6 +451,29 @@ end
 
 # ╔═╡ 9b13bc55-63eb-46bc-acea-f9aec90b340f
 sol_ss = run_ss(solt,sys);
+
+# ╔═╡ 47c852e5-38eb-4c1f-8d60-d180e4826d05
+nf = nodeflux(sys, sol_ss);
+
+# ╔═╡ 77f663a6-96e5-4a1c-843c-cd66fd1382b5
+function Profiles_cross(sol, xpos, data)
+	(;ip,iT) = data
+	grid = grid_2D(nref=nref)
+
+	N_MAX_REG = grid[NumBFaceRegions] + 1
+	bfacemask!(grid, [xpos,0],[xpos,H],N_MAX_REG)
+
+	grid_1D  = subgrid(grid, [N_MAX_REG], boundary=true, transform=(a,b)->a[1]=b[2]) # transform y coordinate of parent grid into x coordinate of subgrid
+	
+	T_profile_cross = view(sol[iT, :], grid_1D)
+
+	MF = nf[:,ip,:]
+	MF_x = MF[1,:]
+
+	MF_profile_cross = view(MF[1,:], grid_1D)
+			
+	T_profile_cross, MF_profile_cross, grid_1D	
+end
 
 # ╔═╡ 4acaadd4-6102-44f5-b602-00465bf3feca
 let
@@ -446,43 +497,79 @@ let
 	p_ = p[p .!= 0.0]
 	dens_ = dens[dens .!= 0.0]
 	
-	nf = nodeflux(sys, sol_ss)
+	#nf = nodeflux(sys, sol_ss)
 
 	massflux = nf[:,ip,:]
-	vel_x = massflux[1,:]./dens
-	vel_x_ = vel_x[dens .== 0.0] .= 0.0
-	vel_y = massflux[2,:]./dens
+	massflux_x_ = massflux[1,:]
+	massflux_x_ = massflux_x_[dens .!= 0.0]
 	
-	vis =GridVisualizer(layout=(5,1), resolution=(600,750))
+	vel_x = massflux[1,:]./dens
+	vel_x_ = vel_x[dens .!= 0.0]
+	vel_y = massflux[2,:]./dens
+	vel_y_ = vel_y[dens .!= 0.0]
+	
+	vis =GridVisualizer(layout=(5,1), resolution=(600,750), colorbarticks=4)
 	
 	scalarplot!(vis[1,1], grid, T, title = "Temperature / K")
 	scalarplot!(vis[2,1], grid, p, limits=(minimum(p_),maximum(p_)), title = "Pressure / Pa",)
 	scalarplot!(vis[3,1], grid, dens, limits=(minimum(dens_),maximum(dens_)), title = "Density / kg m-3",)
 		
-	scalarplot!(vis[4,1], grid, massflux[1,:], title = "Mass flux (X) / kg s-1 m-2")
+	scalarplot!(vis[4,1], grid, massflux[1,:], limits=(minimum(massflux_x_),maximum(massflux_x_)), title = "Mass flux (X) / kg s-1 m-2")
 	#scalarplot!(vis[4,1], grid, massflux[2,:], title = "Mass flux (Y) / kg s-1 m-2")
 	
 	scalarplot!(vis[5,1], grid, vel_x, limits=(minimum(vel_x_),maximum(vel_x_)), title = "Velocity (X) / m s-1")
 	#scalarplot!(vis[6,1], grid, vel_y, title = "Velocity (Y) / m s-1")
 
 	reveal(vis)
-	#massflux[1,:]
+end
+
+# ╔═╡ a21d9a07-de69-4884-8d7d-742413f9a95a
+let
+	(;iT) = data
+	T = sol_ss[iT,:]
+
+	levels = 41
 	
+	vis =GridVisualizer(layout=(1,1), resolution=(650,220), colorbar=:horizontal, colorbarticks=6, linewidth=0.15, levels=levels, )
+
+	colormap = ColorSchemes.jet1[10:90]
+	
+	colorlevels = linspace(minimum(T), maximum(T), levels)
+	
+	scalarplot!(vis[1,1], grid, T, colormap=colormap, colorlevels=colorlevels, title = "Temperature / K")
+	reveal(vis)
+end
+
+# ╔═╡ 5623ace0-4b62-4ec7-b54f-c110d38bc06b
+let
+	(;iT, Tamb) = data
+	
+	#x = L - 120ufac"mm"/6 # x = 60 mm
+	
+
+	x =60ufac"mm" # x = 60 mm
+		
+	T_profile_cross,
+	MF_profile_cross,
+	grid_1D_profile_cross = Profiles_cross(sol_ss, x, data)
+
+	y_coord = vec(grid_1D_profile_cross[Coordinates])
+	
+	MFlow = quad_trap(MF_profile_cross, y_coord)
+	Tm = quad_trap(MF_profile_cross.*T_profile_cross, y_coord) / MFlow 
+
+
+	#ix = findall(all(grid[Coordinates] .== [x, 0.0], dims=1))[1][2]
+	#∇dtdy_w = nf[:,iT,:][:,ix]
+
+	# finite diff approx.
+	dtdy_w = (T_profile_cross[2]-T_profile_cross[1])/(y_coord[2]-y_coord[1])
+
+	Nu = 2*H/(Tamb - Tm) * dtdy_w
 end
 
 # ╔═╡ 7e09011f-9bc7-4925-953c-803b6ac1869f
 Print_summary(sol_ss,grid,sys,data)
-
-# ╔═╡ 0aef8cc3-daea-4dd0-98bc-4188b1baffc9
-function fcn_identity(f,u,node,data)
-	(;ip) = data
-	ng=ngas(data)
-
-    for i=1:ng
-	    f[i] = u[i]
-    end
-    f[ip] = u[ip]
-end
 
 # ╔═╡ Cell order:
 # ╠═349e7220-dc69-11ee-13d2-8f95e6ee5c96
@@ -494,6 +581,7 @@ end
 # ╟─43148504-814c-46ec-985a-2d790e1265e4
 # ╟─b3a6fe03-be46-4159-96ab-477a42d0eec5
 # ╟─c3dbf8b3-fc5f-44ff-be2c-ca4200f5bd6c
+# ╠═9da82e5a-169e-4758-8e50-73fa8793aa80
 # ╠═138b4d12-af0f-4a1c-a4aa-4f55e6038664
 # ╠═869652e5-f15e-43d4-8fbc-724e866892b6
 # ╠═b55537bf-9982-4997-8a2a-1972127bdd86
@@ -501,27 +589,34 @@ end
 # ╠═7be1c79e-08d8-493c-bce0-114c0c003dd7
 # ╠═7f1d9cf8-7785-48c1-853c-74680188121f
 # ╟─e9cb07eb-cfbb-4802-bc7f-6de7a6ad8ac6
+# ╟─3954d223-efb2-4aed-8560-263efe5a480e
 # ╟─f008f30f-0137-4c54-8d4e-a6f589c4a952
 # ╠═e7ca4902-0e14-48ca-bcc6-96b06c85a39d
 # ╟─bcfc3138-3cbb-4386-a33b-573b6c39caf9
 # ╟─0c5e24c0-4aa5-44a2-b2fd-db78795485af
 # ╠═b5870a92-89e2-4eae-a79f-6033b1f3489e
 # ╟─13cfe122-eea8-4bbb-aaa0-5bcc74a247d1
-# ╟─a4fd9977-577e-45c9-a5c3-c0cd8a5dd012
 # ╟─7b0a84b5-60d3-4dd9-89e9-29c88282cb25
 # ╟─3a063481-d447-4bf5-9c49-ecde37a0fcea
 # ╠═035d4123-7092-4429-8cfd-1e5926e84493
 # ╟─5a0900cc-df10-4176-b903-358b3e00415c
 # ╟─076b4a28-be0f-46f0-9857-e6f886c4b118
 # ╠═ae6e4bb7-46e8-4f95-b337-0b4589c43cbf
+# ╟─bf036015-80a1-4b5a-9ddd-9bfc939979e0
 # ╠═26bab6eb-7457-4fb7-b8e2-5148769891ff
-# ╟─9274b233-687d-471d-8bac-e14e9a0cb7c0
+# ╠═47c852e5-38eb-4c1f-8d60-d180e4826d05
+# ╟─4acaadd4-6102-44f5-b602-00465bf3feca
 # ╠═9b13bc55-63eb-46bc-acea-f9aec90b340f
-# ╠═4acaadd4-6102-44f5-b602-00465bf3feca
-# ╟─af0a2719-3e0a-420e-9c8c-4cbbcb828cb1
+# ╟─9274b233-687d-471d-8bac-e14e9a0cb7c0
+# ╠═c9c931d9-0a2a-47de-9bee-493c472def48
+# ╟─665c5826-4516-4ffa-a9d8-def8e3985ddb
+# ╠═a21d9a07-de69-4884-8d7d-742413f9a95a
+# ╟─5abe4d49-f398-4d0a-8055-9c4b1014e74f
+# ╠═5623ace0-4b62-4ec7-b54f-c110d38bc06b
 # ╟─65dbb492-4795-44ca-afcb-fb2a2c925d92
 # ╟─e8425c71-666a-462e-9c4d-fc480810f922
+# ╠═056119e3-ec74-4860-abb4-b75f6b16878d
 # ╠═7e09011f-9bc7-4925-953c-803b6ac1869f
+# ╠═77f663a6-96e5-4a1c-843c-cd66fd1382b5
 # ╠═1e51701d-a893-4056-8336-a3772b85abe4
 # ╠═48366e85-cffb-4c5c-ac3a-807e47f858c7
-# ╠═0aef8cc3-daea-4dd0-98bc-4188b1baffc9

@@ -179,6 +179,7 @@ constant_binary_diff_coeffs = [21.57, 77.16, 83.35] * ufac"mm^2/s"
 # ╔═╡ 7f1d9cf8-7785-48c1-853c-74680188121f
 data = ReactorData(
 	dim = 1,
+	permeable_regions = [Ω_bottom,Ω_top],
 	X0 = [1.0,1.0,1.0],
 	kinpar = CH4ArH2,
 	Tamb = 25.0 + 273.15,
@@ -189,10 +190,10 @@ data = ReactorData(
 	is_reactive = false,
 	include_Soret_Dufour = false,
 	
-	γ_τ = 1.0,
-	poros=1.0,
+	γ_τ = [1.0, 1.0],
+	poros = [1.0, 1.0],
 
-	perm = 1.23e-10*ufac"m^2" * 1.0e6,
+	perm = [1.0, 1.0] * 1.23e-10*ufac"m^2" * 1.0e6,
 	
 	constant_binary_diff_coeffs = constant_binary_diff_coeffs,
 )
@@ -303,7 +304,7 @@ Xpm(i, X0m, X0p, grid) = map((x) -> x == L/2 ? (X0m[i]+X0p[i])/2 : (x < L/2 ? X0
 
 # ╔═╡ 1e51701d-a893-4056-8336-a3772b85abe4
 function setup_run_sim(grid, data)
-	(;ng, ip, iT, Tamb, p, X0, outlet_boundaries) = data
+	(;ng, ip, iT, Tamb, p, X0) = data
 	sys=VoronoiFVM.System(
 		grid;
 		data=data,
