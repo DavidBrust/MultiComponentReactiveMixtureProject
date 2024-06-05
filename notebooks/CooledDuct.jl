@@ -36,7 +36,7 @@ md"""
 Supplementary notebook for:$br
 __Transport of heat and mass for reactive gas mixtures in porous media: modeling and application__.
 
-This notebook is used as validation of the iso-thermal model implementation by reproducing experimental results in [1] and simulation results in [2].
+This notebook is used the capabilites of the model for coupled heat- and mass transfer by reproducing simulation results in [1].
 """
 
 # ╔═╡ 38c3ddb4-b44a-4981-9000-0a1d303bd9ac
@@ -45,36 +45,11 @@ md"""
 The isothermal modeling framework is applied to a ternary gas mixture diffusing in a Loschmidt tube. Experimental results are presented in [1] and simulation results using an alternative approach are presented in [2].
 """
 
-# ╔═╡ 2628cb2d-c1ef-4ad0-8ee4-38e45f864838
-md"""
-## Model equations
-"""
+# ╔═╡ c8a3fd5c-91ae-407e-a564-caf4c3665fcc
+@doc MultiComponentReactiveMixtureProject.DMS_Info_isothermal()
 
-# ╔═╡ 75fddee6-e057-4e91-a239-2033370b00fc
-md"""
-Reiterating the presented modeling equations from Section 2.3, the species mass balances are solved for the isothermal conditions for the ternary gas mixture in the Loschmidt diffusion cell:
-```math
-\begin{align}
-    \partial_t \rho_i + \nabla \cdot \vec J_i  = 0,\qquad i=1,\dots,n.
-    \end{align}   
-```
-"""
-
-# ╔═╡ 43148504-814c-46ec-985a-2d790e1265e4
-md"""
-To complete close the model, expressions for the diffusive species mass fluxes $J_i$ are introduced corresponding to equations in Section 2.3:
-
-Diffusive speceis mass fluxes $J_i$:
-```math
-\begin{equation}
-\begin{split}
-	\frac{p}{RT}\frac{1}{M_{\rm mix}}\mathsf{\vec d}_i &=-\sum_{j:j\not=i}\frac{w_j\vec J_i-w_i\vec J_j}{M_iM_jD_{ij}},\qquad i=1,\dots,n,\\
-	\mathsf{\vec d}_i&=\mathsf{\vec d}_i
-	\\&=\nabla x_i+(x_i{-}w_i)\nabla \log p ,\qquad i=1,\dots,n. 
-\end{split}
-\end{equation}
-```
-"""
+# ╔═╡ 192627ce-11f2-41af-850a-76adcba24168
+@doc MultiComponentReactiveMixtureProject.DMS_Info_thermal()
 
 # ╔═╡ b3a6fe03-be46-4159-96ab-477a42d0eec5
 md"""
@@ -107,8 +82,6 @@ begin
 	const Γ_left = 4
 	const Γ_left_inflow = 5
 	const Γ_right_outflow = 6
-
-	const Γ_Nu = 7 # aux. internal boundary for Nu calc. 
 	
 	const Ω_permeable = 2
 	# const Ω_free = 1
@@ -204,13 +177,19 @@ data = ReactorData(
 	mfluxin = mflowin/(H*1.0ufac"m"),
 	kinpar = Air,
 	Tamb = 50.0 + 273.15,
-	#T_gas_in = 50.0 + 273.15,
 	T_gas_in = 100 + 273.15,
 	
 	p = 101.3*ufac"kPa",
 
 	constant_properties = true,
-	
+	constant_species_viscosities = [
+		dynvisc_gas(O2, 75.0+273.15),
+		dynvisc_gas(N2, 75.0+273.15)
+	],
+	constant_species_thermal_conductivities = [
+		thermcond_gas(O2, 75.0+273.15),
+		thermcond_gas(N2, 75.0+273.15)
+	],		
 	solve_T_equation = true,
 	is_reactive = false,
 	include_Soret_Dufour = false,
@@ -267,13 +246,12 @@ function bcondition(f,u,bnode,data)
 			end
 
 			r_hf_enth = mfluxin/mmix0 * hin
-			# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
-			f[iT] = -r_hf_enth * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
-						
+			f[iT] = -r_hf_enth * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)		
 		end
 
 	end
-
+	
+	# outflow boundary condition
 	for boundary in outflow_boundaries
         boundary_dirichlet!(f,u,bnode, species=ip,region=boundary,value=p)
     end	
@@ -311,6 +289,7 @@ filled by a porous solid. Total mass flow rate of the gas mixture: 4E-3 kg/s.
 # ╔═╡ c9c931d9-0a2a-47de-9bee-493c472def48
 md"""
 $(LocalResource("../data/Goell2012/Goell2012_CooledDuct_cut.png", :width => 600))
+$(LocalResource("../data/Goell2012/Goell2012_CooledDuct_cut2.png", :width => 600))
 """
 
 # ╔═╡ 665c5826-4516-4ffa-a9d8-def8e3985ddb
@@ -425,7 +404,7 @@ sol = solt(t);
 # ╔═╡ ae6e4bb7-46e8-4f95-b337-0b4589c43cbf
 let
 	(;iT,ip,gni) = data
-	vis =GridVisualizer(layout=(3,1), resolution=(600,450))
+	vis =GridVisualizer(layout=(3,1), resolution=(600,450), colorbarticks=4)
 	x_O2_ = sol[gni[:O2],:]
 	x_O2_ = x_O2_[x_O2_ .!= 0.0]
 	x_N2_ = sol[gni[:N2],:]
@@ -541,13 +520,8 @@ let
 end
 
 # ╔═╡ 5623ace0-4b62-4ec7-b54f-c110d38bc06b
-let
+function Nu(x, data)
 	(;iT, Tamb) = data
-	
-	#x = L - 120ufac"mm"/6 # x = 60 mm
-	
-
-	x =60ufac"mm" # x = 60 mm
 		
 	T_profile_cross,
 	MF_profile_cross,
@@ -558,27 +532,22 @@ let
 	MFlow = quad_trap(MF_profile_cross, y_coord)
 	Tm = quad_trap(MF_profile_cross.*T_profile_cross, y_coord) / MFlow 
 
-
-	#ix = findall(all(grid[Coordinates] .== [x, 0.0], dims=1))[1][2]
-	#∇dtdy_w = nf[:,iT,:][:,ix]
-
 	# finite diff approx.
-	dtdy_w = (T_profile_cross[2]-T_profile_cross[1])/(y_coord[2]-y_coord[1])
+	dtdy_w = (T_profile_cross[end]-T_profile_cross[end-1])/(y_coord[end]-y_coord[end-1])
 
 	Nu = 2*H/(Tamb - Tm) * dtdy_w
 end
 
-# ╔═╡ 7e09011f-9bc7-4925-953c-803b6ac1869f
-Print_summary(sol_ss,grid,sys,data)
+# ╔═╡ 91980f61-4173-4840-a1ae-f1d743daa2c4
+Nu(60ufac"mm", data)
 
 # ╔═╡ Cell order:
 # ╠═349e7220-dc69-11ee-13d2-8f95e6ee5c96
 # ╠═0f102f06-3ff3-4bcc-8892-8d9190a87849
 # ╟─d14462c6-f63b-4a61-a1d9-4bcdb8e30e3d
 # ╟─38c3ddb4-b44a-4981-9000-0a1d303bd9ac
-# ╟─2628cb2d-c1ef-4ad0-8ee4-38e45f864838
-# ╟─75fddee6-e057-4e91-a239-2033370b00fc
-# ╟─43148504-814c-46ec-985a-2d790e1265e4
+# ╠═c8a3fd5c-91ae-407e-a564-caf4c3665fcc
+# ╠═192627ce-11f2-41af-850a-76adcba24168
 # ╟─b3a6fe03-be46-4159-96ab-477a42d0eec5
 # ╟─c3dbf8b3-fc5f-44ff-be2c-ca4200f5bd6c
 # ╠═9da82e5a-169e-4758-8e50-73fa8793aa80
@@ -587,11 +556,11 @@ Print_summary(sol_ss,grid,sys,data)
 # ╠═b55537bf-9982-4997-8a2a-1972127bdd86
 # ╟─6939978d-9590-407b-80dc-54721c3f672d
 # ╠═7be1c79e-08d8-493c-bce0-114c0c003dd7
-# ╠═7f1d9cf8-7785-48c1-853c-74680188121f
 # ╟─e9cb07eb-cfbb-4802-bc7f-6de7a6ad8ac6
 # ╟─3954d223-efb2-4aed-8560-263efe5a480e
 # ╟─f008f30f-0137-4c54-8d4e-a6f589c4a952
 # ╠═e7ca4902-0e14-48ca-bcc6-96b06c85a39d
+# ╠═7f1d9cf8-7785-48c1-853c-74680188121f
 # ╟─bcfc3138-3cbb-4386-a33b-573b6c39caf9
 # ╟─0c5e24c0-4aa5-44a2-b2fd-db78795485af
 # ╠═b5870a92-89e2-4eae-a79f-6033b1f3489e
@@ -601,22 +570,22 @@ Print_summary(sol_ss,grid,sys,data)
 # ╠═035d4123-7092-4429-8cfd-1e5926e84493
 # ╟─5a0900cc-df10-4176-b903-358b3e00415c
 # ╟─076b4a28-be0f-46f0-9857-e6f886c4b118
-# ╠═ae6e4bb7-46e8-4f95-b337-0b4589c43cbf
+# ╟─ae6e4bb7-46e8-4f95-b337-0b4589c43cbf
 # ╟─bf036015-80a1-4b5a-9ddd-9bfc939979e0
 # ╠═26bab6eb-7457-4fb7-b8e2-5148769891ff
 # ╠═47c852e5-38eb-4c1f-8d60-d180e4826d05
 # ╟─4acaadd4-6102-44f5-b602-00465bf3feca
 # ╠═9b13bc55-63eb-46bc-acea-f9aec90b340f
 # ╟─9274b233-687d-471d-8bac-e14e9a0cb7c0
-# ╠═c9c931d9-0a2a-47de-9bee-493c472def48
+# ╟─c9c931d9-0a2a-47de-9bee-493c472def48
 # ╟─665c5826-4516-4ffa-a9d8-def8e3985ddb
-# ╠═a21d9a07-de69-4884-8d7d-742413f9a95a
+# ╟─a21d9a07-de69-4884-8d7d-742413f9a95a
 # ╟─5abe4d49-f398-4d0a-8055-9c4b1014e74f
+# ╠═91980f61-4173-4840-a1ae-f1d743daa2c4
 # ╠═5623ace0-4b62-4ec7-b54f-c110d38bc06b
 # ╟─65dbb492-4795-44ca-afcb-fb2a2c925d92
 # ╟─e8425c71-666a-462e-9c4d-fc480810f922
 # ╠═056119e3-ec74-4860-abb4-b75f6b16878d
-# ╠═7e09011f-9bc7-4925-953c-803b6ac1869f
 # ╠═77f663a6-96e5-4a1c-843c-cd66fd1382b5
 # ╠═1e51701d-a893-4056-8336-a3772b85abe4
 # ╠═48366e85-cffb-4c5c-ac3a-807e47f858c7

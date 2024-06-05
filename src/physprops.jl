@@ -477,31 +477,37 @@ end
 function dynvisc_thermcond_mix(data, T, x)
     ng = ngas(data)
     # Fluid = data.Fluids
-    (;Fluids, constant_properties, constant_species_viscosities, constant_species_thermal_conductivities) = data
+    (;Fluids, m, constant_properties, constant_species_viscosities, constant_species_thermal_conductivities) = data
 
     #  !!!ALLOC for types stubility & correctness
     #  !!!ALLOC initialize with zero(eltype) instead of 0.0
     mumix=zero(eltype(T))
     lambdamix=zero(eltype(T))
     
-    if constant_properties
-		mumix += 2.0e-5*ufac"Pa*s"
-		lambdamix += 2.0e-2*ufac"W/(m*K)"
-	else
+    # if constant_properties
+	# 	mumix += 2.0e-5*ufac"Pa*s"
+	# 	lambdamix += 2.0e-2*ufac"W/(m*K)"
+	# else
 		# !!!ALLOC Use MVectors with static size information instead of Vector
 		mu=MVector{ngas(data),eltype(x)}(undef)
 		lambda=MVector{ngas(data),eltype(x)}(undef)
-		M=MVector{ngas(data),eltype(x)}(undef)
+		# M=MVector{ngas(data),eltype(x)}(undef)
 
-		for i=1:ngas(data)
-			mu[i] = dynvisc_gas(Fluids[i], T)
+		@inbounds for i=1:ngas(data)
+			if constant_properties
+				mu[i] = constant_species_viscosities[i]
+				lambda[i] = constant_species_thermal_conductivities[i]
+			else
+				mu[i] = dynvisc_gas(Fluids[i], T)
 				lambda[i] = thermcond_gas(Fluids[i], T)
-			M[i] = Fluids[i].MW
+			end
+			# M[i] = Fluids[i].MW
 		end
-		for i=1:ng
+		@inbounds for i=1:ng
 			sumyFij = zero(T)
 			for j=1:ng
-				Fij = (1+(mu[i]/mu[j])^0.5*(M[j]/M[i])^0.25)^2 / sqrt(8*(1+M[i]/M[j]))
+				Fij = (1+(mu[i]/mu[j])^0.5*(m[j]/m[i])^0.25)^2 / sqrt(8*(1+m[i]/m[j]))
+				# Fij = (1+(mu[i]/mu[j])^0.5*(M[j]/M[i])^0.25)^2 / sqrt(8*(1+M[i]/M[j]))
 				sumyFij += x[j]*Fij
 			end
 			if x[i] > 0
@@ -509,7 +515,7 @@ function dynvisc_thermcond_mix(data, T, x)
 				lambdamix += x[i] * lambda[i] / sumyFij
 			end
 		end
-    end
+    # end
 
     return  mumix, lambdamix
 end
