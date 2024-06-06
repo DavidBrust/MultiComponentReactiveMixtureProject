@@ -1,4 +1,5 @@
 using LinearAlgebra
+using ExtendableGrids
 
 # G0_bot, IR/vis : surface radiosities of glass underside
 function flux_window_underside(f,u,bnode,data)
@@ -559,12 +560,12 @@ Helper function to export to VTK format for visualization 3D solutions of the
     species molar fractions and temperature fields in the 3D domain.
 """
 function WriteSolution3D(sol,grid,data;desc="")
-    (;dim,ip,iT,ibf,gn,nflowin,solve_T_equation) = data
+    (;dim,ip,p,iT,ibf,gn,nflowin,solve_T_equation) = data
     ng=ngas(data)
     _t = now()
     tm = "$(hour(_t))_$(minute(_t))_$(second(_t))"
     desc = isempty(desc) ? desc : "_"*desc
-    path = "../data/out/$(Date(_t))/$(tm)$(desc)"
+    path = "../data/out/$(Date(_t))/$(tm)_$(data.nom_flux/ufac"kW/m^2")suns_$(p/ufac"bar")bara_$(nflowin/ufac"mol/hr")mol_hr$(desc)"
     try
         mkpath(path)
     catch e
@@ -572,15 +573,19 @@ function WriteSolution3D(sol,grid,data;desc="")
     end
     #mkdir(string(Date(_t)))
     
-    VoronoiFVM.writeVTK("$(path)/$(tm)_3D_ptot_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[ip,:])
+    # VoronoiFVM.writeVTK("$(path)/$(tm)_3D_ptot_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[ip,:])
+    ExtendableGrids.writeVTK("$(path)/3D_ptot.vtu", grid; point_data = sol[ip,:])
 	if solve_T_equation
-        VoronoiFVM.writeVTK("$(path)/$(tm)_3D_T_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[iT,:] .-273.15)
+        # VoronoiFVM.writeVTK("$(path)/$(tm)_3D_T_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[iT,:] .-273.15)
+        ExtendableGrids.writeVTK("$(path)/3D_T.vtu", grid; point_data = sol[iT,:] .-273.15)
     end
     for i=1:ng
-        VoronoiFVM.writeVTK("$(path)/$(tm)_3D_x$(gn[i])_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[i,:])
+        # VoronoiFVM.writeVTK("$(path)/$(tm)_3D_x$(gn[i])_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[i,:])
+        ExtendableGrids.writeVTK("$(path)/3D_x$(gn[i]).vtu", grid; point_data = sol[i,:])
     end
 	if dim == 3
-		VoronoiFVM.writeVTK("$(path)/$(tm)_3D_irradiation_flux_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[ibf,:])
+		# VoronoiFVM.writeVTK("$(path)/$(tm)_3D_irradiation_flux_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[ibf,:])
+        ExtendableGrids.writeVTK("$(path)/3D_irradiation_flux.vtu", grid; point_data = sol[ibf,:])
 	end
 end
 

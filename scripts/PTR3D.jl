@@ -4,6 +4,9 @@ using VoronoiFVM
 using LessUnitful
 using Pardiso
 using ExtendableSparse
+using ILUZero
+# using Krylov
+using LinearSolve
 # using Test
 # using ExampleJuggler
 using DataFrames
@@ -149,7 +152,7 @@ function writeOutput_ToDF!(sol, sys, grid, data, df)
 	return nothing
 end
 
-function SetupInputData(data;
+function SetupInputData(kinpar;
 						dim=3,
 						nflowin_H2=3.7*ufac"mol/hr",
 						nflowin_CO2=3.7*ufac"mol/hr",
@@ -159,7 +162,8 @@ function SetupInputData(data;
 						mcat=3000*ufac"mg",
 	)
 
-	(;ng,gni) = data
+	# (;ng,gni) = data
+	(;ng,gni) = kinpar
 	nflowin = nflowin_H2 + nflowin_CO2
 	X0 = zeros(Float64, ng)
 	X0[gni[:H2]] = nflowin_H2/nflowin
@@ -169,7 +173,8 @@ function SetupInputData(data;
 	ReactorData(
 		# dt_hf_irrad = (3.0,20.0),
 		dim = dim,
-		kinpar = XuFroment,
+		# kinpar = XuFroment,
+		kinpar = kinpar,
 		constant_irradiation_flux_bc = false,
 		# is_reactive = false,
 		nom_flux = nom_flux,
@@ -188,7 +193,7 @@ function SetupInputData(data;
 
 end
 
-function run_transient(data; times=[0,15.0], nref=0, ufac=ufac"cm", W_block=3.0ufac, W_window=12.0ufac, H_cat=0.5ufac, mcat=3000ufac"mg", efix=1.0e-2*ufac,)
+function run_transient(data; times=[0,15.0], nref=0, ufac=ufac"cm", W_block=3.0ufac, W_window=12.0ufac, H_cat=0.5ufac, efix=1.0e-2*ufac,)
 
 	(;dim) = data
 	grid = PTR_grid_boundaries_regions!(dim,data; ufac=ufac, nref=nref, W_block=W_block, W_window=W_window, H_cat=H_cat, efix=efix)
@@ -197,19 +202,29 @@ function run_transient(data; times=[0,15.0], nref=0, ufac=ufac"cm", W_block=3.0u
 	inival,sys = PTR_init_system(dim, grid, data)
 	
 	if dim == 2
-		# times = [0,1000.0]
 		control = SolverControl(nothing, sys;)
 	elseif dim == 3
-		# times = [0,5.0]
-		#times = [0,200.0]
-		control = SolverControl(
-			# GMRESIteration(MKLPardisoLU(), EquationBlock()),
-			GMRESIteration(MKLPardisoLU()),
-			sys
-		)
+
+		# control = SolverControl(
+		# 	# GMRESIteration(MKLPardisoLU(), EquationBlock()),
+		# 	GMRESIteration(MKLPardisoLU()),
+		# 	sys
+		# )
+		control = SolverControl(;
+			method_linear = KrylovJL_GMRES(
+				gmres_restart = 10,
+				restart = true,
+				itmax = 250,
+			),
+			precon_linear = VoronoiFVM.factorizationstrategy(
+				MKLPardisoLU(),
+				NoBlock(),
+				sys
+			)
+   		)
 	end
     control.handle_exceptions=true
-	control.Δu_opt=100
+	control.Δu_opt=80
 	control.Δt_max=1
 
 	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="aen",log=true)	

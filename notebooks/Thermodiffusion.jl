@@ -208,10 +208,10 @@ data = ReactorData(
 	is_reactive = false,
 	include_Soret_Dufour = true,
 	
-	γ_τ = 1.0,
-	poros=1.0,
+	γ_τ = [1.0],
+	poros= [1.0],
 
-	perm = ones(3)*1.23e-10*ufac"m^2" * 1.0e6,
+	perm = ones(1)*1.23e-10*ufac"m^2" * 1.0e6,
 	
 	constant_binary_diff_coeffs = constant_binary_diff_coeffs,
 	constant_newman_soret_diff_coeffs = constant_newman_soret_diff_coeffs

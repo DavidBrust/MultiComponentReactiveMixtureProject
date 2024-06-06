@@ -36,13 +36,13 @@ md"""
 Supplementary notebook for:$br
 __Transport of heat and mass for reactive gas mixtures in porous media: modeling and application__.
 
-This notebook is used the capabilites of the model for coupled heat- and mass transfer by reproducing simulation results in [1].
+This notebook is used to demonstrate the capabilites of the model for coupled heat- and mass transfer by reproducing simulation results for an example case presented in [1].
 """
 
 # ╔═╡ 38c3ddb4-b44a-4981-9000-0a1d303bd9ac
 md"""
 # Introduction
-The isothermal modeling framework is applied to a ternary gas mixture diffusing in a Loschmidt tube. Experimental results are presented in [1] and simulation results using an alternative approach are presented in [2].
+The non-isothermal modeling framework is applied to a binary gas mixture (air) flowing through a rectangular duct that is filled with a porous material corresponding to the test case presented in [1].
 """
 
 # ╔═╡ c8a3fd5c-91ae-407e-a564-caf4c3665fcc
@@ -579,7 +579,7 @@ Nu(60ufac"mm", data)
 # ╟─9274b233-687d-471d-8bac-e14e9a0cb7c0
 # ╟─c9c931d9-0a2a-47de-9bee-493c472def48
 # ╟─665c5826-4516-4ffa-a9d8-def8e3985ddb
-# ╟─a21d9a07-de69-4884-8d7d-742413f9a95a
+# ╠═a21d9a07-de69-4884-8d7d-742413f9a95a
 # ╟─5abe4d49-f398-4d0a-8055-9c4b1014e74f
 # ╠═91980f61-4173-4840-a1ae-f1d743daa2c4
 # ╠═5623ace0-4b62-4ec7-b54f-c110d38bc06b
