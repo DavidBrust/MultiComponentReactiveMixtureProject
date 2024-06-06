@@ -212,7 +212,7 @@ function run_transient(data; times=[0,15.0], nref=0, ufac=ufac"cm", W_block=3.0u
 		# )
 		control = SolverControl(;
 			method_linear = KrylovJL_GMRES(
-				gmres_restart = 10,
+				#gmres_restart = 10,
 				restart = true,
 				itmax = 250,
 			),
