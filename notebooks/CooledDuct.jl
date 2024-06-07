@@ -21,11 +21,11 @@ begin
 	using PlutoUI
 	using LessUnitful
 	using VoronoiFVM
-	using ExtendableGrids, GridVisualize, CairoMakie, ColorSchemes
+	using ExtendableGrids, GridVisualize, CairoMakie, ColorSchemes, Plots
 	using CSV, DataFrames
 	using Revise
 	using MultiComponentReactiveMixtureProject
-	GridVisualize.default_plotter!(CairoMakie)	
+	GridVisualize.default_plotter!(CairoMakie)
 end;
 
 # ╔═╡ 0f102f06-3ff3-4bcc-8892-8d9190a87849
@@ -146,7 +146,24 @@ md"""
 """
 
 # ╔═╡ 3954d223-efb2-4aed-8560-263efe5a480e
+function fhp(f,u,edge,data)
 
+	(;mflowin, T_gas_in, p, mmix0) = data
+
+	c0 = p/(ph"R"*T_gas_in)
+	rho0 = mmix0 * c0
+	v0 = mflowin / (H*1.0ufac"m") / rho0
+	
+	x,y = edge.coord[:,edge.index]
+	
+	yh=y/H
+
+	
+	return v0,0
+	
+	# 2D velocitx vector, x component follow hp profile, y component is 0
+	#return 6*v*yh*(1.0-yh),0
+end
 
 # ╔═╡ f008f30f-0137-4c54-8d4e-a6f589c4a952
 md"""
@@ -374,12 +391,13 @@ function setup_run_sim(grid, data)
 	control = SolverControl(nothing, sys;)
 	control.handle_exceptions=true
 	control.Δt_max=100.0
-	control.Δu_opt=500.0
+	control.Δt_grow=1.5
+	control.Δu_opt=1000.0
 	
 
-	times=[0,3000.0]
+	times=[0,1000.0]
 	
-	sol=VoronoiFVM.solve(sys;inival=inival,times,control,log=true)
+	sol=VoronoiFVM.solve(sys;inival=inival,times,control,log=true,verbose="nae")
 	return (sol,sys)
 end
 
@@ -487,10 +505,10 @@ let
 	vel_y = massflux[2,:]./dens
 	vel_y_ = vel_y[dens .!= 0.0]
 	
-	vis =GridVisualizer(layout=(5,1), resolution=(600,750), colorbarticks=4)
+	vis =GridVisualizer(layout=(5,1), resolution=(600,750))
 	
 	scalarplot!(vis[1,1], grid, T, title = "Temperature / K")
-	scalarplot!(vis[2,1], grid, p, limits=(minimum(p_),maximum(p_)), title = "Pressure / Pa",)
+	scalarplot!(vis[2,1], grid, p, limits=(minimum(p_),maximum(p_)), climits=(minimum(p_),maximum(p_)), title = "Pressure / Pa",)
 	scalarplot!(vis[3,1], grid, dens, limits=(minimum(dens_),maximum(dens_)), title = "Density / kg m-3",)
 		
 	scalarplot!(vis[4,1], grid, massflux[1,:], limits=(minimum(massflux_x_),maximum(massflux_x_)), title = "Mass flux (X) / kg s-1 m-2")
@@ -508,15 +526,16 @@ let
 	T = sol_ss[iT,:]
 
 	levels = 41
-	
-	vis =GridVisualizer(layout=(1,1), resolution=(650,220), colorbar=:horizontal, colorbarticks=6, linewidth=0.15, levels=levels, )
 
 	colormap = ColorSchemes.jet1[10:90]
+
+	res = (650,250)
+	vis =GridVisualizer(layout=(1,1), resolution=res, aspect=1.2, levels=0, colormap=colormap, Plotter=Plots)
 	
-	colorlevels = linspace(minimum(T), maximum(T), levels)
-	
-	scalarplot!(vis[1,1], grid, T, colormap=colormap, colorlevels=colorlevels, title = "Temperature / K")
-	reveal(vis)
+	scalarplot!(vis[1,1], grid, T, levels=0, linewidth=0, colorlevels=levels+2, title = "Temperature / K")
+	sc = reveal(vis)
+	#fn = "../img/out/2024-06-07/Cooled_Duct_nref2.pdf"
+	#GridVisualize.save(fn, sc)
 end
 
 # ╔═╡ 5623ace0-4b62-4ec7-b54f-c110d38bc06b
@@ -557,7 +576,7 @@ Nu(60ufac"mm", data)
 # ╟─6939978d-9590-407b-80dc-54721c3f672d
 # ╠═7be1c79e-08d8-493c-bce0-114c0c003dd7
 # ╟─e9cb07eb-cfbb-4802-bc7f-6de7a6ad8ac6
-# ╟─3954d223-efb2-4aed-8560-263efe5a480e
+# ╠═3954d223-efb2-4aed-8560-263efe5a480e
 # ╟─f008f30f-0137-4c54-8d4e-a6f589c4a952
 # ╠═e7ca4902-0e14-48ca-bcc6-96b06c85a39d
 # ╠═7f1d9cf8-7785-48c1-853c-74680188121f

@@ -178,6 +178,33 @@ Combined function to assemble symmetric Maxwell-Stefan diffusivity and Newman-So
 For M-S diffusivity, account for porous material through the constriction and tourtuosity factor γ_τ which lowers the diffusivities
  ~1 order of magnitude compared to diffusion through free space.
 """
+function D_A_matrices!(edge, D, A, T, p, data)
+	(;m,γ_τ,constant_properties,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs)=data
+	ng=ngas(data)
+	ind = 1
+	@inbounds for i=1:(ng-1) # i: row index
+		for j=(i+1):ng # j: col index
+            # if !constant_properties
+			# Dij = binary_diff_coeff_gas(data.Fluids[i], data.Fluids[j], T, p)
+			# # Dij *= m[i]*m[j]*γ_τ # eff. diffusivity
+			# Aij = constant_newman_soret_diff_coeffs[ind] # in absence of calculation methods use constant values
+            # else
+                # Dij = 2.0e-5*m[i]*m[j]
+				Dij = constant_binary_diff_coeffs[ind]
+				# Dij *= m[i]*m[j]
+				Aij = constant_newman_soret_diff_coeffs[ind]
+            # end
+			# Dij *= m[i]*m[j]*γ_τ # eff. diffusivity
+			Dij *= γ_τ[edge.region] # eff. diffusivity
+			D[i,j] = Dij
+			D[j,i] = Dij # M-S diffusion matrix is symmetric
+			A[i,j] = Aij
+			A[j,i] = -Aij # Newman-Soret coefficient matrix is anti-symmetric
+			ind += 1
+		end
+	end
+end
+
 function D_A_matrices!(D, A, T, p, data)
 	(;m,γ_τ,constant_properties,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs)=data
 	ng=ngas(data)
@@ -214,10 +241,6 @@ Mixture mass flow (bulk convective mass flow) through the pore space of the poro
 ```
 """
 
-function DarcyVelo(u,data,mu)
-	(;ip,perm) = data
-	-perm/mu*(u[ip,1]-u[ip,2])	
-end
 
 # version of function for Darcy velocity depending on spatially
 # varying permeability of the porous medium
@@ -299,7 +322,8 @@ function DMS_flux(f,u,edge,data)
 		@inline MassFrac!(X,W,data)
 		
 		if include_Soret_Dufour
-			@inline D_A_matrices!(D, A, Tm, pm, data)
+			# @inline D_A_matrices!(D, A, Tm, pm, data)
+			@inline D_A_matrices!(edge, D, A, Tm, pm, data)
 			@inline ThermalDiffRatio!(TDR, X, A, D, data)	
 		else
 			# !!! TEST: Partial domain blocking !!!
@@ -311,7 +335,7 @@ function DMS_flux(f,u,edge,data)
 		@inline mumix, lambdamix = dynvisc_thermcond_mix(data, Tm, X)
 			
 		rho = c*mmix
-		#v = DarcyVelo(u,data,mumix)
+		
 		v = DarcyVelo(u,edge,data,mumix)
 		
 		f[ip] = -rho*v
@@ -483,7 +507,7 @@ function DMS_boutflow(f,u,edge,data)
 	end
 	
     @inline mumix, _ = dynvisc_thermcond_mix(data, Tout, X)
-	# v = DarcyVelo(u,data,mumix)
+	
 	v = DarcyVelo(u,edge,data,mumix)
 	
 	for i=1:(ng-1)

@@ -198,6 +198,7 @@ Define simulation parameters e.g. the initial composition (equimolar), temperatu
 # ╔═╡ 7f1d9cf8-7785-48c1-853c-74680188121f
 data = ReactorData(
 	dim = dim,
+	permeable_regions = [1],
 
 	kinpar = HeArKr,
 	X0 = [1,1,1] / 3,
@@ -207,11 +208,12 @@ data = ReactorData(
 	solve_T_equation = true,
 	is_reactive = false,
 	include_Soret_Dufour = true,
+	#include_Soret_Dufour = false,
 	
 	γ_τ = [1.0],
 	poros= [1.0],
 
-	perm = ones(1)*1.23e-10*ufac"m^2" * 1.0e6,
+	perm = [1.0]*1.23e-10*ufac"m^2" * 1.0e6,
 	
 	constant_binary_diff_coeffs = constant_binary_diff_coeffs,
 	constant_newman_soret_diff_coeffs = constant_newman_soret_diff_coeffs
@@ -387,12 +389,12 @@ function setup_run_sim(grid, data)
 		
 
 	
-	sol=VoronoiFVM.solve(sys;inival=inival,times,control,log=true)
+	sol=VoronoiFVM.solve(sys;inival=inival,times,control,log=true, verbose="nae")
 	return (sol,sys)
 end
 
 # ╔═╡ 035d4123-7092-4429-8cfd-1e5926e84493
-solt, sys = setup_run_sim(grid, data);
+solt, sys = setup_run_sim(grid, data)
 
 # ╔═╡ 5a0900cc-df10-4176-b903-358b3e00415c
 md"""

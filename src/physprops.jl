@@ -495,8 +495,8 @@ function dynvisc_thermcond_mix(data, T, x)
 
 		@inbounds for i=1:ngas(data)
 			if constant_properties
-				mu[i] = constant_species_viscosities[i]
-				lambda[i] = constant_species_thermal_conductivities[i]
+				mu[i] = one(eltype(T)) * constant_species_viscosities[i]
+				lambda[i] = one(eltype(T)) * constant_species_thermal_conductivities[i]
 			else
 				mu[i] = dynvisc_gas(Fluids[i], T)
 				lambda[i] = thermcond_gas(Fluids[i], T)
