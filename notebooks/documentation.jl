@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.40
+# v0.19.43
 
 using Markdown
 using InteractiveUtils
@@ -72,7 +72,7 @@ md"""
 ### Derivation of separated formulation
 Total species enthalpy $h_i$ consists of two contibutions via
  - a reference enthalpy $h_i^0$ ("formation enthalpy" at reference conditions, typically 298.15 K, 1 bar) 
- - a thermal enthalpy $h_i^{\text{th}}(T)$ due to the species temperature unequal the reference temperatrue.
+ - a thermal enthalpy $h_i^{\text{th}}(T)$ due to the species temperature deviating from the reference temperature.
 
 ```math
 \begin{align}
@@ -81,7 +81,7 @@ h_i &= h_i^0 + \int_{T_{\text{ref}}}^T c_{p,i}(\widetilde{T}) d\widetilde{T} \\
 \end{align}
 ```
 
-The reference enthalpy must be considered only when species transformations through chemical reactions occur. For non-reacting mixtures it cancels out exactly.
+The reference enthalpy must be considered only when species transformations through chemical reactions occur ("reaction enthalpy"). For non-reacting mixtures it cancels out exactly.
 
 An improvement in numerical convergence was observed after separating the (constant) formation enthalpy $h_i^0$ from the thermal contribution $h_i^{\text{th}}(T)$ and account for the species transformations via the reaction source term $\sum h_i^0 r_i$.
 
@@ -92,7 +92,7 @@ In the following it is shown how to obtain the "separated formulation" from the 
 md"""
 ```math
 \begin{align}
-\frac{\partial \rho h}{\partial t} + \nabla \cdot ( \rho h \vec v ) + \nabla \cdot \left(  \sum_i^n h_i \vec J_i \right) + \nabla \cdot \vec Q - \frac{\partial p}{\partial t} &= 0 \\
+\frac{\partial (\rho h)}{\partial t} + \nabla \cdot ( \rho h \vec v ) + \nabla \cdot \left(  \sum_i^n h_i \vec J_i \right) + \nabla \cdot \vec Q - \frac{\partial p}{\partial t} &= 0 \\
 \end{align}
 ```
 """
@@ -149,32 +149,34 @@ md"""
 
 # ╔═╡ 3e53e30d-f601-4d78-9f93-037172e40504
 md"""
-Multiply the species mass balance with $h_i^0$:
+Consider the species mass balance for gas phase species $i$:
 ```math
-\begin{align}
-\frac{\partial \rho_i}{\partial t} + \nabla \cdot \left( \rho_i \vec v \right ) + \nabla \cdot \vec J_i = r_i \\
-h_i^0 \frac{\partial \rho_i}{\partial t} + h_i^0 \left( \nabla \cdot \left( \rho_i \vec v \right ) \right) + h_i^0 \left( \nabla \cdot \vec J_i \right )= h_i^0 r_i
-\end{align}
+\frac{\partial \rho_i}{\partial t} + \nabla \cdot \left( \rho_i \vec v \right ) + \nabla \cdot \vec J_i = r_i
 ```
-After defining a fixed reference temperature $T_{\text{ref}}$ for all following calculations the $h_i^0(T_{\text{ref}})$ are constant:
+Multiply the species mass balance by the reference enthalpy $h_i^0$:
+```math
+h_i^0 \frac{\partial \rho_i}{\partial t} + h_i^0 \left( \nabla \cdot \left( \rho_i \vec v \right ) \right) + h_i^0 \left( \nabla \cdot \vec J_i \right )= h_i^0 r_i
+```
+The reference enthalpy is defined at a reference temperature $T_{\text{ref}}$, so for the remainder of the derivation $h_i^0=h_i^0(T_{\text{ref}})$ are constant:
 ```math
 \begin{align}
 \frac{\partial (\rho_i h_i^0 )}{\partial t} + \nabla \cdot \left(  \rho_i h_i^0 \vec v \right) + \nabla \cdot \left ( h_i^0 \vec J_i \right ) = h_i^0 r_i
 \end{align}
 ```
-Summing over both sides: 
+Summation over all gas phase species $i=1\dots n$ yields:
 
 ```math
 \begin{align}
-\sum \left( \frac{\partial (\rho_i h_i^0 )}{\partial t} + \nabla \cdot \left(  \rho_i h_i^0 \vec v \right) + \nabla \cdot \left ( h_i^0 \vec J_i \right ) \right) = \sum h_i^0 r_i
+\sum_{i=1}^{n} \left( \frac{\partial (\rho_i h_i^0 )}{\partial t} + \nabla \cdot \left(  \rho_i h_i^0 \vec v \right) + \nabla \cdot \left ( h_i^0 \vec J_i \right ) \right) = \sum_{i=1}^{n} h_i^0 r_i
 
 
 \end{align}
 ```
-Leads to the "separated" form of the enthalpy equation for the __gas phase only__:
+We obtain the "separated" form of the enthalpy equation in the __gas phase__:
 ```math
 \begin{align}
-\frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum \rho_i h_i^{\text{th}}(T) \vec v \right) + \nabla \cdot \left ( \sum h_i^{\text{th}}(T) \vec J_i \right ) + \nabla \cdot \vec Q + \sum h_i^0 r_i - \frac{\partial p}{\partial t}&= 0 \\
+\frac{\partial (\sum_{i=1}^{n} \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum_{i=1}^{n} \rho_i h_i^{\text{th}}(T) \vec v \right) + \nabla \cdot \left ( \sum_{i=1}^{n} h_i^{\text{th}}(T) \vec J_i \right ) \\
++ \nabla \cdot \vec Q + \sum_{i=1}^{n} h_i^0 r_i - \frac{\partial p}{\partial t}&= 0 
 \end{align}
 ```
 """
@@ -187,7 +189,7 @@ Enthalpy equation for __gas phase only__.
 Formulation based on separation of "reference  enthalpy" and "thermal enthalpy".  See section "Derivation of Separated Formulation".
 ```math
 \begin{align}
-\frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec J_i \right) + \vec Q \right ) + \sum h_i^0 r_i +\frac{\partial p}{\partial t}&= 0
+\frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec J_i \right) + \vec Q \right ) + \sum h_i^0 r_i -\frac{\partial p}{\partial t}&= 0
 \end{align}
 ```
 
@@ -338,14 +340,14 @@ md"""
 # ╟─b46119ae-bcb1-4b7b-b991-f2279dbe25a5
 # ╟─52539d55-2523-4937-a049-3159d74021f1
 # ╟─ceb22984-3af0-4d76-8e27-b5cba9c4e51c
-# ╟─83cd18d8-40c8-49c8-8b01-32f0aa8cc17b
-# ╟─30ca1e60-ee79-4b6d-9c66-d5e3313ade3a
-# ╟─7c3f89da-9b81-4395-8ffc-00c65fdc7529
+# ╠═83cd18d8-40c8-49c8-8b01-32f0aa8cc17b
+# ╠═30ca1e60-ee79-4b6d-9c66-d5e3313ade3a
+# ╠═7c3f89da-9b81-4395-8ffc-00c65fdc7529
 # ╟─cf75ad38-c5d6-4258-ab39-710ece3b7663
 # ╟─70fbdc66-fefc-432e-abeb-05a322b34e00
 # ╟─cb64283a-4c74-43ea-be69-a0ee293491fd
 # ╟─730348aa-3ff7-43bd-8c43-e9ba6823d318
-# ╟─3e53e30d-f601-4d78-9f93-037172e40504
+# ╠═3e53e30d-f601-4d78-9f93-037172e40504
 # ╟─4ac838f9-777e-41d6-a89c-5ed4282b4288
 # ╟─b40f02e9-ec79-4122-9156-c469d90152f6
 # ╟─aa68910a-f86f-4e33-894e-b3d3808473cc

@@ -400,7 +400,7 @@ end
 let
 	(; gni,iT,ip) = data;
 		
-	f = Figure(size = (600, 300))
+	fig = Figure(size = (600, 300))
 	
 	xs = solt.t/ufac"hr"
 	Bottom = 1
@@ -408,7 +408,7 @@ let
 
 	x_avg_bottom, x_avg_top = xAvgBottomTop(sys, solt, data)
 
-	ax1 = Axis(f[1, 1], xlabel="time / hr", ylabel="Mole fraction", title="Argon", limits = (nothing, nothing, 0.39, 0.61))
+	ax1 = Axis(fig[1, 1], xlabel="time / hr", ylabel="Mole fraction", title="Argon", limits = (nothing, nothing, 0.39, 0.61))
 
 	# Ar
 	lines!(xs, x_avg_bottom[gni[:Ar],:], label = "Bottom")
@@ -420,7 +420,7 @@ let
 	
 	
 	# CH4
-	ax2 = Axis(f[1, 2], xlabel="time / hr", ylabel="Mole fraction", title="Methane", limits = (nothing, nothing, nothing, 0.61))
+	ax2 = Axis(fig[1, 2], xlabel="time / hr", ylabel="Mole fraction", title="Methane", limits = (nothing, nothing, nothing, 0.61))
 	
 	lines!(xs, x_avg_bottom[gni[:CH4],:], label = "Bottom")
 	scatter!(xCH4_Bottom.time, xCH4_Bottom.xCH4_Bottom)
@@ -428,7 +428,11 @@ let
 	lines!(xs, x_avg_top[gni[:CH4],:], label = "Top")
 	scatter!(xCH4_Top.time, xCH4_Top.xCH4_Top)
 	axislegend(ax2, merge=true)
-	f	
+	fig
+
+	#fn = "../img/out/2024-06-17/Loschmidt.pdf"
+	#CairoMakie.save(fn, fig)
+	
 end
 
 # ╔═╡ Cell order:
@@ -469,7 +473,7 @@ end
 # ╠═26bab6eb-7457-4fb7-b8e2-5148769891ff
 # ╟─9274b233-687d-471d-8bac-e14e9a0cb7c0
 # ╟─c40265d6-a9e0-443f-bfec-ca70418d8361
-# ╟─9ba456c7-f6ed-49c5-9878-d9e0deb96384
+# ╠═9ba456c7-f6ed-49c5-9878-d9e0deb96384
 # ╟─af0a2719-3e0a-420e-9c8c-4cbbcb828cb1
 # ╟─65dbb492-4795-44ca-afcb-fb2a2c925d92
 # ╟─e8425c71-666a-462e-9c4d-fc480810f922

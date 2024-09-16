@@ -185,7 +185,7 @@ end;
 
 # ╔═╡ bbb6d613-1592-49ae-8929-12d10fa7c39c
 function plot_Tcalc_exp(df, fflow)
-	p=Plots.plot(xguide="Nominal flux / kW m⁻²", yguide="Temperature / °C", title="$(fflow) lₛ/min", legend=:bottomright)
+	p=Plots.plot(xguide="Nominal flux / kW m⁻²", yguide="Temperature / °C", title="$(fflow) Lₛ/min", legend=:bottomright)
 	
 	Plots.plot!(p,df.nom_flux, df.T_03, ribbon=df.T_03_Uc, fillalpha=.1, label="Cat. (calc.)", ls=:dash)
 	Plots.plot!(p,df.nom_flux, df.calc_T_03_TC, ribbon=df.T_03_TC_Uc, fillalpha=.1, label="TC (calc.)", ls=:dashdot)
@@ -841,7 +841,7 @@ let
 	# 07.08.2023, 40-80 suns, 5.6NL/min
 	p2 = plot_Tcalc_exp(hcat(df_230807_Tcalc, df_230807_Texp), 5.6)
 	p=Plots.plot(p1,p2,layout=(1,2), margin = 5mm, size=(550, 270))	
-	#Plots.savefig(p, "../../../data/out/2024-04-24_JECE_revisions/Tcat_surf_TC_uc.svg")
+	#Plots.savefig(p, "../../../data/out/2024-05-31_JECE_revisions/Tcat_surf_TC_uc.svg")
 end
 
 # ╔═╡ 4389b52e-f286-41d1-93e6-e8090743e50a
@@ -948,6 +948,7 @@ LocalResource(
 # ╠═bbb6d613-1592-49ae-8929-12d10fa7c39c
 # ╠═8afe6a43-f0e0-4849-8405-9c4f72bafcd4
 # ╠═fc594076-cb09-4cc1-a447-ed7b24dc38d7
+# ╠═683e30d1-c014-46ea-8f04-52948d44ebf2
 # ╠═4f67dc46-b5b6-4648-a526-77992c22020f
 # ╟─14d41f40-059c-4826-92c1-d3a42260385f
 # ╟─9b287a3a-bce9-483e-a788-ada05c5b46bd

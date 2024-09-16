@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.40
+# v0.19.43
 
 using Markdown
 using InteractiveUtils
@@ -471,6 +471,19 @@ md"""
 # Auxiliary
 """
 
+# ╔═╡ 568aabbc-901d-4a9b-9d46-9609b8d5d76b
+data
+
+# ╔═╡ bbd64f98-8bae-42a2-8593-bbf7787640be
+md"""
+# Scale analysis
+In the following the scale separation between pore scale and macroscopic scale is expressed via the scale separation $\epsilon = d_{\textrm p}/L$ where $d_{\textrm p}$ is the mean pore diameter and $L$ is the characteristic macroscopic length, here the frit thickness of 5 mm.
+
+"""
+
+# ╔═╡ b59631f5-6dab-4b8f-b375-ca0755773000
+ϵ = round(data.dp/5ufac"mm", sigdigits=4)
+
 # ╔═╡ b519541f-9ccd-4032-bc51-9a1abaecadba
 md"""
 ### Peclet Number
@@ -487,6 +500,44 @@ Describes the ratio of advective transport to diffusive transport. Can be formul
 """
 
 
+# ╔═╡ 535e812c-54ea-48ce-8e1f-0ee49c6e6f31
+md"""
+Characteristic times for advective and diffusive mass transport:
+```math
+
+t_{\text L}^{\text{adv}} = \frac{L_c}{v_c} \qquad t_{\text L}^{\text{dif}} = \frac{L_c^2}{D_c}
+```
+"""
+
+# ╔═╡ 6a0f3072-a81a-4478-a106-76cadf9ac255
+let
+	T, p = 600+273.15, 1*ufac"bar"
+	(;ng,dp,poros,m,γ_τ,mmix0,mfluxin,Fluids,X0) = data
+
+	D = zeros(Float64,ng,ng,)
+	MultiComponentReactiveMixtureProject.D_matrix!_post(D, T, p, data)	
+	D /= maximum(γ_τ) # eff. diffusivity
+	D_min = minimum(D[D .!= 0.0])
+
+
+	dens = p*mmix0/(ph"R"*T)
+	u0 = mfluxin/dens
+	
+	# macroscopic length scale L
+	Lc = 5ufac"mm" # thickness of porous frit in main flow direction
+	t_L_adv = Lc/u0
+	t_L_dif = Lc^2/D_min
+	Pe_L = t_L_dif/t_L_adv
+	# microscopic length scale l
+	lc = dp
+	t_l_adv = lc/u0
+	t_l_dif = lc^2/D_min
+	Pe_l = t_l_dif/t_l_adv
+
+	# t_L_adv, t_L_dif
+	(Pe_l=Pe_l, Pe_L=Pe_L, t_L_adv=t_L_adv, t_L_dif=t_L_dif)
+end
+
 # ╔═╡ 57b8f297-7616-41f3-bef3-5237c6cfded6
 md"""
 ### Knudsen Number
@@ -501,10 +552,29 @@ where $\lambda$ is the mean free path length of the fluid, ideal gas in this cas
 -  $\text{Kn} > 10$: Free molecular flow
 """
 
-# ╔═╡ eaaf24b5-fabd-4363-8dbf-ebcc1e6416d1
-function RePrPeKn(T, p, data)
+# ╔═╡ 2e44ebc1-0b72-4c92-b39a-9bf63bcb8992
+let
+	T, p = 600+273.15, 1*ufac"bar"
+	
+	(;ng,dp,poros,m) = data
+	
+	poros = maximum(poros)
+	D_K_min = dp * poros^1.5/(1-poros)*sqrt(8*ph"R"*T/(9*pi*maximum(m)))
+	D_K_max = dp * poros^1.5/(1-poros)*sqrt(8*ph"R"*T/(9*pi*minimum(m)))
 
-	(;mfluxin, T_gas_in, mmix0, Fluids, X0, dp) = data
+	D = zeros(Float64,ng,ng,)
+	MultiComponentReactiveMixtureProject.D_matrix!_post(D, T, p, data)	
+
+	D_max = maximum(D)
+	D_min = minimum(D[D .!= 0.0])
+
+	D_K_max, D_K_min, D_max, D_min
+end
+
+# ╔═╡ eaaf24b5-fabd-4363-8dbf-ebcc1e6416d1
+function RePrPeKnDaBi(T, p, data)
+
+	(;mfluxin, T_gas_in, mmix0, Fluids, X0, dp, lcat, poros, rhos, lambdas) = data
 	ng = ngas(data)
 
 	#T = T_gas_in
@@ -522,20 +592,228 @@ function RePrPeKn(T, p, data)
 	L = 5*ufac"mm" # length scale of reactor in main flow direction
 	Pe_h = L*u0*dens*heat_cap/(mmix0*therm_cond) # Peclet heat transport
 
+	poros = maximum(poros) # take max. poros of the regions
+
+	function hsf(data,T,p,x)
+		therm_cond/dp*((1.0 + 4*(1.0-poros)/poros) + 0.5*(1.0-poros)^0.5*Re^0.6*Pr^(1.0/3.0))*ufac"W/(m^2*K)"
+	end
+
+	hc = hsf(data,T,p,X0) # char. value of heat transfer coeff.
+	Bi = hc*L/lambdas # Biot number
+
 	D = zeros(Float64,ng,ng,)
 	MultiComponentReactiveMixtureProject.D_matrix!_post(D, T, p, data)	
-	
-	Pe_m = L*u0/maximum(D)
+
+	Dmin = minimum(D[D .!= 0.0])
+	#Pe_m = L*u0/maximum(D)
+	Pe_m = L*u0/Dmin
 	
 	σs = Dict(:H2 => 289*ufac"pm", :CH4 => 380*ufac"pm", :H2O => 265*ufac"pm", :N2 => 364*ufac"pm", :CO => 376*ufac"pm", :CO2 => 330*ufac"pm")
 	Kn = ph"k_B"*T/(sqrt(2)*pi*σs[:H2O]^2*p*dp)
 
+	c = p/(ph"R"*T)
 	
-	Re, Pr, Pe_h, Pe_m, Kn	
+	rm = maximum(abs.(ri(data,T,p * X0))) # mol / (m^3 * s)
+	
+	As = 0.02ufac"m^2/g"
+	rho_frit = (1-poros)*rhos
+
+	r_As = rm * lcat /(As*rho_frit)
+	c = p/(ph"R"*T)
+
+	Da = L*r_As/(c * Dmin)
+
+	Sc = dyn_visc/(dens * Dmin) # Schmidt number
+	Shp = 2 + 0.69*sqrt(Re)*Sc^(1/3) # Sherwood number for single particle
+	Shb = (1+1.15*(1-poros))*Shp # Sherwood number for catalyst bed/packed bed
+	
+	Re, Pr, Pe_h, Pe_m, Kn, Da, Bi, Sc, Shp, Shb
 end
 
 # ╔═╡ 1196e9ed-024a-4469-95cf-a8622ecaf413
-Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
+Re, Pr, Pe_h, Pe_m, Kn, Da, Bi, Sc, Shp, Shb = RePrPeKnDaBi(600+273.15, 1*ufac"bar", data)
+
+# ╔═╡ 4b11b2d8-5574-4ddd-a8be-20609ad379d9
+md"""
+1.  $\epsilon  \ll 1, \qquad \epsilon =$ $(ϵ)  $$, \qquad\epsilon^{-2}=$$ $(ϵ^-2)
+1.  $\textrm{Pe} < \epsilon^{-2}, \qquad \textrm{Pe}_{\textrm m} =$  $(round(Pe_m,sigdigits=2))
+1.  $\textrm{Da} < 1,  \qquad \textrm{Da} =$ $(round(Da,sigdigits=2))
+1.  $\textrm{Da} / \textrm{Pe} < \epsilon, \qquad \textrm{Da}/\textrm{Pe} =$ $(round(Da/Pe_m,sigdigits=2))
+
+"""
+
+# ╔═╡ 4bd41629-7d92-48f5-b53d-8e8cc50091a5
+Kn
+
+# ╔═╡ 2d7bd1d8-279e-42f6-b544-3229c0401577
+md"""
+## Existence of mass transport limitations
+Estimate the influence of mass transport and judge if limitations in mass transport might limit the reaction rate according to the procedure in __Wolf et.al 2016, Chemical Engineering & Technology 39 (6).__ Calculate the difference in bulk and surface concentration for species CO2 that establishes as a result of finite mass transport in the presence of the rWGS surface reaction at typical reacton conditions. CO2 was chosen, as its diffusion coefficient is the lowest of all gas phase speceis in the mixture and the rWGS is the main CO2 consuming reaction:
+
+```math
+r_{\mathrm{rWGS}} = \beta_{\mathrm{CO_2}} A_{\mathrm{m,cat}} (c_{\mathrm{CO_2, bulk}} - c_{\mathrm{CO_2, surface}})
+```
+Herein, $A_{\mathrm{m,cat}}$ is the catalyst mass specific surface area which is calculated from the known total mass of deposited catalyst, and the technical data provided from the manufacturer of the porous support material:
+```math
+	A_{\mathrm{m,cat}}=A/m_{\mathrm{cat}} =A_{\mathrm{m,sup}} \rho^{\mathrm{eff}} / l_{\mathrm{m,cat}}
+```
+with
+```math
+	A_{\mathrm{m,sup}}=A/m_{\mathrm{sup}}, \quad \rho^{\mathrm{eff}} = \phi \rho_{\mathrm g} + (1-\phi) \rho_{\mathrm s} \approx (1-\phi) \rho_{\mathrm s}, \quad  l_{\mathrm{m,cat}} = m_{\mathrm{cat}}/V
+```
+
+Further, $\beta$ is the mass transport coeffiecient calculated by 
+```math
+\beta_{\mathrm{CO_2}} = \frac{\mathrm{Sh}\, D_{\mathrm{CO_2}}}{d_{\mathrm p}}
+```
+with the non-dimensional Sherwood number for fixed beds with porosity $\phi$:
+
+```math
+\mathrm{Sh} = (1+1.5(1-\phi)) \mathrm{Sh_p}
+```
+with the Sherwood number for single particles given by:
+```math
+\mathrm{Sh_p} = 2 + 0.69\, \sqrt{\mathrm{Re}}\, \sqrt[3]{\mathrm{Sc}} 
+```
+and the non-dimensional Schmidt and Reynolds numbers $\mathrm{Sc, Re}$ defined as:
+```math
+\mathrm{Re} = \frac{\rho |\vec v| d_{\mathrm p}}{\mu}, \qquad \mathrm{Sc} = \frac{\eta}{\rho D_{\mathrm{CO_2}}}
+```
+See below the relative difference between bulk and surface concentration of CO2 for typical operating conditions which amounts to $\approx 1\%$. Therefore, no tranpsort limitations exist and intrinsic kinetics can be applied.
+"""
+
+# ╔═╡ 263ff643-ea2a-4f5e-b378-b96fe63ca05f
+let
+	T, p = 500+273.15, 1.0ufac"bar"
+	c = p/(ph"R"*T)
+	(;poros,lambdas,mmix0,rhos,X0,lcat,dp,gni) = data
+	ng = ngas(data)
+	
+	D = zeros(Float64,ng,ng,)
+	MultiComponentReactiveMixtureProject.D_matrix!_post(D, T, p, data)
+	Dmin = minimum(D[D .!= 0.0])
+
+	poros = maximum(poros) # take max. poros of the regions
+	rhog = p*mmix0/(ph"R"*T)
+
+	rho_eff = poros*rhog + (1-poros)*rhos
+	rho_eff_ = (1-poros)*rhos
+
+	Am_sup = 0.02*ufac"m^2/g"# mass specific surface area, from manufacturer datasheet, por. class 0
+	# catalyst mass specific area
+	Am_cat = Am_sup/lcat*rho_eff_ 
+
+	pi = p* X0
+	RR = maximum(abs.(ri(data,T,pi)))
+
+	mt_coeff = Shb * Dmin / dp
+
+	Δcbs = RR / (mt_coeff*Am_cat)
+	c_CO2 = pi[gni[:CO2]]/(ph"R"*T)
+
+	Δrel = Δcbs/c_CO2
+
+	tcri = lcat * RR/c # inverse of characteristic reaction time / reaction freq.
+	Lc = 5ufac"mm"
+	tct = Lc^2 / Dmin
+	(Δrel=Δrel,tcri=tcri,tct=tct)
+end
+
+# ╔═╡ c507594b-5a16-4239-89a0-ee426f44675f
+md"""
+## Validity of local thermal equilibrium
+"""
+
+# ╔═╡ 65cc4967-951e-46eb-9960-b47dfb1eda16
+md"""
+### Biot Number
+
+```math
+	\mathrm{Bi}_{\mathrm{L}} = \frac{|h(T_a-T_b)|}{|\lambda_b\nabla_XT_b\cdot \vec n|} = \frac{h_c L_c}{\lambda_c}
+```
+"""
+
+# ╔═╡ fd19f137-769e-4361-a156-557d0fa088ea
+Bi
+
+# ╔═╡ 5aa2d303-2a7f-48e2-8aeb-268eae61a60d
+md"""
+```math
+	\mathcal{L} = \frac{\lambda_b}{\lambda_a}
+```
+"""
+
+# ╔═╡ 4a865a4b-3bf3-48ca-bbd3-b27086c1da29
+let
+	(;X0, lambdas) = data
+	T = 273.15 + 25
+	_, lambdaf = dynvisc_thermcond_mix(data, T, X0)
+
+	Ts = (25:100:625) .+ 273
+
+	[lambdas/dynvisc_thermcond_mix(data, T, X0)[2] for T in Ts]
+end
+
+# ╔═╡ a0ce6c34-7be0-4b08-aa34-d52c88968db8
+function criteria_local_th_equil()
+	T, p = 600+273.15, 1.0ufac"bar"
+	(;ng, X0, dp, poros, rhos, cs, lambdas, poros, mfluxin, mmix0) = data
+
+	_, kf = dynvisc_thermcond_mix(data, T, X0)
+
+	As = 0.02ufac"m^2/g"
+	poros = maximum(poros)
+	rho_frit = (1-poros)*rhos
+
+	A0 = As * rho_frit
+
+	L = 5.0ufac"mm"
+	l = 5*dp
+	ks = lambdas
+
+	# length scale dependent criteria
+	crit1 = poros*kf*l/(A0*L^2)*(1/kf + 1/ks)
+	crit2 = (1-poros)*ks*l/(A0*L^2)*(1/kf + 1/ks)
+
+	# time scale dependent criteria
+	cf = heatcap_mix(data, T, X0)/mmix0
+	
+	D = zeros(Float64,ng,ng,)
+	MultiComponentReactiveMixtureProject.D_matrix!_post(D, T, p, data)	
+	Dmin = minimum(D[D .!= 0.0])
+	
+	dens = p*mmix0/(ph"R"*T)
+	u0 = mfluxin/dens	
+
+	# advection time scale
+	tA = l/u0
+	# diffusion time scale
+	tD = l^2/Dmin
+	# mean time scale
+	t = 0.5*(tA+tD)
+
+	crit3A = poros*(dens*cf)*l^2/tA*(1/kf + 1/ks)
+	crit3D = poros*(dens*cf)*l^2/tD*(1/kf + 1/ks)
+	crit3 = poros*(dens*cf)*l^2/t*(1/kf + 1/ks)
+
+	crit4A = (1-poros)*(rhos*cs)*l^2/tA*(1/kf + 1/ks)
+	crit4D = (1-poros)*(rhos*cs)*l^2/tD*(1/kf + 1/ks)
+	crit4 = (1-poros)*(rhos*cs)*l^2/t*(1/kf + 1/ks)
+
+	crit5 = ks/kf
+
+	(
+		crit1=crit1,
+		crit2=crit2,
+		crit3=crit3,
+		crit4=crit4,
+		rλ=crit5
+	)
+	
+end
+
+# ╔═╡ 49b370e6-2fd8-4ac5-953b-a48af91393ed
+crits = criteria_local_th_equil()
 
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
@@ -573,7 +851,24 @@ Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 # ╟─107b390f-f9e6-4879-89a7-ec1373bafb52
 # ╠═5547b97e-5adf-48ec-9fb9-55d54c1503a4
 # ╟─bcaae53b-d58b-4e36-9b79-471b02acaea6
+# ╠═568aabbc-901d-4a9b-9d46-9609b8d5d76b
 # ╠═1196e9ed-024a-4469-95cf-a8622ecaf413
+# ╟─bbd64f98-8bae-42a2-8593-bbf7787640be
+# ╠═b59631f5-6dab-4b8f-b375-ca0755773000
+# ╟─4b11b2d8-5574-4ddd-a8be-20609ad379d9
 # ╟─b519541f-9ccd-4032-bc51-9a1abaecadba
+# ╟─535e812c-54ea-48ce-8e1f-0ee49c6e6f31
+# ╠═6a0f3072-a81a-4478-a106-76cadf9ac255
 # ╟─57b8f297-7616-41f3-bef3-5237c6cfded6
+# ╠═4bd41629-7d92-48f5-b53d-8e8cc50091a5
+# ╠═2e44ebc1-0b72-4c92-b39a-9bf63bcb8992
 # ╠═eaaf24b5-fabd-4363-8dbf-ebcc1e6416d1
+# ╟─2d7bd1d8-279e-42f6-b544-3229c0401577
+# ╠═263ff643-ea2a-4f5e-b378-b96fe63ca05f
+# ╟─c507594b-5a16-4239-89a0-ee426f44675f
+# ╟─65cc4967-951e-46eb-9960-b47dfb1eda16
+# ╠═fd19f137-769e-4361-a156-557d0fa088ea
+# ╟─5aa2d303-2a7f-48e2-8aeb-268eae61a60d
+# ╠═49b370e6-2fd8-4ac5-953b-a48af91393ed
+# ╠═4a865a4b-3bf3-48ca-bbd3-b27086c1da29
+# ╠═a0ce6c34-7be0-4b08-aa34-d52c88968db8

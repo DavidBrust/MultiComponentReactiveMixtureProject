@@ -83,7 +83,6 @@ begin
 	const L = 80ufac"mm"
 	const H = 10ufac"mm"
 	const mflowin = 1.0e-3ufac"kg/m^3"
-	#const mflowin = 5.0e-4ufac"kg/m^3"
 end;
 
 # ╔═╡ 138b4d12-af0f-4a1c-a4aa-4f55e6038664
@@ -121,13 +120,24 @@ function grid_2D(;nref=0, L=L, H=H, efix=0.01ufac"mm")
 	hmin = H/ny/10
 	hmax = H/ny
 
-	#X_ = collect(-L/2:L/2/nx:0) # uniform spacing, inlet region
+	#XLeft = collect(-L/2:L/nx:-L/nx) # uniform spacing, inlet region
+	XLeft = collect(-L/2:L/nx:-L/4) # uniform spacing, inlet region
+	XLeft_ = geomspace(-L/4, -efix, lmax, lmin)
+		
+	#X_ = [-L/nx,-efix]
+	#XLeft = glue(XLeft,X_)
+	XLeft = glue(XLeft, XLeft_)
+	X_ = [-efix,0.0]
 	
-	#XLeft = collect(0:L/nx:(3/4*L)) # uniform spacing
-	XLeft = collect(-L/2:L/nx:(3/4*L)) # uniform spacing
+	XLeft = glue(XLeft,X_)
+	
+	XMid = collect(0:L/nx:(3/4*L)) # uniform spacing
+	X = glue(XLeft, XMid)
+	#XLeft = collect(-L/2:L/nx:(3/4*L)) # uniform spacing
     XRight = geomspace(3/4*L, L, lmax, lmin)
 	#XLeft = glue(X_, XLeft)
-	X = glue(XLeft, XRight)
+	X = glue(X, XRight)
+	
 	#X = collect(0:L/nx:L)
 
 	Y_ = [-efix, 0.0]
@@ -171,41 +181,6 @@ md"""
 ## Simulation parameters
 """
 
-# ╔═╡ 81099644-bd82-43b7-a433-b0415d8776f0
-function fhp(data,x,y)
-
-	(;mflowin, T_gas_in, p, mmix0) = data
-
-	c0 = p/(ph"R"*T_gas_in)
-	rho0 = mmix0 * c0
-	v0 = mflowin / (H*1.0ufac"m") / rho0
-	
-	yh=y/H
-	# 2D velocitx vector, x->hp , y -> 0
-	return 6*v0*yh*(1.0-yh), 0
-	
-end
-
-# ╔═╡ 3954d223-efb2-4aed-8560-263efe5a480e
-function fhp_(f,u,edge,data)
-
-	(;mflowin, T_gas_in, p, mmix0) = data
-
-	c0 = p/(ph"R"*T_gas_in)
-	rho0 = mmix0 * c0
-	v0 = mflowin / (H*1.0ufac"m") / rho0
-	
-	x,y = edge.coord[:,edge.index]
-	
-	yh=y/H
-
-	
-	return v0,0
-	
-	# 2D velocitx vector, x component follow hp profile, y component is 0
-	#return 6*v*yh*(1.0-yh),0
-end
-
 # ╔═╡ f008f30f-0137-4c54-8d4e-a6f589c4a952
 md"""
 Setup data structure corresponding to Air:
@@ -237,6 +212,7 @@ data = ReactorData(
 	kinpar = Air,
 	Tamb = 50.0 + 273.15,
 	T_gas_in = 100 + 273.15,
+	#T_gas_in = 300 + 273.15,
 	
 	p = 101.3*ufac"kPa",
 
@@ -250,6 +226,8 @@ data = ReactorData(
 		thermcond_gas(N2, 75.0+273.15)
 	],		
 	solve_T_equation = true,
+	#solve_T_equation = false,
+	
 	is_reactive = false,
 	include_Soret_Dufour = false,
 	
@@ -262,12 +240,6 @@ data = ReactorData(
 
 	# perm = 1.23e-10*ufac"m^2" * 1.0e6,
 )
-
-# ╔═╡ 0d3c46d6-d839-4969-8840-68d039e4ef9a
-begin
-	const evelo=edgevelocities(grid,(x,y) -> fhp(data,x,y))
-	const bfvelo=bfacevelocities(grid,(x,y) -> fhp(data,x,y))
-end;
 
 # ╔═╡ bcfc3138-3cbb-4386-a33b-573b6c39caf9
 md"""
@@ -292,11 +264,17 @@ function bcondition(f,u,bnode,data)
 	#boundary_robin!(f,u,bnode, species=iT,region=Γ_top,value=Tamb * eps_,factor=eps_)
 	boundary_dirichlet!(f,u,bnode, species=iT,region=Γ_top,value=Tamb)
 
-	#boundary_dirichlet!(f,u,bnode, species=iT, region=[Γ_inlet_wall_bottom,Γ_inlet_wall_top],value=T_gas_in)
-	#boundary_robin!(f,u,bnode, species=iT, region=[Γ_inlet_wall_bottom,Γ_inlet_wall_top],value=T_gas_in * eps_,factor=eps_)
+	c0 = p/(ph"R"*T_gas_in)
+	rho0 = mmix0 * c0
 	
 	if bnode.region in inflow_boundaries
+
+		# !!! parabolic inflow profile !!!		
+		#r_mfluxin = bfvelo[bnode.ibnode,bnode.ibface] * rho0 * ramp(bnode.time; du=(0.1,1), dt=dt_mf)
 		r_mfluxin = mfluxin*ramp(bnode.time; du=(0.1,1), dt=dt_mf)
+
+		# !!! parabolic inflow profile !!!
+		
 		
 		f[ip] = -r_mfluxin # Neumann bc. for total mass flux
 		for i=1:(ng-1)
@@ -315,8 +293,13 @@ function bcondition(f,u,bnode,data)
 				hin += X0[i]*enthalpy_gas_thermal(data.Fluids[i],T_gas_in)
 			end
 
-			r_hf_enth = mfluxin/mmix0 * hin
-			f[iT] = -r_hf_enth * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)		
+			# !!! parabolic inflow profile !!!
+			#r_hf_enth = bfvelo[bnode.ibnode,bnode.ibface] * rho0/mmix0 * hin * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
+			
+			r_hf_enth = mfluxin/mmix0 * hin * ramp(bnode.time; du=(0.0,1), dt=dt_hf_enth)
+			f[iT] = -r_hf_enth 
+			# !!! parabolic inflow profile !!!
+
 		end
 
 	end
@@ -408,7 +391,7 @@ end
 
 # ╔═╡ 1e51701d-a893-4056-8336-a3772b85abe4
 function setup_run_sim(grid, data)
-	(;ng, ip, iT, Tamb, p, X0, inflow_boundaries, outflow_boundaries, permeable_regions) = data
+	(;ng, ip, iT, Tamb, p, X0, inflow_boundaries, outflow_boundaries, permeable_regions, solve_T_equation) = data
 	
 	sys=VoronoiFVM.System(
 		grid;
@@ -425,7 +408,9 @@ function setup_run_sim(grid, data)
 
 	#enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal, T
 	enable_species!(sys; species=collect(1:(ng+1)), regions=permeable_regions) # gas phase species xi, ptotal
-	enable_species!(sys; species=iT) # T
+	if solve_T_equation
+		enable_species!(sys; species=iT) # T
+	end
 
 	inival=unknowns(sys)
 	inival .= zero(eltype(inival))
@@ -440,13 +425,9 @@ function setup_run_sim(grid, data)
 		end
 	end
 	
-	inival[iT,:].=Tamb
-
-
-	#control = SolverControl(
-	#	GMRESIteration(MKLPardisoLU(), EquationBlock()),
-	# 	sys
-	#)
+	if solve_T_equation
+		inival[iT,:].=Tamb
+	end
 
 	
 	control = SolverControl(nothing, sys;)
@@ -487,15 +468,15 @@ sol = solt(t);
 #=╠═╡
 let
 	(;iT,ip,gni) = data
-	vis =GridVisualizer(layout=(3,1), resolution=(660,450), colorbarticks=4)
+	vis =GridVisualizer(layout=(2,1), resolution=(660,350), colorbarticks=4)
 	x_O2_ = sol[gni[:O2],:]
 	x_O2_ = x_O2_[x_O2_ .!= 0.0]
 	x_N2_ = sol[gni[:N2],:]
 	x_N2_ = x_N2_[x_N2_ .!= 0.0]
 	
-	scalarplot!(vis[1,1], grid, sol[gni[:O2],:], limits=(minimum(x_O2_), maximum(x_O2_)), title = "O2 molar fraction",)
-	scalarplot!(vis[2,1], grid, sol[gni[:N2],:], limits=(minimum(x_N2_), maximum(x_N2_)), title = "N2 molar fraction",)
-	scalarplot!(vis[3,1], grid, sol[iT,:], title = "Temperature")
+	scalarplot!(vis[1,1], grid, sol[gni[:O2],:], limits=(minimum(x_O2_), maximum(x_O2_)), title = "O2 molar fraction", aspect=2.0)
+	scalarplot!(vis[2,1], grid, sol[gni[:N2],:], limits=(minimum(x_N2_), maximum(x_N2_)), title = "N2 molar fraction", aspect=2.0)
+	#scalarplot!(vis[3,1], grid, sol[iT,:], title = "Temperature")
 
 	reveal(vis)
 	
@@ -586,7 +567,7 @@ let
 	vel_y = massflux[2,:]./dens
 	vel_y_ = vel_y[dens .!= 0.0]
 	
-	vis =GridVisualizer(layout=(5,1), resolution=(600,750))
+	vis =GridVisualizer(layout=(5,1), resolution=(660,850), aspect=2.0, colorbarticks=4)
 	
 	scalarplot!(vis[1,1], grid, T, title = "Temperature / K")
 	scalarplot!(vis[2,1], grid, p, limits=(minimum(p_),maximum(p_)), climits=(minimum(p_),maximum(p_)), title = "Pressure / Pa",)
@@ -598,7 +579,10 @@ let
 	scalarplot!(vis[5,1], grid, vel_x, limits=(minimum(vel_x_),maximum(vel_x_)), title = "Velocity (X) / m s-1")
 	#scalarplot!(vis[6,1], grid, vel_y, title = "Velocity (Y) / m s-1")
 
-	reveal(vis)
+	sc = reveal(vis)
+
+	#fn = "../img/out/2024-06-17/Cooled_Duct_nref3.png"
+	#GridVisualize.save(fn, sc)
 end
   ╠═╡ =#
 
@@ -613,13 +597,13 @@ let
 
 	colormap = ColorSchemes.jet1[20:90]
 
-	res = (650,250)
-	vis =GridVisualizer(layout=(1,1), resolution=res, aspect=1.2, levels=0, colormap=colormap, colorbar=:horizontal, colorbarticks=6)
+	res = (660,200)
+	vis =GridVisualizer(layout=(1,1), resolution=res, aspect=1.2, levels=0, colormap=colormap, colorbar=:horizontal, colorbarticks=6, Plotter=Plots)
 	
 	scalarplot!(vis[1,1], grid, T, levels=0, linewidth=0, colorlevels=levels+2, title = "Temperature / K")
 	
 	sc = reveal(vis)
-	#fn = "../img/out/2024-06-07/Cooled_Duct_nref2.png"
+	#fn = "../img/out/2024-06-13/Cooled_Duct_nref2_reproduce.png"
 	#GridVisualize.save(fn, sc)
 end
   ╠═╡ =#
@@ -667,9 +651,6 @@ Nu(60ufac"mm", data)
 # ╟─6939978d-9590-407b-80dc-54721c3f672d
 # ╠═7be1c79e-08d8-493c-bce0-114c0c003dd7
 # ╟─e9cb07eb-cfbb-4802-bc7f-6de7a6ad8ac6
-# ╠═81099644-bd82-43b7-a433-b0415d8776f0
-# ╠═0d3c46d6-d839-4969-8840-68d039e4ef9a
-# ╠═3954d223-efb2-4aed-8560-263efe5a480e
 # ╟─f008f30f-0137-4c54-8d4e-a6f589c4a952
 # ╠═e7ca4902-0e14-48ca-bcc6-96b06c85a39d
 # ╠═7f1d9cf8-7785-48c1-853c-74680188121f
@@ -689,14 +670,14 @@ Nu(60ufac"mm", data)
 # ╟─4acaadd4-6102-44f5-b602-00465bf3feca
 # ╠═9b13bc55-63eb-46bc-acea-f9aec90b340f
 # ╟─9274b233-687d-471d-8bac-e14e9a0cb7c0
-# ╠═c9c931d9-0a2a-47de-9bee-493c472def48
+# ╟─c9c931d9-0a2a-47de-9bee-493c472def48
 # ╟─665c5826-4516-4ffa-a9d8-def8e3985ddb
-# ╠═a21d9a07-de69-4884-8d7d-742413f9a95a
+# ╟─a21d9a07-de69-4884-8d7d-742413f9a95a
 # ╟─5abe4d49-f398-4d0a-8055-9c4b1014e74f
 # ╠═91980f61-4173-4840-a1ae-f1d743daa2c4
-# ╠═5623ace0-4b62-4ec7-b54f-c110d38bc06b
 # ╟─65dbb492-4795-44ca-afcb-fb2a2c925d92
 # ╟─e8425c71-666a-462e-9c4d-fc480810f922
+# ╠═5623ace0-4b62-4ec7-b54f-c110d38bc06b
 # ╠═056119e3-ec74-4860-abb4-b75f6b16878d
 # ╠═77f663a6-96e5-4a1c-843c-cd66fd1382b5
 # ╠═1e51701d-a893-4056-8336-a3772b85abe4
