@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.43
+# v0.19.46
 
 using Markdown
 using InteractiveUtils
@@ -839,7 +839,7 @@ crits = criteria_local_th_equil()
 # ╠═f99203e7-e53e-4109-b6ff-7fb87d290324
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-# ╠═99b59260-7651-45d0-b364-4f86db9927f8
+# ╟─99b59260-7651-45d0-b364-4f86db9927f8
 # ╟─8de4b22d-080c-486f-a6a9-41e8a5489966
 # ╟─c9c6ce0b-51f8-4f1f-9c16-1fd92ee78a12
 # ╟─111b1b1f-51a5-4069-a365-a713c92b79f4

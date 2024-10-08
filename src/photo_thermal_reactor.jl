@@ -388,14 +388,28 @@ const lc_plate = SurfaceOpticalProps(
 function readFlux(flux)
 
 	path = pkgdir(MultiComponentReactiveMixtureProject)*"/data/IrradiationFluxProfiles/"
-	fluxes = [40.0,60.0,80.0,100.0]
+
+	# 2024 Flux Maps: FPC system demonstrator campaign
+	fluxes = [34.0,48.0,60.0,74.0]
+
+	# 2023 Flux Maps: PC reactor pre-test
+	# fluxes = [40.0,60.0,80.0,100.0]
+
 	@assert flux in fluxes
 	d_flux_n = Dict(
-	40.0=>("FluxMap_Import_20230523_110038_40.csv","Target_coords_20230523_110038_40.csv"),
-	60.0=>	("FluxMap_Import_20230523_105203_60.csv","Target_coords_20230523_105203_60.csv"),
-	80.0=>("FluxMap_Import_20230523_105025_80.csv","Target_coords_20230523_105025_80.csv"),
-	100.0=>("FluxMap_Import_20230523_104820_100.csv","Target_coords_20230523_104820_100.csv")
+		# 2024 Flux Maps: FPC system demonstrator campaign
+		34.0 =>	("FluxMap_Import_20240619_160857_34.csv","Target_coords_20240619_160857_34.csv"),
+		48.0 =>	("FluxMap_Import_20240618_153315_48.csv","Target_coords_20240618_153315_48.csv"),
+		60.0 =>	("FluxMap_Import_20240618_152913_60.csv","Target_coords_20240618_152913_60.csv"),
+		74.0 =>	("FluxMap_Import_20240618_152551_74.csv","Target_coords_20240618_152551_74.csv"),
+
+		# 2023 Flux Maps: PC reactor pre-test
+		# 40.0 => ("FluxMap_Import_20230523_110038_40.csv","Target_coords_20230523_110038_40.csv"),
+		# 60.0 => ("FluxMap_Import_20230523_105203_60.csv","Target_coords_20230523_105203_60.csv"),		
+		# 80.0 => ("FluxMap_Import_20230523_105025_80.csv","Target_coords_20230523_105025_80.csv"),
+		# 100.0 => ("FluxMap_Import_20230523_104820_100.csv","Target_coords_20230523_104820_100.csv")
 	)
+
 	fn_flux, fn_coord = d_flux_n[flux]
 	FluxMap = CSV.read(path*fn_flux, DataFrame, header=false,delim=";")
 	coords = CSV.read(path*fn_coord, DataFrame, header=1,delim=";")
@@ -406,18 +420,33 @@ end
 
 function flux_interpol(flux)
 	flux /= ufac"kW/m^2"
-	nom_flux = 80.0
-	if flux >= 30.0 && flux < 50.0
-		nom_flux = 40.0
-	elseif flux >= 50.0 && flux < 70.0
-		nom_flux = 60.0
-	elseif flux >= 70.0 && flux < 90.0
-		nom_flux = 80.0
-	elseif flux >= 90.0 && flux <= 100.0
-		nom_flux = 100.0
+	fluxmap_select = 60.0
+
+	# 2024 Flux Maps: FPC system demonstrator campaign
+	if flux < 41.0
+		fluxmap_select = 34.0
+	elseif flux >= 41.0 && flux < 54.0
+		fluxmap_select = 48.0
+	elseif flux >= 54.0 && flux < 67.0
+		fluxmap_select = 60.0
+	elseif flux >= 67.0
+		fluxmap_select = 74.0
 	end
-	M, coords = readFlux(nom_flux);
-	M .*= flux/nom_flux*ufac"kW/m^2"
+
+	# 2023 Flux Maps: PC reactor pre-test
+	# if flux >= 30.0 && flux < 50.0
+	# 	fluxmap_select = 40.0
+	# elseif flux >= 50.0 && flux < 70.0
+	# 	fluxmap_select = 60.0
+	# elseif flux >= 70.0 && flux < 90.0
+	# 	fluxmap_select = 80.0
+	# elseif flux >= 90.0 && flux <= 100.0
+	# 	fluxmap_select = 100.0
+	# end
+	M, coords = readFlux(fluxmap_select);
+	meanflux = sum(M)/(size(M,1)*size(M,2))
+	M .*= flux/meanflux*ufac"kW/m^2"
+	# M .*= flux/nom_flux*ufac"kW/m^2"
 	
 
 	# Interpolations.interpolate((coords.X*ufac"cm",coords.Y*ufac"cm"), M, Gridded(Linear()) )

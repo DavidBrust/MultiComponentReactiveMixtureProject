@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.40
+# v0.19.43
 
 using Markdown
 using InteractiveUtils
@@ -948,7 +948,6 @@ LocalResource(
 # ╠═bbb6d613-1592-49ae-8929-12d10fa7c39c
 # ╠═8afe6a43-f0e0-4849-8405-9c4f72bafcd4
 # ╠═fc594076-cb09-4cc1-a447-ed7b24dc38d7
-# ╠═683e30d1-c014-46ea-8f04-52948d44ebf2
 # ╠═4f67dc46-b5b6-4648-a526-77992c22020f
 # ╟─14d41f40-059c-4826-92c1-d3a42260385f
 # ╟─9b287a3a-bce9-483e-a788-ada05c5b46bd

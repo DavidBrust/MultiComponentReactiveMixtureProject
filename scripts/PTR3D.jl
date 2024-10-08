@@ -103,6 +103,9 @@ function init_DF(data)
 	end
 	df[:, "OUT_DELTA_P"] = Float64[] # ip = ng + 1; Pa
 	df[:, "OUT_T_GAS"] = Float64[] # iT = ip + 1; °C
+
+	df[:, "T_AVG_UC"] = Float64[] # iT_UC = iT + 1; °C
+	df[:, "T_AVG_LC"] = Float64[] # iT_LC = iT + 2; °C
 	
 
 	return df
@@ -145,20 +148,28 @@ function writeOutput_ToDF!(sol, sys, grid, data, df)
 	# Dp = Avg_inb[ip] - Avg_outb[ip]
 	# df[ri, iOut+ip] = Dp
 	
-
 	Tout = Avg_outb[iT] - 273.15 # convert K to °C
 	df[ri, iOut+iT] = Tout
+
+	# temperature in inlet plane (inflow boundary), corresponds to upper chamber
+	Tin = Avg_inb[iT] - 273.15 # convert K to °C
+	df[ri, iOut+iT+1] = Tin
+
+	df[ri, iOut+iT+2] = Tout
 
 	return nothing
 end
 
 function SetupInputData(kinpar;
 						dim=3,
-						nflowin_H2=3.7*ufac"mol/hr",
-						nflowin_CO2=3.7*ufac"mol/hr",
-						nom_flux=70.0*ufac"kW/m^2",
+						nflowin_H2=3.287*ufac"mol/hr",
+
+						nflowin_CO2=1.566*ufac"mol/hr",
+						# nflowin_CO2=3.287*ufac"mol/hr",
+						
+						nom_flux=57.87*ufac"kW/m^2",
 						T_gas_in=273.15 + 25,
-						p=1.0*ufac"bar",
+						p=1.638*ufac"bar",
 						mcat=3000*ufac"mg",
 	)
 
@@ -175,6 +186,7 @@ function SetupInputData(kinpar;
 		dim = dim,
 		# kinpar = XuFroment,
 		kinpar = kinpar,
+		# is_reactive = false,
 		constant_irradiation_flux_bc = false,
 		# is_reactive = false,
 		nom_flux = nom_flux,
@@ -253,17 +265,39 @@ function run_stationary(solt,grid,sys,data)
     return sol_steadystate,grid,sys,data
 end
 
-# function runtests()
-#     solt,grid,sys,data = run_transient()
 
-#     solss,grid,sys,data = run_stationary(solt,grid,sys,data)
-#     # @test isapprox(minimum(solss[data.iT,:]), 410.60941331349306) # 100 suns
-#     @test isapprox(minimum(solss[data.iT,:]), 382.19131101873813) # 70 suns
-# end
 
 function run(data)
-    solt,grid,sys,data = run_transient(data)
+
+	
+	df = init_DF(data)
+	writeInput_ToDF!(data, df)
+
+	
+    solt,grid,sys,data = run_transient(data, H_cat=5ufac"mm")
+	# solt,grid,sys,data = run_transient(data, H_cat=0.5ufac"mm")
+
     solss,grid,sys,data = run_stationary(solt,grid,sys,data)
+
+	writeOutput_ToDF!(solss, sys, grid, data, df)
+
+	t = now()
+    tm = "$(hour(t))_$(minute(t))_$(second(t))"
+    	path = "../data/out/$(Date(t))/$(tm)/"
+    try
+        mkpath(path)
+    catch e
+        println("Directory " * path * " already exists.")
+    end
+	transform(col,val::Float64) = @sprintf("%e", val)
+	# df_ = df[:, Cols(:IN_MOLAR_F_CO2, :IN_MOLAR_F_H2, :IN_IRR_FLUX, 10:17)]
+	# DEBUG: Output avg. T in upper and lower chambers
+	df_ = df[:, Cols(:IN_MOLAR_F_CO2, :IN_MOLAR_F_H2, :IN_IRR_FLUX, 10:17, :T_AVG_UC, :T_AVG_LC)]
+
+	CSV.write("$(path)/$(tm)_PTR_DATA_INTERPOL.csv", df_, transform=transform)
+
+	dim = 3
+	nref = 0
 
     # grid_aspect, inb,irrb,outb,sb,catr = PTR_grid_boundaries_regions(dim;nref=nref,H=0.5*400,W=16*100);
 	grid_aspect = PTR_grid_boundaries_regions!(dim,data;nref=nref,ufac=ufac"m",H=2.0,W=16.0);

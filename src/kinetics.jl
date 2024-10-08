@@ -132,6 +132,47 @@ const XuFroment = KinData{}(;
     ΔHj = Dict( gnames .=> [-70.65, -82.9, -38.28, 88.68, 0.0, 0.0]*ufac"kJ/mol")
 )
 
+# Kinetics for Ru-STO catalyst based on XuFroment (Ni)
+# Modified paramters from fit to experimental data: 
+# - k1_ref, Eact1
+# - k2_ref, Eact2
+const RuSTO_FPC = KinData{}(;
+    ng = ng,
+    gnames = gnames,
+    Fluids = [CO,H2,CH4,H2O,CO2,N2],
+    gn = gn,
+    gni = Dict(value => key for (key, value) in gn),    
+    nr = nr,
+    rnames = rnames,
+    rn = rn,
+    rni = Dict(value => key for (key, value) in rn),
+
+    nuij = vcat(
+        [1, 3, -1, -1, 0, 0], #R1 : CH4 + H2O -> 3 H2 + CO
+        [-1, 1, 0, -1, 1, 0], #R2 : CO + H2O -> CO2 + H2
+        [0, 4, -1, -2, 1, 0], #R3 : CH4 + 2 H2O -> 4 H2 + CO2
+        
+    ),
+    # # values of reaction rate constants @ Tref
+    # ki_ref = Dict( rnames .=>  log.(1.225*[1.842e-4, 7.558, 2.193e-5]) ), # Xu Froment
+    ki_ref = Dict( rnames .=>  log.(1.225*[9.35e-5, 38.20, 2.193e-5]) ), # Parameter Fit
+    # ki_ref = Dict( rnames .=>  log.(1.225*[1.842e-4, 7.558, 2.193e-5]) ), # TEST / DEBUG
+    Tki_ref = Dict( rnames .=> [648.0, 648.0, 648.0]*ufac"K"),
+    # # Activation energies
+    # Ei = Dict( rnames .=> [240.1, 67.13, 243.9]*ufac"kJ/mol"), # Xu Froment
+    Ei = Dict( rnames .=> [99.93, 92.57, 243.9]*ufac"kJ/mol"), # Parameter Fit
+    # Ei = Dict( rnames .=> [240.1, 67.13, 243.9]*ufac"kJ/mol"), # TEST / DEBUG
+    # # equilibrium constants Ki
+    Ki_ref = Dict( rnames .=> [1.913e-4, 10.18, 1.947e-3]),
+    TKi_ref = Dict( rnames .=> [693.0, 693.0, 693.0]*ufac"K"),
+    # # reaction enthalpies
+    ΔHi = Dict( rnames .=> [220.01, -37.92, 182.09]*ufac"kJ/mol"),
+    # values of gas phase species adsorption coefficients @ Tref
+    Kj_ref = Dict( gnames .=> [40.91, 0.0296, 0.1791, 0.4152, 0.0, 0.0]),
+    TKj_ref = Dict( gnames .=> [648.0, 648.0, 823.0, 823.0, 823.0, 823.0]*ufac"K" ),
+    ΔHj = Dict( gnames .=> [-70.65, -82.9, -38.28, 88.68, 0.0, 0.0]*ufac"kJ/mol")
+)
+
 
 const Wolf_rWGS = KinData{}(;
     nr = 1,
@@ -269,7 +310,7 @@ function ri(data,T,p_)
     pexp .= zero(eltype(p_))
     unitc=  one(eltype(p_))
     # atol = one(eltype(p_))*1.0e-9
-    if kinpar == XuFroment
+    if kinpar == XuFroment || kinpar == RuSTO_FPC
         p ./= ufac"bar"
         unitc *=ufac"mol/(hr*g)"
         # if @inbounds @views abs(p[n[:H2]]) > atol

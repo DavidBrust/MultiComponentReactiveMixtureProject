@@ -13,7 +13,7 @@ export dynvisc_mix, heatcap_mix, molarweight_mix, dynvisc_thermcond_mix, enthalp
 export Air, N2, O2, Ar, H2, CO2, CO, H2O, CH4, He, Kr
 
 include("kinetics.jl")
-export KinData, ri, S3P, XuFroment, Riedel_rWGS, Wolf_rWGS
+export KinData, ri, S3P, XuFroment, Riedel_rWGS, Wolf_rWGS, RuSTO_FPC
 export nreac
 
 include("darcy_maxwell_stefan_model.jl")
