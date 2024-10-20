@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.46
+# v0.19.43
 
 using Markdown
 using InteractiveUtils
@@ -89,7 +89,8 @@ function ThermalDemo(dim; nref=nref, W_block=1.0ufac"cm", W_window=12.0ufac"cm",
 		X0 = [0.0,0.5,0.0,0.0,0.5,0.0],
 		#X0 = [0.0,0.0,0.0,0.0,0.0,1.0],
 
-		perm = [0.0,1.0,1.0]*1.23e-10*ufac"m^2",
+		#perm = [0.0,1.0,1.0]*1.23e-10*ufac"m^2",
+		perm = [0.0,1.0,1.0]*4.0e-12*ufac"m^2",
 		poros = [0.0,0.33,0.33],
 				
 		#p = 3.5*ufac"bar",
@@ -120,7 +121,8 @@ function ThermalDemo(dim; nref=nref, W_block=1.0ufac"cm", W_window=12.0ufac"cm",
 		)
 	end
 	control.handle_exceptions=true
-	control.Δu_opt=100
+	#control.Δu_opt=100
+	control.Δu_opt=1000
 	control.Δt_max=100
 
 	solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="aen",log=true)	
@@ -147,6 +149,9 @@ let
 	end
 end
   ╠═╡ =#
+
+# ╔═╡ b00cbc94-071b-4ac5-9af7-0bbfab69e84f
+data
 
 # ╔═╡ 927dccb1-832b-4e83-a011-0efa1b3e9ffb
 md"""
@@ -219,12 +224,25 @@ end
 # ╔═╡ e148f083-4d4e-4fe8-960d-bccd00689c9b
 sol_ss = run_ss(solt,sys);
 
+# ╔═╡ 8f3b3a6e-a9f3-4a40-9714-cba7c699ab24
+let
+	(;ip,p) = data
+
+	psol = sol_ss[ip,:]
+
+	(maximum(psol)-p) / ufac"mbar"
+	
+end
+
 # ╔═╡ 3207839f-48a9-49b6-9861-e5e74bc593a4
 # ╠═╡ skip_as_script = true
 #=╠═╡
 MultiComponentReactiveMixtureProject.Print_summary_ext(sol_ss,sys,data)
 #MultiComponentReactiveMixtureProject.Print_summary_ext(t,solt,sys,data)
   ╠═╡ =#
+
+# ╔═╡ c8f0887c-f42a-41a9-925b-18a08189067e
+MultiComponentReactiveMixtureProject.BoundaryFluxes(sol_ss,sys,data)	
 
 # ╔═╡ f40d7865-1649-4445-86eb-48e2a1a8817b
 HeatFluxes_inner = HeatFluxes_EB_I_inner(sol_ss,sys,data)
@@ -824,7 +842,9 @@ crits = criteria_local_th_equil()
 # ╠═4e05ab31-7729-4a4b-9c14-145118477715
 # ╠═a1ea393e-f123-4ad0-affa-885db325cfd5
 # ╠═415f6fa7-d5b5-40a2-806e-3d8a61541c2e
+# ╠═8f3b3a6e-a9f3-4a40-9714-cba7c699ab24
 # ╠═480e4754-c97a-42af-805d-4eac871f4919
+# ╠═b00cbc94-071b-4ac5-9af7-0bbfab69e84f
 # ╟─927dccb1-832b-4e83-a011-0efa1b3e9ffb
 # ╠═fac7a69d-5d65-43ca-9bf3-7d9d0c9f2583
 # ╠═b42ce84e-9f97-488a-9311-24c809437623
@@ -834,6 +854,7 @@ crits = criteria_local_th_equil()
 # ╠═70cdb28c-4b23-4ea4-8cd4-5eb97a3b930a
 # ╠═e148f083-4d4e-4fe8-960d-bccd00689c9b
 # ╠═3207839f-48a9-49b6-9861-e5e74bc593a4
+# ╠═c8f0887c-f42a-41a9-925b-18a08189067e
 # ╠═f40d7865-1649-4445-86eb-48e2a1a8817b
 # ╠═e6828f65-fc35-4e2e-aedd-324ccfe4a22c
 # ╠═f99203e7-e53e-4109-b6ff-7fb87d290324

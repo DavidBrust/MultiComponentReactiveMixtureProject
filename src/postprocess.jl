@@ -2,6 +2,18 @@ using LinearAlgebra
 using ExtendableGrids
 
 # G0_bot, IR/vis : surface radiosities of glass underside
+function flux_incoming_lamp_on_catalyst_layer(f,u,bnode,data)
+    (;iT,top_radiation_boundaries)=data
+    # if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
+    if bnode.region in top_radiation_boundaries        
+
+        G1_bot_vis, _ = PTR_radiosity_window(f,u,bnode,data)
+
+        f[iT] = G1_bot_vis
+    end
+end
+
+# G0_bot, IR/vis : surface radiosities of glass underside
 function flux_window_underside(f,u,bnode,data)
     (;iT,top_radiation_boundaries)=data
     # if bnode.region==Γ_top_cat || bnode.region==Γ_top_frit
@@ -311,6 +323,12 @@ function fcn_identity(f,u,bnode,data)
     end
     f[ip] = u[ip]
     f[iT] = u[iT]
+end
+
+function irradiation_power_input(sol,sys,grid,data)
+    (;top_radiation_boundaries) = data
+    Irr_Power = integrate(sys,flux_incoming_lamp_on_catalyst_layer,sol; boundary=true)[:,top_radiation_boundaries] 
+    return sum(Irr_Power)
 end
 
 function avg_in_out(sol,sys,grid,data)

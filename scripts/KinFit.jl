@@ -81,17 +81,17 @@ function init_DF(data)
 	df = DataFrame()
 
 	for i=1:ng		
-		df[:, "IN_MOLAR_F_"*String(gn[i])] = Float64[] # mol/s
+		df[:, "IN_MOLAR_F_"*String(gn[i])] = Float64[] # mol/hr
 	end
-	df[:, "IN_P_GAS"] = Float64[] # ip = ng + 1; Pa
+	df[:, "IN_P_GAS"] = Float64[] # ip = ng + 1; bara
 	df[:, "IN_T_GAS"] = Float64[] # iT = ip + 1; °C
 	
-	df[:, "IN_IRR_FLUX"] = Float64[] # iIrr = iT + 1; W/m2
+	df[:, "IN_IRR_FLUX"] = Float64[] # iIrr = iT + 1; kW/m2
 
 	for i=1:ng		
-		df[:, "OUT_MOLAR_F_"*String(gn[i])] = Float64[] # mol/s
+		df[:, "OUT_MOLAR_F_"*String(gn[i])] = Float64[] # mol/hr
 	end
-	df[:, "OUT_DELTA_P"] = Float64[] # ip = ng + 1; Pa
+	df[:, "OUT_P_GAS"] = Float64[] # ip = ng + 1; bara
 	df[:, "OUT_T_GAS"] = Float64[] # iT = ip + 1; °C
 
 	df[:, "T_AVG_UC"] = Float64[] # iT_UC = iT + 1; °C
@@ -107,14 +107,14 @@ function writeInput_ToDF!(data, df)
 	push!(df, zeros(Float64, ncol(df)))
 	ri = nrow(df)
 	for i=1:ng
-		df[ri, i] = nflowin * X0[i]
+		df[ri, i] = nflowin * X0[i] / ufac"mol/hr"
 	end
 	# in simulation, pressure at outlet is specified via p
 	iOut = iT + 1 # corresponds to iIrr (last input variable)
-	df[ri, iOut+ip] = p
+	df[ri, iOut+ip] = p / ufac"bar"
 	# df[ri, ip] = p
 	df[ri, iT] = T_gas_in - 273.15 # convert K to °C
-	df[ri, iT+1] = nom_flux
+	df[ri, iT+1] = nom_flux / ufac"kW/m^2"
 
 	return nothing
 end
@@ -127,14 +127,14 @@ function writeOutput_ToDF!(sol, sys, grid, data, df)
 
 	ri = nrow(df)
 	for i=1:ng
-		df[ri, iOut+i] = -nflowout[i]/m[i]
+		df[ri, iOut+i] = -nflowout[i]/m[i] / ufac"mol/hr"
 	end
 
 	(Avg_inb, Avg_outb) = MultiComponentReactiveMixtureProject.avg_in_out(sol,sys,grid,data)
 
 	# in simulation, pressure at outlet is specified via p and known beforehand
 	# the pressure at the inlet boundary results from simulationinpu
-	df[ri, ip] = Avg_inb[ip]
+	df[ri, ip] = Avg_inb[ip] / ufac"bar"
 	# Dp = Avg_inb[ip] - Avg_outb[ip]
 	# df[ri, iOut+ip] = Dp
 	
@@ -198,7 +198,7 @@ function SetupInputData(kinpar;
 
 end
 
-function run_transient(data; times=[0,15.0], nref=0, ufac=ufac"cm", W_block=3.0ufac, W_window=12.0ufac, H_cat=0.5ufac, efix=1.0e-2*ufac,)
+function run_transient(data; times=[0,15.0], nref=0, ufac=ufac"cm", W_block=3.0ufac, W_window=12.0ufac, H_cat=0.5ufac, efix=1.0e-2*ufac,handle_exceptions=false)
 
 	(;dim) = data
 	grid = PTR_grid_boundaries_regions!(dim,data; ufac=ufac, nref=nref, W_block=W_block, W_window=W_window, H_cat=H_cat, efix=efix)
@@ -225,7 +225,8 @@ function run_transient(data; times=[0,15.0], nref=0, ufac=ufac"cm", W_block=3.0u
         vb = "aen"
 	end
     # control.handle_exceptions=true
-    control.handle_exceptions=false
+    # control.handle_exceptions=false
+    control.handle_exceptions=handle_exceptions
 	control.Δu_opt=40
     # control.Δu_opt=10
 	control.Δt_max=1
@@ -258,7 +259,7 @@ function run_stationary(solt,grid,sys,data)
     return sol_steadystate,grid,sys,data
 end
 
-function simulate_OF(kinpar, PCData, nti, obs_dict, obs_sel; dim=2, writeData=false)
+function simulate_OF(kinpar, PCData, nti, obs_dict, obs_sel; dim=2, writeData=false, handle_exceptions=false)
 
 
     n_obs_per_row = size(obs_sel,1)
@@ -267,6 +268,10 @@ function simulate_OF(kinpar, PCData, nti, obs_dict, obs_sel; dim=2, writeData=fa
     
     OF_data = Vector{Float64}(undef,n_data)
     OF_calc = Vector{Float64}(undef,n_data)
+
+    if writeData
+        df = init_DF(ReactorData())        
+    end
 
     for (i,row) in enumerate(nti)
         data = SetupInputData(
@@ -280,33 +285,20 @@ function simulate_OF(kinpar, PCData, nti, obs_dict, obs_sel; dim=2, writeData=fa
             # p=1.0*ufac"bar",
             mcat=PCData.m_cat,
         )
+
+        # if writeData
+        #     writeInput_ToDF!(data, df)
+        # end
     
-        if writeData
-            df = init_DF(data)
-	        writeInput_ToDF!(data, df)
-        end
+
         
-        # solt,grid,sys,data = run_transient(data, W_block=0.0ufac"cm", W_window=12.0ufac"cm", H_cat=0.05ufac"cm")
-        
-        solt,grid,sys,data = run_transient(data, W_block=PCData.W_block, W_window=PCData.W_window, H_cat=PCData.H_cat)
+        solt,grid,sys,data = run_transient(data, W_block=PCData.W_block, W_window=PCData.W_window, H_cat=PCData.H_cat, handle_exceptions=handle_exceptions)
         
         solss,grid,sys,data = run_stationary(solt,grid,sys,data)
 
         if writeData
+            writeInput_ToDF!(data, df)
             writeOutput_ToDF!(solss, sys, grid, data, df)
-            t = now()
-            tm = "$(hour(t))_$(minute(t))_$(second(t))"
-                path = "../data/out/$(Date(t))/$(tm)/"
-            try
-                mkpath(path)
-            catch e
-                println("Directory " * path * " already exists.")
-            end
-            transform(col,val::Float64) = @sprintf("%e", val)
-            
-            df_ = df[:, Cols(:IN_MOLAR_F_CO2, :IN_MOLAR_F_H2, :IN_IRR_FLUX, 10:17, :T_AVG_UC, :T_AVG_LC)]
-
-            CSV.write("$(path)/$(tm)_PTR_DATA_INTERPOL.csv", df_, transform=transform)
 
             if dim == 3
                 grid_aspect = PTR_grid_boundaries_regions!(dim,data;nref=0,ufac=ufac"m",H=2.0,W=16.0);
@@ -327,6 +319,33 @@ function simulate_OF(kinpar, PCData, nti, obs_dict, obs_sel; dim=2, writeData=fa
         end
 
     end
+
+    if writeData
+        t = now()
+        tm = "$(hour(t))_$(minute(t))_$(second(t))"
+            path = "../data/out/$(Date(t))/$(tm)/"
+        try
+            mkpath(path)
+        catch e
+            println("Directory " * path * " already exists.")
+        end
+        transform(col,val::Float64) = @sprintf("%.6f", val)
+        
+        df_ = df[:, Cols(
+            :IN_MOLAR_F_H2,
+            :IN_MOLAR_F_CO2,
+            :IN_IRR_FLUX,
+            :OUT_P_GAS,
+            :OUT_MOLAR_F_H2,
+            :OUT_MOLAR_F_CO2,
+            :OUT_MOLAR_F_CO,
+            :OUT_MOLAR_F_CH4,
+            :T_AVG_UC,
+            :T_AVG_LC
+            )]
+
+        CSV.write("$(path)/$(tm)_PTR_CASES.csv", df_, transform=transform, delim=';')
+    end
     return OF_data, OF_calc
 end
 
@@ -341,16 +360,23 @@ function create_plot(fit_p;
     fitpar_bak=fitpar_bak,
     obs_dict=obs_dict,
     df=load_data(),
+    data_row_sel=collect(1:size(df,1)),
     PCData=PCData23,
     dim=2,
-    writeData=false
+    writeData=false,
+    Ann=true
     )
 
     # df = load_data()
     
-    nti = Tables.namedtupleiterator(df) # whole data set
+    # nti = Tables.namedtupleiterator(df) # whole data set
+    # nti = Tables.namedtupleiterator(df[[1,2,16:22...],:])
+    nti = Tables.namedtupleiterator(df[data_row_sel,:])
+    print("Datapoints in Parity Plot: ")
+    @show data_row_sel
+    
     # DEBUG: first row only
-    # nti = Tables.namedtupleiterator(df[1:1,:]) 
+    # nti = Tables.namedtupleiterator(df[1:1,:])
 
     n_rows = size(nti)[1]
 
@@ -359,7 +385,7 @@ function create_plot(fit_p;
 
     # Simulate with XuFroment
     # reset_kinpar!()
-    OF_data_XF, OF_calc_XF = simulate_OF(kinpar, PCData, nti, obs_dict, obs_sel, dim=dim, writeData=writeData)
+    OF_data_XF, OF_calc_XF = simulate_OF(kinpar, PCData, nti, obs_dict, obs_sel, dim=dim, writeData=writeData, handle_exceptions=true)
 
     # Simulate with Kinetic fit
     # update_kinpar!(fitpar, kinpar, fitpar_dict, fitpar_sel)
@@ -381,20 +407,24 @@ function create_plot(fit_p;
 
 
 
-    OF_data_FIT, OF_calc_FIT = simulate_OF(kinpar, PCData, nti, obs_dict, obs_sel, dim=dim, writeData=writeData)
+    OF_data_FIT, OF_calc_FIT = simulate_OF(kinpar, PCData, nti, obs_dict, obs_sel, dim=dim, writeData=writeData, handle_exceptions=true)
     SSE = sum(abs2, OF_data_FIT .- OF_calc_FIT) # residual: sum of squared errors
-
+    sa = Ann ? [Plots.text(string(row.ID)*" ", 8, :right) for row in nti] : nothing
     splots = []
 
     # Genertate parity plot: CO
     if :CO in obs_sel
         iCO = [(i-1)*n_obs_per_row+1 for i in 1:n_rows]
+        # sa = Ann ? [Plots.text(string(id)*" ", 8, :right) for id in 1:n_rows] : nothing
+        
+
         p1 = plot(title="CO", xlabel="Exp. flow / mol/hr", ylabel="Calc. flow / mol/hr", aspect_ratio=:equal)
         
         ulim = maximum(vcat(OF_data_XF[iCO],OF_calc_XF[iCO],OF_data_FIT[iCO], OF_calc_FIT[iCO]))
         plot!(p1, [0,ulim], [0,ulim], c=:black, label=:none)
         scatter!(p1, OF_data_XF[iCO], OF_calc_XF[iCO], label="XuFroment", c=1,)
-        scatter!(p1, OF_data_FIT[iCO], OF_calc_FIT[iCO], label="Kinetic fit", c=2, m=:cross)
+        #scatter!(p1, OF_data_FIT[iCO], OF_calc_FIT[iCO], label="Kinetic fit", c=2, m=:cross)
+        scatter!(p1, OF_data_FIT[iCO], OF_calc_FIT[iCO], label="Kinetic fit", c=2, m=:cross, series_annotations=sa)
 
         push!(splots, p1)
     end
@@ -407,7 +437,7 @@ function create_plot(fit_p;
         ulim = maximum(vcat(OF_data_XF[iCH4],OF_calc_XF[iCH4],OF_data_FIT[iCH4], OF_calc_FIT[iCH4]))
         plot!(p2, [0,ulim], [0,ulim], c=:black, label=:none)
         scatter!(p2, OF_data_XF[iCH4], OF_calc_XF[iCH4], label="XuFroment", c=1)
-        scatter!(p2, OF_data_FIT[iCH4], OF_calc_FIT[iCH4], label="Kinetic fit", c=2, m=:cross)
+        scatter!(p2, OF_data_FIT[iCH4], OF_calc_FIT[iCH4], label="Kinetic fit", c=2, m=:cross, series_annotations=sa)
 
         annotate!(p2, (.65, .4),  Plots.text("SSE: "*string(round(SSE,sigdigits=4)), :left, 8, "Helvetica Bold") )
         for (i,fp) in enumerate(keys(KinFit.fitpar_dict))
@@ -443,7 +473,7 @@ function create_plot(fit_p;
         ulim = maximum(OF_data_XF[iH2])
         plot!(p4, [0,ulim], [0,ulim], c=:black, label=:none)
         scatter!(p4, OF_data_XF[iH2], OF_calc_XF[iH2], label="XuFroment", c=1)
-        scatter!(p4, OF_data_FIT[iH2], OF_calc_FIT[iH2], label="Kinetic fit", c=2, m=:cross)
+        scatter!(p4, OF_data_FIT[iH2], OF_calc_FIT[iH2], label="Kinetic fit", c=2, m=:cross, series_annotations=sa)
         push!(splots, p4)
     end
 
@@ -575,10 +605,17 @@ function run(
 
         # 2024 data
         path="C:\\Users\\brus_dv\\Promotion_FPC\\ReactorDatabase\\Evaluation_FPC_System_0624\\Kinetics_fit\\Exp_data\\FPC_System_24\\",
-        fn="FPC24data.csv"
+        # remove outlier data points from list
+        # fn="FPC24data_reduced.csv"
+
+        # include data points from 06. & 07.06.
+        fn="FPC24data_4days.csv"
+        
     )
-    data_row_sel=collect(1:size(df,1)) # whole data set
-    # data_row_sel=[2,4,9,11]
+    # data_row_sel=collect(1:size(df,1)) # whole data set
+    data_row_sel=[1,2,16:22...]
+    # data_row_sel=[16]
+    @show data_row_sel
 
     # switch to select what to do
     # :parfit = only fit, no plot, return fit results
@@ -587,9 +624,12 @@ function run(
     
     # mode = :parfit_plot
     mode = :plot
+    # mode = :parfit
 
+    # dim = 2
     dim = 3
-    writeData = true
+    # writeData = true
+    writeData = false
 
     obs_sel=[:CO, :CH4]
     # obs_sel=[:CO]
@@ -600,23 +640,27 @@ function run(
     # R3 : CH4 + 2 H2O <-> 4 H2 + CO2
 
     fitpar_sel=[
-        :k1ref
+        # :Eact1, :k1ref, :Eact3, :k3ref
     ]
 
     initial_guess = [
-        (:k1ref, -8.1527020),
-        (:Eact1, 99931.50063),
-        (:k2ref, 3.845787845),
-        (:Eact2, 92565.21822),
-        (:k3ref, -11.041),
+        (:k1ref, -8.153),
+        (:Eact1, 99930.0),
+        # (:k2ref, 3.845787845),
+        # (:Eact2, 92565.21822),
+        (:k3ref, -11.04),
+        # (:Eact3, 177505.0715),
+
     ]
 
-    # initial_guess = nothing    
+    # initial_guess = nothing
+    @show mode    
 
     if mode == :parfit || (mode == :parfit_plot)
         println("Branch :parfit || :parfit_plot")
         @show fitpar_sel
         @show initial_guess
+        @show obs_sel
 
         res = run_optim(
             initial_guess=initial_guess,
@@ -631,12 +675,14 @@ function run(
             println("Branch :parfit_plot")
 
             fit_p = Optim.minimizer(res)
+            @show fit_p
 
             p = create_plot(fit_p,
                     initial_guess=initial_guess,
                     fitpar_sel=fitpar_sel,
                     df=df,
-                    PCData=data
+                    PCData=data,
+                    data_row_sel=data_row_sel,
                 )
         else
             p = nothing
@@ -651,6 +697,7 @@ function run(
                 fitpar_sel=fitpar_sel,
                 df=df,
                 PCData=data,
+                data_row_sel=data_row_sel,
                 dim=dim,
                 writeData=writeData
             )

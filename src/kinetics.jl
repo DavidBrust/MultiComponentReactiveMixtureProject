@@ -134,17 +134,22 @@ const XuFroment = KinData{}(;
 
 # Kinetics for Ru-STO catalyst based on XuFroment (Ni)
 # Modified paramters from fit to experimental data: 
-# - k1_ref, Eact1
-# - k2_ref, Eact2
+# R3 omitted: for given temperature range of interest, R2 >> R3
+# - k1_ref, Eact1 -> obtained from fit (table 15)
+# - k2_ref, Eact2 -> original values from XuFroment (1989)
 const RuSTO_FPC = KinData{}(;
     ng = ng,
     gnames = gnames,
     Fluids = [CO,H2,CH4,H2O,CO2,N2],
     gn = gn,
     gni = Dict(value => key for (key, value) in gn),    
+    # nr = 2,
     nr = nr,
+    # rnames = [:R1, :R2],
     rnames = rnames,
+    # rn = Dict(1:2 .=> [:R1, :R2]),
     rn = rn,
+    # rni = Dict(value => key for (key, value) in Dict(1:2 .=> [:R1, :R2])),
     rni = Dict(value => key for (key, value) in rn),
 
     nuij = vcat(
@@ -155,18 +160,24 @@ const RuSTO_FPC = KinData{}(;
     ),
     # # values of reaction rate constants @ Tref
     # ki_ref = Dict( rnames .=>  log.(1.225*[1.842e-4, 7.558, 2.193e-5]) ), # Xu Froment
-    ki_ref = Dict( rnames .=>  log.(1.225*[9.35e-5, 38.20, 2.193e-5]) ), # Parameter Fit
-    # ki_ref = Dict( rnames .=>  log.(1.225*[1.842e-4, 7.558, 2.193e-5]) ), # TEST / DEBUG
-    Tki_ref = Dict( rnames .=> [648.0, 648.0, 648.0]*ufac"K"),
+    ki_ref = Dict( rnames .=>  log.(1.225*[0.000234996, 7.558, 1.30994E-05]) ), # TEST / DEBUG Table 15
+    # ki_ref = Dict( rnames .=>  log.(1.225*[0.000432325, 38.20043874, 6.06105E-08]) ), # TEST / DEBUG Table 14
+    # ki_ref = Dict( rnames .=>  log.(1.225*[0.00499, 7.558, 1.0e-15]) ), # Parameter Fit
+    # Tki_ref = Dict( [:R1, :R2] .=> [648.0, 648.0]*ufac"K"),
     # # Activation energies
     # Ei = Dict( rnames .=> [240.1, 67.13, 243.9]*ufac"kJ/mol"), # Xu Froment
-    Ei = Dict( rnames .=> [99.93, 92.57, 243.9]*ufac"kJ/mol"), # Parameter Fit
-    # Ei = Dict( rnames .=> [240.1, 67.13, 243.9]*ufac"kJ/mol"), # TEST / DEBUG
+    Ei = Dict( rnames .=> [99.93, 67.13, 243.9]*ufac"kJ/mol"), # TEST / DEBUG Table 15
+    # Ei = Dict( rnames .=> [142.168, 92.565, 268.109]*ufac"kJ/mol"), # TEST / DEBUG Table 14
+    # Ei = Dict( [:R1, :R2] .=> [84.48, 67.13]*ufac"kJ/mol"), # Parameter Fit
+    
     # # equilibrium constants Ki
+    # Ki_ref = Dict( [:R1, :R2] .=> [1.913e-4, 10.18]),
     Ki_ref = Dict( rnames .=> [1.913e-4, 10.18, 1.947e-3]),
-    TKi_ref = Dict( rnames .=> [693.0, 693.0, 693.0]*ufac"K"),
+    # TKi_ref = Dict( [:R1, :R2] .=> [693.0, 693.0]*ufac"K"),
+    Tki_ref = Dict( rnames .=> [648.0, 648.0, 648.0]*ufac"K"),
     # # reaction enthalpies
-    ΔHi = Dict( rnames .=> [220.01, -37.92, 182.09]*ufac"kJ/mol"),
+    # ΔHi = Dict( [:R1, :R2] .=> [220.01, -37.92]*ufac"kJ/mol"),
+    ΔHi = Dict( [:R1, :R2, :R3] .=> [220.01, -37.92, 182.09]*ufac"kJ/mol"),
     # values of gas phase species adsorption coefficients @ Tref
     Kj_ref = Dict( gnames .=> [40.91, 0.0296, 0.1791, 0.4152, 0.0, 0.0]),
     TKj_ref = Dict( gnames .=> [648.0, 648.0, 823.0, 823.0, 823.0, 823.0]*ufac"K" ),
@@ -310,7 +321,7 @@ function ri(data,T,p_)
     pexp .= zero(eltype(p_))
     unitc=  one(eltype(p_))
     # atol = one(eltype(p_))*1.0e-9
-    if kinpar == XuFroment || kinpar == RuSTO_FPC
+    if kinpar == XuFroment 
         p ./= ufac"bar"
         unitc *=ufac"mol/(hr*g)"
         # if @inbounds @views abs(p[n[:H2]]) > atol
@@ -319,6 +330,13 @@ function ri(data,T,p_)
             pexp[3] = @inbounds 1/p[n[:H2]]^3.5*(p[n[:CH4]]*p[n[:H2O]]^2-p[n[:H2]]^4*p[n[:CO2]]/Ki_[r[:R3]])
             pexp ./= @inline DEN(data,T,p)^2
         # end
+
+    elseif kinpar == RuSTO_FPC
+        p ./= ufac"bar"
+        unitc *=ufac"mol/(hr*g)"
+            pexp[1] = @inbounds 1/p[n[:H2]]^2.5*(p[n[:CH4]]*p[n[:H2O]]-p[n[:H2]]^3*p[n[:CO]]/Ki_[r[:R1]])    
+            pexp[2] = @inbounds 1/p[n[:H2]]*(p[n[:CO]]*p[n[:H2O]]-p[n[:H2]]*p[n[:CO2]]/Ki_[r[:R2]])
+            pexp ./= @inline DEN(data,T,p)^2
         
     elseif kinpar == S3P
         p ./= ufac"bar"
