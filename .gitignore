@@ -5,9 +5,10 @@ data/*
 !data/IrradiationFluxProfiles/*
 !data/IJHMT_3D.pvsm
 notebooks/experimental
-Manifest.toml
+# Manifest.toml
 docs/build
 docs/src/examples
 docs/src/notebooks
 .vscode/*
+*_auth_token.txt
 \#*
