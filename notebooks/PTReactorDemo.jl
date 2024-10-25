@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.40
+# v0.19.43
 
 using Markdown
 using InteractiveUtils
@@ -28,9 +28,9 @@ begin
 	using StaticArrays
 	using MultiComponentReactiveMixtureProject
 	
-	#GridVisualize.default_plotter!(PlutoVista)
-	GridVisualize.default_plotter!(CairoMakie)
-	CairoMakie.activate!(; type = "png")
+	GridVisualize.default_plotter!(PlutoVista)
+	#GridVisualize.default_plotter!(CairoMakie)
+	#CairoMakie.activate!(; type = "png")
 end;
 
 # ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
@@ -48,7 +48,7 @@ Select problem dimension: $(@bind dim Select([2,3], default=2))
 
 Select grid refinement level: $(@bind nref Select([0,1,2,3], default=0))
 
-Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=false))
+Check the box to __start the simulation__: $(@bind RunSim PlutoUI.CheckBox(default=true))
 """
 
 # ╔═╡ 4e05ab31-7729-4a4b-9c14-145118477715
@@ -66,7 +66,7 @@ end
 let
 	grid, inb,irrb,outb,sb,catr =  PTR_grid_boundaries_regions(dim, nref=nref)
 	if dim == 2
-		vis = GridVisualizer(resolution=(660,200))
+		vis = GridVisualizer(resolution=(660,200), zoom=4)
 		gridplot!(vis, grid, aspect=4.0, linewidth=0.5,)
 		#GridVisualize.save("2D_grid_cross_unblock.svg", vis)
 		reveal(vis)
@@ -296,7 +296,7 @@ Visualize distribution of magnitude of source term from $\partial p / \partial t
 """
 
 # ╔═╡ f798e27a-1d7f-40d0-9a36-e8f0f26899b6
-@bind t Slider(solt.t,show_value=true,default=solt.t[end])
+@bind t PlutoUI.Slider(solt.t,show_value=true,default=solt.t[end])
 
 # ╔═╡ b42ce84e-9f97-488a-9311-24c809437623
 sol = solt(t);
@@ -528,7 +528,7 @@ Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 # ╟─111b1b1f-51a5-4069-a365-a713c92b79f4
 # ╟─eb9dd385-c4be-42a2-8565-cf3cc9b2a078
 # ╟─107b390f-f9e6-4879-89a7-ec1373bafb52
-# ╠═5547b97e-5adf-48ec-9fb9-55d54c1503a4
+# ╟─5547b97e-5adf-48ec-9fb9-55d54c1503a4
 # ╠═f798e27a-1d7f-40d0-9a36-e8f0f26899b6
 # ╟─de69f808-2618-4add-b092-522a1d7e0bb7
 # ╟─bcaae53b-d58b-4e36-9b79-471b02acaea6

@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.40
+# v0.19.43
 
 using Markdown
 using InteractiveUtils
@@ -52,7 +52,8 @@ md"""
 
 # ╔═╡ 75fddee6-e057-4e91-a239-2033370b00fc
 md"""
-Reiterating the presented modeling equations from Section 2.3, the species mass balances are solved for the isothermal conditions for the ternary gas mixture in the Loschmidt diffusion cell:
+In the closed separation chamber, with no-flux boundary conditions on all boundaries, the convectice velocity vanishes $\vec v = 0$ throughout the domain. 
+Further, in this application there is no solid phase (gas phase only) such that we set the porosity $\phi=1$. For the isothermal conditions in the Loschmidt diffusion cell we get for the ternary gas mixture :
 ```math
 \begin{align}
     \partial_t \rho_i + \nabla \cdot \vec J_i  = 0,\qquad i=1,\dots,n.
@@ -62,9 +63,8 @@ Reiterating the presented modeling equations from Section 2.3, the species mass 
 
 # ╔═╡ 43148504-814c-46ec-985a-2d790e1265e4
 md"""
-To complete close the model, expressions for the diffusive species mass fluxes $J_i$ are introduced corresponding to equations in Section 2.3:
+To close the model, the Maxwell-Stefan formulation for the diffusive species mass fluxes $\vec J_i$ are introduced:
 
-Diffusive speceis mass fluxes $J_i$:
 ```math
 \begin{equation}
 \begin{split}
@@ -436,7 +436,7 @@ end
 # ╟─d14462c6-f63b-4a61-a1d9-4bcdb8e30e3d
 # ╟─38c3ddb4-b44a-4981-9000-0a1d303bd9ac
 # ╟─2628cb2d-c1ef-4ad0-8ee4-38e45f864838
-# ╟─75fddee6-e057-4e91-a239-2033370b00fc
+# ╠═75fddee6-e057-4e91-a239-2033370b00fc
 # ╟─43148504-814c-46ec-985a-2d790e1265e4
 # ╟─b3a6fe03-be46-4159-96ab-477a42d0eec5
 # ╟─c3dbf8b3-fc5f-44ff-be2c-ca4200f5bd6c

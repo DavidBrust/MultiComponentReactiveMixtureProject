@@ -30,7 +30,6 @@ Computational notebooks based on the ``Pluto.jl`` package are used to illustrate
 
 #### Notebooks
 
-- `documentation.jl`: documentation of model equations
 - `Thermodiffusion.jl`: demonstration of thermodiffusion (reproduces figures shown in the article)
 - `Uphill_Diff1D.jl`: illustration of transport against a concentration gradient (convection driven) in iso-thermal conditions
 - `Residual_MoleFrac1D.jl`: investigation of grid refinement on residual molar fractions

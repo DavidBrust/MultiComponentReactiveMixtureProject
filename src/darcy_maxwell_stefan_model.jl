@@ -9,75 +9,44 @@ Mixture mass averaged velocity is calculated from Darcy equation. The void fract
 
 ```math
 \begin{align}
-	\frac{\partial \epsilon \rho}{\partial t} + \nabla \cdot \left ( \rho \vec v \right)  &= 0\\
-	\vec v  &= -\frac{\kappa}{\mu} \vec \nabla p\\
+	\phi\frac{\partial \rho}{\partial t} + \nabla \cdot (\rho \langle\vec v\rangle) &= 0\\
+	 \langle \vec v \rangle &= - K/\eta  \nabla p 
 \end{align}
 ```
 
 ## Species mass transport
 ```math
 \begin{align}
-	\frac{\partial \epsilon \rho_i}{\partial t} + \nabla \cdot \left( \vec J_i + \rho_i \vec v \right ) - r_i(\varrho) &= 0 ~, \qquad i = 1 ... n \\
-		\frac{p}{RT}\frac{1}{M_{\text{mix}}} \left( \nabla x_i + (x_i-w_i) \frac{\nabla p}{p} \right) &= -\sum_{j=1 \atop j \neq i}^{n} \frac{w_j \vec J_i-w_i \vec J_j}{D_{ij} M_i M_j} \\
+		\phi \frac{\partial \rho_i}{\partial t} + \nabla \cdot ( \rho_i \langle \vec v \rangle + \langle \vec J_i \rangle ) - \phi r_i(\varrho) &= 0, \quad i=1\dots n  \\
+		 -\sum_{\frac{j=1}{j \neq i}}^{n} x_i x_j \langle D_{ij}^{\mathrm{eff}} \rangle^{-1} \left( \frac{\langle\vec J_i\rangle}{\rho_i} - \frac{\langle \vec J_j \rangle}{\rho_j} \right) &= \nabla x_i + (x_i-w_i) \nabla p/p \\
 		\sum_{i=1}^n x_i &= 1
 \end{align}
 ```
 
-where $\rho$ is the (total) mixture density, $\vec v$ is the mass-averaged (barycentric)  mixture velocity calculated with the Darcy equation,
+where $\rho$ is the (total) mixture density, \langle \vec v \rangle is the mass-average (barycentric) convective velocity (Darcy velocity), 
 $x_i$, $w_i$ and $M_i$ are the molar fraction, mass fraction and molar mass of species $i$ respectively,
-$\vec J_i$ is the __diffusive__ mass flux of species $i$ ($\frac{\text{kg}}{\text{m}^2 \text{s}}$)
+$\langle \vec J_i\rangle$ is the __diffusive__ mass flux of species $i$ ($\frac{\text{kg}}{\text{m}^2 \text{s}}$)
 and $r_i$ is the species mass volumetric source/sink ($\frac{\text{kg}}{\text{m}^3 \text{s}}$) of gas phase species $i$.
-The __convective__ mass flux of species $i$ is the product of the superficial mean velocity with the partial mass density $\rho_i \vec v$.
+The __convective__ mass flux of species $i$ is the product of the Darcy velocity with the partial mass density $\rho_i \langle \vec v \rangle$.
 """
 function DMS_Info_isothermal() end
 
 @doc raw"""
 ## Thermal energy transport
 
-Enthalpy equation for __gas phase only__.
-Considers convective-diffusive transport of thermal energy,
-including "thermal drift" from convective-diffusive species fluxes $\vec J_i + \rho_i \vec v$ carrying enthalpy.
 
-Formulation based on separation of "reference  enthalpy" and "thermal enthalpy".
-In the documentation.jl notebook see section "Derivation of Separated Formulation".
-```math
-\begin{align}
-\frac{\partial (\sum \rho_i h_i^{\text{th}}(T) )}{\partial t} + \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec J_i \right) + \vec q \right ) + \sum h_i^0 r_i - \frac{\partial p}{\partial t} &= 0
-\end{align}
-```
-
-```math
-\begin{align}
-\vec q = -\lambda \nabla T
-\end{align}
-```
-
-Enthalpy equation for __gas + solid phase__.
+Thermal energy equation expressed as enthalpy equation for __gas + solid phase__.
 It is formulated with effective transport parameters
-that are a consequence of the quasi-homogeneous phase approach.
-Formulation based on separation of "reference  enthalpy" and "thermal enthalpy".
-In the documentation.jl notebook see section "Derivation of Separated Formulation".
+that follow from the homogenization procedure.
+
 
 ```math
 \begin{align}
-\frac{\partial (\varepsilon \sum (\rho_i h_i^{\text{th}}(T))  + [1-\varepsilon] \rho_{\text s} h_{\text s}) )}{\partial t} +& \nabla \cdot \left( \sum h_i^{\text{th}}(T) \left( \rho_i \vec v + \vec J_i \right) + \vec q_{\text{eff}} \right ) \\
-+& \sum h_i^0 r_i - \varepsilon \frac{\partial p}{\partial t} = 0
-
+(1-\phi) \rho_{\mathrm s} c_{\mathrm s} \frac{\partial T}{\partial t} + \nabla \cdot ( c \rho T \langle \vec v \rangle) - \nabla \cdot \left( \langle \lambda^{\text{eff}} \rangle \nabla T \right) = \phi q \\
 \end{align}
 ```
 
-```math
-\begin{align}
-h_i &= h_i^0 + \int_{T_{\text{ref}}}^T c_{p,i}(\widetilde{T}) d\widetilde{T} \\
-&= h_i^0 + h_i^{\text{th}}(T)
-\end{align}
-```
-
-```math
-\begin{align}
-\vec q_{\text{eff}} = -\lambda_{\text{eff}} \nabla T
-\end{align}
-```
+with the density and heat capacity of the solid phase $\rho_{\mathrm s}$ and $c_{\mathrm s}$ and the mixture density and heat capacities in the gas phase $\rho = \sum_{i=1}^{n} \rho_i$ and $c=\sum_{i=1}^{n} w_i c_{p,i}$, the heat source term $q$ from gas phase chemical reactions and further with the effective thermal conductivity $\langle \lambda^{\text{eff}}\rangle$
 """
 function DMS_Info_thermal() end
 

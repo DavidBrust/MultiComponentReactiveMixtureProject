@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.40
+# v0.19.43
 
 using Markdown
 using InteractiveUtils
@@ -30,7 +30,7 @@ begin
 end;
 
 # ╔═╡ d3278ac7-db94-4119-8efd-4dd18107e248
-PlutoUI.TableOfContents(title="Uphill diffusion 1D", aside=false)
+PlutoUI.TableOfContents(title="Uphill diffusion 1D", aside=true)
 
 # ╔═╡ 2c4b16ab-8f60-467b-b608-2fea9fbc741c
 md"""
@@ -251,7 +251,7 @@ end
 
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
-# ╟─d3278ac7-db94-4119-8efd-4dd18107e248
+# ╠═d3278ac7-db94-4119-8efd-4dd18107e248
 # ╟─2c4b16ab-8f60-467b-b608-2fea9fbc741c
 # ╠═83fa22fa-451d-4c30-a4b7-834974245996
 # ╠═a995f83c-6ff7-4b95-a798-ea636ccb1d88

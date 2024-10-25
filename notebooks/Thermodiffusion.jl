@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.40
+# v0.19.43
 
 using Markdown
 using InteractiveUtils
@@ -54,31 +54,25 @@ md"""
 
 # ╔═╡ 75fddee6-e057-4e91-a239-2033370b00fc
 md"""
-Reiterating the presented modeling equations from Section 2.3, the species mass balance and thermal energy equations are solved for the non-isothermal ternary gas mixture in the separation chamber:
+In the closed separation chamber, with no-flux boundary conditions on all boundaries, the convectice velocity vanishes $\vec v = 0$ throughout the domain. 
+Further, in this application there is no solid phase (gas phase only) such that we set the porosity $\phi=1$. Then, the species mass balance and thermal energy equations take for the non-isothermal ternary gas mixture in the separation chamber:
 ```math
 \begin{align}
-    \partial_t \rho_i +\nabla\cdot(\rho_i \vec v) + \nabla \cdot \vec J_i  = r_i(\varrho),\qquad i=1,\dots,n.
+    \partial_t \rho_i + \nabla \cdot \vec J_i  = r_i(\varrho),\qquad i=1,\dots,n.
     \end{align}   
 ```
 
 
 ```math
 \begin{align}
-	\partial_t(\rho h)+\nabla\cdot(\rho h \vec v)+\nabla\cdot\vec Q=\partial_tp.
+	\partial_t(\rho h)+\nabla\cdot\vec Q=\partial_tp.
 \end{align}
 ```
 """
 
 # ╔═╡ 43148504-814c-46ec-985a-2d790e1265e4
 md"""
-To close the model, expressions for the convective velocity $\vec v$, diffusive species mass fluxes $J_i$ and diffusive thermal energy flux $\vec Q$ are introduced corresponding to equations in Section 2.3:
-
-Convective velocity $\vec v$:
-```math
-    \begin{align}
-         \vec v  = -\frac{\kappa}{\nu} \nabla p
-    \end{align}
-```
+To close the model, expressions for the diffusive species mass fluxes $\vec J_i$ and diffusive thermal energy flux $\vec Q$ are needed:
 
 Diffusive speceis mass fluxes $J_i$:
 ```math
@@ -211,7 +205,7 @@ data = ReactorData(
 	γ_τ = 1.0,
 	poros=1.0,
 
-	perm = 1.23e-10*ufac"m^2" * 1.0e6,
+	#perm = 1.23e-10*ufac"m^2" * 1.0e6,
 	
 	constant_binary_diff_coeffs = constant_binary_diff_coeffs,
 	constant_newman_soret_diff_coeffs = constant_newman_soret_diff_coeffs
@@ -502,11 +496,11 @@ end
 
 # ╔═╡ Cell order:
 # ╠═349e7220-dc69-11ee-13d2-8f95e6ee5c96
-# ╠═0f102f06-3ff3-4bcc-8892-8d9190a87849
+# ╟─0f102f06-3ff3-4bcc-8892-8d9190a87849
 # ╟─d14462c6-f63b-4a61-a1d9-4bcdb8e30e3d
 # ╟─38c3ddb4-b44a-4981-9000-0a1d303bd9ac
 # ╟─2628cb2d-c1ef-4ad0-8ee4-38e45f864838
-# ╟─75fddee6-e057-4e91-a239-2033370b00fc
+# ╠═75fddee6-e057-4e91-a239-2033370b00fc
 # ╟─43148504-814c-46ec-985a-2d790e1265e4
 # ╟─b3a6fe03-be46-4159-96ab-477a42d0eec5
 # ╟─f4286a46-ceb4-40b2-8ce5-7fcd231e3168
