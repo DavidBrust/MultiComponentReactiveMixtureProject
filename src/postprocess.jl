@@ -423,7 +423,7 @@ function WriteSolution3D(sol,grid,data;desc="")
     _t = now()
     tm = "$(hour(_t))_$(minute(_t))_$(second(_t))"
     desc = isempty(desc) ? desc : "_"*desc
-    path = "../data/out/$(Date(_t))/$(tm)$(desc)"
+    path = joinpath(@__DIR__,"../data/out/$(Date(_t))/$(tm)$(desc)")
     try
         mkpath(path)
     catch e
@@ -431,15 +431,15 @@ function WriteSolution3D(sol,grid,data;desc="")
     end
     #mkdir(string(Date(_t)))
     
-    VoronoiFVM.writeVTK("$(path)/$(tm)_3D_ptot_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[ip,:])
+    ExtendableGrids.writeVTK("$(path)/$(tm)_3D_ptot_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[ip,:])
 	if solve_T_equation
-        VoronoiFVM.writeVTK("$(path)/$(tm)_3D_T_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[iT,:] .-273.15)
+        ExtendableGrids.writeVTK("$(path)/$(tm)_3D_T_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[iT,:] .-273.15)
     end
     for i=1:ng
-        VoronoiFVM.writeVTK("$(path)/$(tm)_3D_x$(gn[i])_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[i,:])
+        ExtendableGrids.writeVTK("$(path)/$(tm)_3D_x$(gn[i])_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[i,:])
     end
 	if dim == 3
-		VoronoiFVM.writeVTK("$(path)/$(tm)_3D_irradiation_flux_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[ibf,:])
+		ExtendableGrids.writeVTK("$(path)/$(tm)_3D_irradiation_flux_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[ibf,:])
 	end
 end
 
@@ -449,7 +449,7 @@ function WriteSolution3D(solt::TransientSolution,grid,data;desc="")
     _t = now()
     tm = "$(hour(_t))_$(minute(_t))_$(second(_t))"
     desc = isempty(desc) ? desc : "_"*desc
-    path = "../data/out/$(Date(_t))/$(tm)$(desc)"
+    path = joinpath(@__DIR__,"../data/out/$(Date(_t))/$(tm)$(desc)")
     try
         mkpath(path)
     catch e
@@ -460,21 +460,21 @@ function WriteSolution3D(solt::TransientSolution,grid,data;desc="")
     for (i,t) in enumerate(solt.t)
                 
         # pressure
-        VoronoiFVM.writeVTK("$(path)/3D_ptot_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr")_$(i).vtu", grid; point_data = solt(t)[ip,:])
+        ExtendableGrids.writeVTK("$(path)/3D_ptot_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr")_$(i).vtu", grid; point_data = solt(t)[ip,:])
 
         # temperature
         if solve_T_equation            
-            VoronoiFVM.writeVTK("$(path)/3D_T_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr")_$(i).vtu", grid; point_data = solt(t)[iT,:] .-273.15)
+            ExtendableGrids.writeVTK("$(path)/3D_T_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr")_$(i).vtu", grid; point_data = solt(t)[iT,:] .-273.15)
         end
 
         # species molar fractions
         for j=1:ng
-            VoronoiFVM.writeVTK("$(path)/3D_x$(gn[j])_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr")_$(i).vtu", grid; point_data = solt(t)[j,:])           
+            ExtendableGrids.writeVTK("$(path)/3D_x$(gn[j])_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr")_$(i).vtu", grid; point_data = solt(t)[j,:])           
         end
 
         # irradiation boundary flux
         if dim == 3
-            VoronoiFVM.writeVTK("$(path)/3D_irradiation_flux_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr")_$(i).vtu", grid; point_data = solt(t)[ibf,:])
+            ExtendableGrids.writeVTK("$(path)/3D_irradiation_flux_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr")_$(i).vtu", grid; point_data = solt(t)[ibf,:])
         end
 
     end
