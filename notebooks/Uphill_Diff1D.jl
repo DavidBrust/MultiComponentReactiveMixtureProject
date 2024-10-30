@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.43
+# v0.20.1
 
 using Markdown
 using InteractiveUtils
@@ -175,42 +175,6 @@ md"""
 # Auxiliary
 """
 
-# ╔═╡ 4965daa3-7545-4255-80d2-bc686feebec1
-# ╠═╡ skip_as_script = true
-#=╠═╡
-let
-	flowrate = :high
-	
-	data = ReactorData(
-		inlet_boundaries=[Γ_left],
-		outlet_boundaries=[Γ_right],
-		irradiated_boundaries=[],
-		side_boundaries=[],
-		solve_T_equation=false,
-		nflowin=nflowin(flowrate),
-		Treac = 273.15+650
-)
-	(;ip,p,ng,gn) = data
-	
-	grid = grid1D(2)
-	inival, sys = PTR_init_system(1, grid, data)
-	
-	control = SolverControl(nothing, sys;)
-		control.handle_exceptions=true
-		control.Δu_opt=100.0
-		control.Δt_max=0.01
-		control.Δt=0.01
-
-	times = [0,2]
-	tstep = 0.01
-	solt = solve(sys;inival=inival,times,tstep=tstep,control,verbose="a")
-	
-	filename = @sprintf "Uphill_diff_demo_%s.mp4" flowrate
-	# uncomment the following line to export the time evolution of the solution as an animation
-	#plotting_movie(solt,grid,data,flowrate,filename=filename)
-end;
-  ╠═╡ =#
-
 # ╔═╡ 70cb642a-e21f-45b7-ae84-ba2bcf0066b6
 function plotting_movie(
 						solt,
@@ -248,6 +212,43 @@ function plotting_movie(
         end
     end
 end
+
+# ╔═╡ 4965daa3-7545-4255-80d2-bc686feebec1
+# ╠═╡ skip_as_script = true
+#=╠═╡
+let
+	flowrate = :high
+	
+	data = ReactorData(
+		inlet_boundaries=[Γ_left],
+		outlet_boundaries=[Γ_right],
+		irradiated_boundaries=[],
+		side_boundaries=[],
+		solve_T_equation=false,
+		nflowin=nflowin(flowrate),
+		Treac = 273.15+650
+)
+	(;ip,p,ng,gn) = data
+	
+	grid = grid1D(2)
+	inival, sys = PTR_init_system(1, grid, data)
+	
+	control = SolverControl(nothing, sys;)
+		control.handle_exceptions=true
+		control.Δu_opt=100.0
+		control.Δt_max=0.01
+		control.Δt=0.01
+
+	times = [0,2]
+	tstep = 0.01
+	solt = solve(sys;inival=inival,times,tstep=tstep,control,verbose="a")
+	
+	filename = @sprintf "Uphill_diff_demo_%s.mp4" flowrate
+	# uncomment the following line to export the time evolution of the solution as an animation
+	plotting_movie(solt,grid,data,flowrate,filename=filename)
+	LocalResource(filename)
+end
+  ╠═╡ =#
 
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93

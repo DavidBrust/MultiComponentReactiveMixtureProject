@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.43
+# v0.20.1
 
 using Markdown
 using InteractiveUtils
@@ -247,9 +247,6 @@ md"""
 Uncomment the following line to export the time evolution of the solution as an animation.
 """
 
-# ╔═╡ 8b30f68c-9111-4803-b3dc-16e4c440865b
-#plotting_movie(filename="Soret_demo_transient.mp4")
-
 # ╔═╡ 8c53810e-330f-4eef-9402-62d31fb5d753
 md"""
 ## Stationary solution
@@ -494,13 +491,19 @@ function plotting_movie(; filename = "plotting_video.gif", Plotter = default_plo
     end
 end
 
+# ╔═╡ 8b30f68c-9111-4803-b3dc-16e4c440865b
+let
+	plotting_movie(filename="Soret_demo_transient.mp4")
+	LocalResource("Soret_demo_transient.mp4")
+end
+
 # ╔═╡ Cell order:
 # ╠═349e7220-dc69-11ee-13d2-8f95e6ee5c96
 # ╟─0f102f06-3ff3-4bcc-8892-8d9190a87849
 # ╟─d14462c6-f63b-4a61-a1d9-4bcdb8e30e3d
 # ╟─38c3ddb4-b44a-4981-9000-0a1d303bd9ac
 # ╟─2628cb2d-c1ef-4ad0-8ee4-38e45f864838
-# ╠═75fddee6-e057-4e91-a239-2033370b00fc
+# ╟─75fddee6-e057-4e91-a239-2033370b00fc
 # ╟─43148504-814c-46ec-985a-2d790e1265e4
 # ╟─b3a6fe03-be46-4159-96ab-477a42d0eec5
 # ╟─f4286a46-ceb4-40b2-8ce5-7fcd231e3168
