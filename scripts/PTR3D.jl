@@ -35,6 +35,8 @@ function run_transient(;dim=3, times=[0,20.0], nref=0)
     control.Δu_opt = 100
     #control.Δt_max = 0.5
     control.Δt_max = 2.0
+    control.tol_round=1.0e-9
+    control.max_round=3
     solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="nae",log=true)
 
     return solt,grid,sys,data
@@ -56,6 +58,8 @@ function run_stationary(solt,grid,sys,data)
 		time = solt.t[end],
 		inival = solt(solt.t[end]),
         control,
+        tol_round=1.0e-9,
+        max_round=3,
 		verbose="na"
 	)
 
@@ -73,8 +77,7 @@ end
 function run()
     solt,grid,sys,data = run_transient(nref=1)
     solss,grid,sys,data = run_stationary(solt,grid,sys,data)
-
-    grid_aspect, inb,irrb,outb,sb,catr = PTR_grid_boundaries_regions(3;nref=1,H=0.5*400,W=16*100);
+    grid_aspect, inb,irrb,outb,sb,catr = PTR_grid_boundaries_regions(3;nref=1,H=2,W=16);
     WriteSolution3D(solss,grid_aspect,data,desc="nref_1_aspect_4_cm")
 
 end

@@ -12,3 +12,4 @@ docs/src/notebooks
 .vscode/*
 *_auth_token.txt
 \#*
+*.mp4
