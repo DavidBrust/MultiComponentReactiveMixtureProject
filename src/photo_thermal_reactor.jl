@@ -602,8 +602,8 @@ function PTR_grid_boundaries_regions(dim;nref=0,H=0.5,W=16)
 		circular_symmetric!(grid)
 	
 		cellmask!(grid,[0,9/10*H].*ufac"cm",[W,H].*ufac"cm",Ω_catalyst) # catalyst layer	
-		bfacemask!(grid, [0,H].*ufac"cm",[W-1,H].*ufac"cm",Γ_top_permeable)
-		bfacemask!(grid, [0,H].*ufac"cm",[W-2,0.5].*ufac"cm",Γ_top_irradiated) 
+		bfacemask!(grid, [0,H].*ufac"cm",[W-1,H].*ufac"cm",Γ_top_permeable; allow_new=false)
+		bfacemask!(grid, [0,H].*ufac"cm",[W-2,0.5].*ufac"cm",Γ_top_irradiated; allow_new=false) 
 				
 		inb = [Γ_top_permeable,Γ_top_irradiated]
 		irrb = [Γ_top_irradiated]
@@ -628,8 +628,8 @@ function PTR_grid_boundaries_regions(dim;nref=0,H=0.5,W=16)
 	
 		# catalyst region
 		cellmask!(grid,[0,0,9/10*H].*ufac"cm",[W,W,H].*ufac"cm",Ω_catalyst) # catalyst layer	
-		bfacemask!(grid, [1,1,H].*ufac"cm",[W-1,W-1,H].*ufac"cm",Γ_top_permeable)
-		bfacemask!(grid, [2,2,H].*ufac"cm",[W-2,W-2,H].*ufac"cm",Γ_top_irradiated)
+		bfacemask!(grid, [1,1,H].*ufac"cm",[W-1,W-1,H].*ufac"cm",Γ_top_permeable; allow_new=false)
+		bfacemask!(grid, [2,2,H].*ufac"cm",[W-2,W-2,H].*ufac"cm",Γ_top_irradiated; allow_new=false)
 
 		inb = [Γ_top_permeable,Γ_top_irradiated]
 		irrb = [Γ_top_irradiated]
