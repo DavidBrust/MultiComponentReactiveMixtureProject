@@ -252,11 +252,6 @@ md"""
 The time evolution of the species mole fraction averaged over the Bottom and Top parts of the Loschmidt diffusion cell as shown in [1], Figure 5.7 is reproduced below using the model and implementation presented in this work.
 """
 
-# ╔═╡ c40265d6-a9e0-443f-bfec-ca70418d8361
-md"""
-$(LocalResource("../data/Goell2012/Loschmidt_Krishna1993.png"))
-"""
-
 # ╔═╡ af0a2719-3e0a-420e-9c8c-4cbbcb828cb1
 begin
 	path = "../data/Goell2012/Loschmidt/"
@@ -436,7 +431,7 @@ end
 # ╟─d14462c6-f63b-4a61-a1d9-4bcdb8e30e3d
 # ╟─38c3ddb4-b44a-4981-9000-0a1d303bd9ac
 # ╟─2628cb2d-c1ef-4ad0-8ee4-38e45f864838
-# ╠═75fddee6-e057-4e91-a239-2033370b00fc
+# ╟─75fddee6-e057-4e91-a239-2033370b00fc
 # ╟─43148504-814c-46ec-985a-2d790e1265e4
 # ╟─b3a6fe03-be46-4159-96ab-477a42d0eec5
 # ╟─c3dbf8b3-fc5f-44ff-be2c-ca4200f5bd6c
@@ -467,7 +462,6 @@ end
 # ╟─ae6e4bb7-46e8-4f95-b337-0b4589c43cbf
 # ╠═26bab6eb-7457-4fb7-b8e2-5148769891ff
 # ╟─9274b233-687d-471d-8bac-e14e9a0cb7c0
-# ╟─c40265d6-a9e0-443f-bfec-ca70418d8361
 # ╟─9ba456c7-f6ed-49c5-9878-d9e0deb96384
 # ╟─af0a2719-3e0a-420e-9c8c-4cbbcb828cb1
 # ╟─65dbb492-4795-44ca-afcb-fb2a2c925d92
