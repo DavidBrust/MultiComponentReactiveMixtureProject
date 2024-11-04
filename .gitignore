@@ -3,7 +3,7 @@ data/*
 !data/Goell2012
 !data/doc/*
 !data/IrradiationFluxProfiles/*
-!data/IJHMT_3D.pvsm
+!data/PTR3D.pvsm
 notebooks/experimental
 # Manifest.toml
 docs/build
