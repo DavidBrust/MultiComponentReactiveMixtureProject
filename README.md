@@ -48,4 +48,6 @@ PTR3D.run()
 The script will run the simulation and will export the solution in VTK format to a new folder for plotting with [ParaView](https://www.paraview.org/). Use the provided ParaView state file `data/PTR3D.pvsm` to reproduce Figure 5 in Section 4.1.
 
 This project has received funding from the European Union's Horizon 2020 research and innovation
-programme under grant agreement No 862453. <img src="assets/flag_yellow_eps.svg" alt="Flag of the European Union" width="150"/>
+programme under grant agreement No 862453.
+
+<img src="assets/flag_yellow_eps.svg" alt="Flag of the European Union" width="150"/>
