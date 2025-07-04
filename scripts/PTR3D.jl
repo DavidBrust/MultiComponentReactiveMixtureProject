@@ -74,11 +74,11 @@ function runtests()
     @test isapprox(minimum(solss[data.iT,:]), 382.19131101873813) # 70 suns
 end
 
-function run()
-    solt,grid,sys,data = run_transient(nref=1)
+function run(nref=0)
+    solt,grid,sys,data = run_transient(nref=nref)
     solss,grid,sys,data = run_stationary(solt,grid,sys,data)
-    grid_aspect, inb,irrb,outb,sb,catr = PTR_grid_boundaries_regions(3;nref=1,H=2,W=16);
-    WriteSolution3D(solss,grid_aspect,data,desc="nref_1_aspect_4_cm")
+    grid_aspect, inb,irrb,outb,sb,catr = PTR_grid_boundaries_regions(3;nref=nref,H=2,W=16);
+    WriteSolution3D(solss,grid_aspect,data,desc="nref_$(nref)_aspect_4_cm")
 
 end
 
