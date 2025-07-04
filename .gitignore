@@ -5,7 +5,7 @@ data/*
 !data/IrradiationFluxProfiles/*
 !data/PTR3D.pvsm
 notebooks/experimental
-# Manifest.toml
+Manifest.toml
 docs/build
 docs/src/examples
 docs/src/notebooks
