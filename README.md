@@ -1,12 +1,12 @@
 MultiComponentReactiveMixtureProject
 ====================================
 
-[![DOI](https://zenodo.org/badge/643598052.svg)](https://zenodo.org/doi/10.5281/zenodo.10901335)
+[![DOI](https://zenodo.org/badge/643598052.svg)](https://zenodo.org/doi/10.5281/zenodo.10901335) 
 
 
-Project package for the implementation of a model for heat and multi-component, reactive gas phase transport in porous media in ``Julia``. The model is presented in [https://dx.doi.org/10.2139/ssrn.5055040](https://dx.doi.org/10.2139/ssrn.5055040).
+Project package for the implementation of a model for heat and multi-component, reactive gas phase transport in porous media in ``Julia``. The model is presented in [https://doi.org/10.1016/j.cej.2025.162027](https://doi.org/10.1016/j.cej.2025.162027).
 
-The model is applied to the simulation of a Photo-thermal catalytic reactor. 
+The model is applied to the simulation of a [photo-thermal catalytic reactor](https://doi.org/10.1016/j.jece.2024.113372). 
 Concentrated solar irradiation is used to supply heat input into the reactor to drive endothermal chemical reactions.
 The reactor utilizes a catalyst coated porous material which is directly irradiated and through which the reactive gas mixture passes.
 A 3D (square prismatic) domain of porous material is modelled.
