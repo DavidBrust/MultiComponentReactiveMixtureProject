@@ -1,3 +1,5 @@
+# abstract type AbstractReactorData end
+
 @doc raw"""
 Helper function to calculate radiation emitted from the window towards the surface
     of the catalyst layer in the upper chamber in the photo thermal catalytic
@@ -28,8 +30,8 @@ function PTR_radiosity_window(f,u,bnode,data)
 	
 
     Tglass = u[iTw] # local tempererature of quartz window
-    G1_bot_IR = eps1*ph"σ"*(Tglass^4-Tamb^4)+ph"σ"*Tamb^4
-	#G1_bot_IR = ph"σ"*Tamb^4
+	G1_bot_IR = eps1*σ*(Tglass^4-Tamb^4)+σ*Tamb^4
+	#G1_bot_IR = σ*Tamb^4
 	G1_bot_vis = zero(eltype(u))
     if bnode.region in irradiated_boundaries		
 		G1_bot_vis += G_lamp # flux profile measured behind quarz in plane of cat layer
@@ -73,8 +75,8 @@ function PTR_top(f,u,bnode,data)
 			# Tfilm = (T_gas_in+u[iT])
 			# @inline hin = heatcap_mix(data, Tfilm, X0) * (Tfilm - 298.15)
 			hin = zero(eltype(u))
-			@inbounds for i=1:ng
-				hin += enthalpy_gas_thermal(Fluids[i],T_gas_in)
+			for i=1:ng
+				hin += enthalpy_gas_thermal(Fluids[i], T_gas_in)
 			end
 			# @inline hin = heatcap_mix(data, T_gas_in, X0) * (T_gas_in - Tref)
 			r_hf_enth = mfluxin/mmix0 * hin
@@ -84,14 +86,16 @@ function PTR_top(f,u,bnode,data)
 			if bnode.region in irradiated_boundaries
 				@inline G1_vis, G1_IR = PTR_radiosity_window(f,u,bnode,data)
 
-				hflux_irrad = (-eps2*ph"σ"*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR) # irradiation heatflux 
-				#hflux_irrad = (-eps2*ph"σ"*(u[iT]^4-Tamb^4) + alpha2_vis*G1_vis) # irradiation heatflux 
+				hflux_irrad = (-eps2*σ*u[iT]^4 + alpha2_vis*G1_vis + alpha2_IR*G1_IR) # irradiation heatflux 
+				#hflux_irrad = (-eps2*σ*(u[iT]^4-Tamb^4) + alpha2_vis*G1_vis) # irradiation heatflux 
 				
-				Tm=0.5*(u[iT] + u[iTw]) # mean temperature: catalyst layer and window
-		        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X0) # thermal conductivity at Tm and inlet composition X0
-				dh=2*uc_h
-				kconv=Nu*λf/dh*ufac"W/(m^2*K)"
-				hflux_conv = kconv*(u[iT]-Tm) # convection heatflux through top chamber
+				##################### NEGLECT INTERNAL CONVECTION #####################
+				# Tm=0.5*(u[iT] + u[iTw]) # mean temperature: catalyst layer and window
+		        # @inline _,λf=dynvisc_thermcond_mix(data, Tm, X0) # thermal conductivity at Tm and inlet composition X0
+				# dh=2*uc_h
+				# kconv=Nu*λf/dh*ufac"W/(m^2*K)"
+				# hflux_conv = kconv*(u[iT]-Tm) # convection heatflux through top chamber
+				##################### NEGLECT INTERNAL CONVECTION #####################
 				
 				# !!! DEBUG !!!
 				# f[iT] += (-hflux_irrad + hflux_conv) * ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
@@ -107,9 +111,9 @@ function PTR_top(f,u,bnode,data)
 				# calculate local window temperature from (local) flux balance
 				hflux_conv_top_w = k_nat_conv*(u[iTw]-Tamb)
 				G2_vis = rho2_vis*G1_vis		
-				G2_IR = eps2*ph"σ"*u[iT]^4 + rho2_IR*G1_IR
-				hflux_abs_w = alpha1_vis*G2_vis + alpha1_IR*G2_IR + alpha1_IR*ph"σ"*Tamb^4
-				hflux_emit_w = uc_window.eps*ph"σ"*u[iTw]^4
+				G2_IR = eps2*σ*u[iT]^4 + rho2_IR*G1_IR
+				hflux_abs_w = alpha1_vis*G2_vis + alpha1_IR*G2_IR + alpha1_IR*σ*Tamb^4
+				hflux_emit_w = uc_window.eps*σ*u[iTw]^4
 				# !!! DEBUG !!!
 				# f[iTw] = -hflux_conv -hflux_abs_w +hflux_conv_top_w +2*hflux_emit_w
 				# f[iTw] *= ramp(bnode.time; du=(0.0,1), dt=dt_hf_irrad)
@@ -134,9 +138,15 @@ function PTR_side(f,u,bnode,data)
 	ng=ngas(data)
 
 	if solve_T_equation && bnode.region in side_boundaries
-	    X=MVector{ng,eltype(u)}(undef)
-        @inline MoleFrac!(X,u,data)
-        @inline _,λf=dynvisc_thermcond_mix(data, u[iT], X)
+	    # X=MVector{ng,eltype(u)}(undef)
+		X = get_tmp(data.X, u); X = @view X[1:ng]
+        MoleFrac!(X,u,data)
+        # @inline _,λf=dynvisc_thermcond_mix(data, u[iT], X)
+		mu = get_tmp(data.dynvisc, u); mu = @view mu[1:ng]
+		lambda = get_tmp(data.thermcond, u); lambda = @view lambda[1:ng]
+
+		_, λf = dynvisc_thermcond_mix(data, mu, lambda, u[iT], X)
+
 
 		# !!! DEBUG !!!
         # w/o shell height
@@ -166,18 +176,22 @@ function PTR_bottom(f,u,bnode,data)
 
 		# heatflux from irradiation exchange with bottom plate
 		Tplate = u[iTp]	
-		hflux_irrad = -eps1*ph"σ"*u[iT]^4 + alpha1_IR/(1-rho1_IR*rho2_IR)*(eps2*ph"σ"*Tplate^4+rho2_IR*eps1*ph"σ"*u[iT]^4)
+		hflux_irrad = -eps1*σ*u[iT]^4 + alpha1_IR/(1-rho1_IR*rho2_IR)*(eps2*σ*Tplate^4+rho2_IR*eps1*σ*u[iT]^4)
 	
-		# heatflux from convective/conductive heat exchange with bottom plate
-		Tm=0.5*(u[iT] + Tplate)
 
-		X=MVector{ng,eltype(u)}(undef)
-		@inline MoleFrac!(X,u,data)
+		##################### NEGLECT INTERNAL CONVECTION #####################
+		# heatflux from convective/conductive heat exchange with bottom plate
+		# Tm=0.5*(u[iT] + Tplate)
+
+		# X=MVector{ng,eltype(u)}(undef)
+		# @inline MoleFrac!(X,u,data)
         
-        @inline _,λf=dynvisc_thermcond_mix(data, Tm, X) # thermal conductivity at Tm and outlet composition X
-        dh=2*lc_h
-		kconv=Nu*λf/dh*ufac"W/(m^2*K)"
-		hflux_conv = kconv*(u[iT]-Tm) # positive flux in negative z coord. (towards plate)
+        # @inline _,λf=dynvisc_thermcond_mix(data, Tm, X) # thermal conductivity at Tm and outlet composition X
+        # dh=2*lc_h
+		# kconv=Nu*λf/dh*ufac"W/(m^2*K)"
+		# hflux_conv = kconv*(u[iT]-Tm) # positive flux in negative z coord. (towards plate)
+		##################### NEGLECT INTERNAL CONVECTION #####################
+
 
 		# sign convention: outward pointing fluxes (leaving the domain) as positive, inward pointing fluxes (entering) as negative
 
@@ -193,9 +207,9 @@ function PTR_bottom(f,u,bnode,data)
 
 		# calculate (local) plate temperature from (local) flux balance
 		hflux_conv_bot_p = k_nat_conv*(u[iTp]-Tamb)
-		hflux_emit_p = lc_plate.eps*ph"σ"*u[iTp]^4
-		G1_IR = (eps1*ph"σ"*u[iT]^4 + rho1_IR*eps2*ph"σ"*u[iTp]^4)/(1-rho1_IR*rho2_IR)
-		hflux_abs_p = alpha2_IR*G1_IR + alpha2_IR*ph"σ"*Tamb^4
+		hflux_emit_p = lc_plate.eps*σ*u[iTp]^4
+		G1_IR = (eps1*σ*u[iT]^4 + rho1_IR*eps2*σ*u[iTp]^4)/(1-rho1_IR*rho2_IR)
+		hflux_abs_p = alpha2_IR*G1_IR + alpha2_IR*σ*Tamb^4
 
 		# !!! DEBUG
 		# f[iTp] = -hflux_conv -hflux_abs_p +2*hflux_emit_p +hflux_conv_bot_p
@@ -405,7 +419,135 @@ Mutable data structure to hold modeling parameters of photo-thermal reactor
 $(TYPEDFIELDS)
 """
 
-@kwdef mutable struct ReactorData{NG, KP}
+##################################### BAK ########################################
+# @kwdef mutable struct ReactorData{NG, KP}
+#     "Spatial dimension, default=2"
+# 	dim::Int64 = 2
+#     # time constants for ramp functions
+#     dt_mf::Tuple{Float64, Float64}=(0.0,1.0)
+#     dt_hf_enth::Tuple{Float64, Float64}=(2.0,10.0)
+#     dt_hf_irrad::Tuple{Float64, Float64}=(3.0,10.0)
+    
+#     # vectors holding boundary information
+#     inlet_boundaries::Vector{Int64} = Int64[]
+#     irradiated_boundaries::Vector{Int64} = Int64[]
+#     outlet_boundaries::Vector{Int64} = Int64[]
+#     side_boundaries::Vector{Int64} = Int64[]
+#     catalyst_regions::Vector{Int64} =[2]
+#     impermeable_regions::Vector{Int64} =[3]
+
+#     kinpar::KP = XuFroment
+#     ng::Int64 = kinpar.ng
+
+#     # switches to control the simulation
+# 	is_reactive::Bool = true
+#     solve_T_equation::Bool = true
+#     constant_properties::Bool = false
+# 	include_Soret_Dufour::Bool = false
+# 	include_dpdt::Bool = false
+
+#     ip::Int64 = ng+1
+# 	iT::Int64 = ip+1
+# 	# inlcude window & plate temperatures as boundary species
+# 	iTw::Int64=iT+1 # index of window Temperature (upper chamber)
+# 	iTp::Int64=iTw+1 # index of plate Temperature (lower chamber)
+	
+# 	ibf::Int64 = dim == 3 ? iTp+1 : iTp # index of boundary flux species, workaround to include spatially varying boundary flux
+
+# 	idpdt::Int64=ibf+1 # index of auxiliary variable holding dp/dt for use in enthalpy equation
+	
+# 	p::Float64 = 1.0*ufac"bar"
+# 	Tamb::Float64 = 298.15*ufac"K"
+# 	Treac::Float64 = 298.15*ufac"K"
+
+# 	gn::Dict{Int, Symbol} = kinpar.gn # names and fluid indices
+# 	gni::Dict{Symbol, Int} = kinpar.gni # inverse names and fluid indices
+# 	Fluids::Vector{FluidProps} = kinpar.Fluids # fluids and respective properties in system
+	
+# 	m::Vector{Float64} = let
+#         m=zeros(Float64, ng)
+#         for i=1:ng
+# 			m[i] = Fluids[i].MW
+# 		end
+# 		m
+# 	end
+	
+# 	X0::Vector{Float64} = let
+#         x=zeros(Float64, ng)
+# 		x[gni[:H2]] = 1.0
+# 		x[gni[:CO2]] = 1.0
+# 		#x[gni[:N2]] = 1.0
+# 		x/sum(x)
+# 	end # inlet / initial composition
+	
+# 	mmix0::Float64 = sum(X0 .* m)
+# 	W0::Vector{Float64} = @. m*X0/mmix0
+
+# 	# Constant property storage
+# 	constant_binary_diff_coeffs::Vector{Float64} = ones(Float64, ng*(ng-1)÷2) * 0.2*ufac"cm^2/s"
+# 	constant_newman_soret_diff_coeffs::Vector{Float64} = ones(Float64, ng*(ng-1)÷2) * 0.1
+# 	constant_species_viscosities::Vector{Float64} = ones(Float64, ng) * 2.0e-5*ufac"Pa*s"
+# 	constant_species_thermal_conductivities::Vector{Float64} = ones(Float64, ng) * 0.02*ufac"W/(m*K)"
+
+# 	# Inflow properties
+# 	nflowin::Float64 = 7.4*ufac"mol/hr"
+# 	mflowin::Float64 = nflowin*mmix0
+# 	mfluxin::Float64 = mflowin/(100*ufac"cm^2")*ufac"kg/(m^2*s)"
+# 	T_gas_in::Float64 = Tamb
+
+#     # catalyst mass, volume and loading
+# 	mcat::Float64=500.0*ufac"mg"
+# 	Vcat::Float64=1.0*ufac"m^2"*0.02*ufac"cm"
+# 	lcat::Float64=mcat/Vcat
+
+# 	# upper and lower chamber heights for calculation of conduction/convection b.c.
+# 	uc_h::Float64=17.0*ufac"mm"
+# 	lc_h::Float64=18.0*ufac"mm"
+# 	Nu::Float64=4.861	
+
+# 	# optical properties of surfaces in IR/visible ranges
+# 	uc_window::SurfaceOpticalProps = uc_window
+# 	uc_cat::SurfaceOpticalProps = uc_cat
+# 	uc_mask::SurfaceOpticalProps = uc_mask
+# 	lc_frit::SurfaceOpticalProps = lc_frit
+# 	lc_plate::SurfaceOpticalProps = lc_plate
+
+# 	# reactor data
+# 	delta_gap::Float64=1.5*ufac"mm" # gas gap between frit and reactor wall
+# 	delta_wall::Float64=15*ufac"mm" # reactor wall thickness
+# 	shell_h::Float64=20*ufac"mm" # height of heat transfer area adjancent to domain boundary 
+# 	k_nat_conv::Float64=20.0*ufac"W/(m^2*K)" #17.5*ufac"W/(m^2*K)" # natural+forced convection heat transfer coeff.
+# 	nom_flux::Float64 = 70.0*ufac"kW/m^2" # nominal irradiation flux density / kW/m^2
+
+# 	# VitraPor data
+# 	dp::Float64=200.0*ufac"μm" # average pore size, por class 0
+# 	poros::Float64=0.33 # porosity, VitraPor sintetered filter class 0
+# 	perm::Float64=1.23e-10*ufac"m^2" # perm. of porous medium, use in Darcy Eq.
+# 	γ_τ::Float64=poros^1.5 # constriction/tourtuosity factor
+	
+# 	# Solid (non-porous) Borosilica glass (frit material)
+# 	rhos::Float64=2.23e3*ufac"kg/m^3" # density of non-porous Boro-Solikatglas 3.3
+# 	lambdas::Float64=1.13*ufac"W/(m*K)" # thermal conductiviy of non-porous SiO2
+# 	cs::Float64=0.8e3*ufac"J/(kg*K)" # heat capacity of non-porous SiO2
+
+# 	# quartz window / Al bottom plate thermal conductivities
+# 	lambda_window::Float64=1.38*ufac"W/(m*K)"
+# 	lambda_Al::Float64=235.0*ufac"W/(m*K)"
+
+# 	logreg::Float64=1.0e-20
+
+#     function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,include_Soret_Dufour,include_dpdt,ip,iT,iTw,iTp,ibf,idpdt,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs,constant_species_viscosities,constant_species_thermal_conductivities,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,logreg)
+#         KP = MultiComponentReactiveMixtureProject.KinData{nreac(kinpar)}
+# 		# FluxIntp = flux_interpol(nom_flux)
+# 		# flux_inner, flux_outer = flux_inner_outer(nom_flux)
+#         new{ng,KP}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,include_Soret_Dufour,include_dpdt,ip,iT,iTw,iTp,ibf,idpdt,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs,constant_species_viscosities,constant_species_thermal_conductivities,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,logreg)
+
+#     end
+# end
+##################################### BAK ########################################
+
+
+@kwdef mutable struct ReactorData
     "Spatial dimension, default=2"
 	dim::Int64 = 2
     # time constants for ramp functions
@@ -421,8 +563,12 @@ $(TYPEDFIELDS)
     catalyst_regions::Vector{Int64} =[2]
     impermeable_regions::Vector{Int64} =[3]
 
-    kinpar::KP = XuFroment
+    # kinpar::KP = XuFroment
+	# kinpar::KinData{3} = XuFroment
+	kinpar::KinData = XuFroment
     ng::Int64 = kinpar.ng
+
+	
 
     # switches to control the simulation
 	is_reactive::Bool = true
@@ -432,14 +578,34 @@ $(TYPEDFIELDS)
 	include_dpdt::Bool = false
 
     ip::Int64 = ng+1
-	iT::Int64 = ip+1
+	iT::Int64 = solve_T_equation ? ip+1 : 0
 	# inlcude window & plate temperatures as boundary species
-	iTw::Int64=iT+1 # index of window Temperature (upper chamber)
-	iTp::Int64=iTw+1 # index of plate Temperature (lower chamber)
+	iTw::Int64 = solve_T_equation ? iT+1 : 0 # index of window Temperature (upper chamber)
+	iTp::Int64 = solve_T_equation ? iTw+1 : 0# index of plate Temperature (lower chamber)
 	
 	ibf::Int64 = dim == 3 ? iTp+1 : iTp # index of boundary flux species, workaround to include spatially varying boundary flux
 
-	idpdt::Int64=ibf+1 # index of auxiliary variable holding dp/dt for use in enthalpy equation
+	idpdt::Int64 = include_dpdt ? ibf+1 : 0 # index of auxiliary variable holding dp/dt for use in enthalpy equation
+
+	nvar::Int64 = maximum([ip, iT, iTw, iTp, ibf, idpdt])
+
+	
+	X::DiffCache{Vector{Float64}, Vector{Float64}} = DiffCache(ones(nvar), 2 * nvar)	
+	W::DiffCache{Vector{Float64}, Vector{Float64}} = DiffCache(ones(nvar), 2 * nvar)
+    
+	F::DiffCache{Vector{Float64}, Vector{Float64}} = DiffCache(ones(nvar), 2 * (nvar))
+
+	D::DiffCache{Matrix{Float64}, Vector{Float64}} = DiffCache(ones(nvar, nvar), 2 * nvar)
+	M::DiffCache{Matrix{Float64}, Vector{Float64}} = DiffCache(ones(nvar, nvar), 2 * (nvar))
+
+	A::DiffCache{Matrix{Float64}, Vector{Float64}} = DiffCache(ones(nvar, nvar), 2 * (nvar))
+	TDR::DiffCache{Vector{Float64}, Vector{Float64}} = DiffCache(ones(nvar), 2 * (nvar))
+
+	dynvisc::DiffCache{Vector{Float64}, Vector{Float64}} = DiffCache(ones(nvar), 2 * nvar)
+	thermcond::DiffCache{Vector{Float64}, Vector{Float64}} = DiffCache(ones(nvar), 2 * nvar)
+
+	ipiv::Vector{Int} = zeros(Int, ng-1)
+	
 	
 	p::Float64 = 1.0*ufac"bar"
 	Tamb::Float64 = 298.15*ufac"K"
@@ -521,13 +687,6 @@ $(TYPEDFIELDS)
 
 	logreg::Float64=1.0e-20
 
-    function ReactorData(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,include_Soret_Dufour,include_dpdt,ip,iT,iTw,iTp,ibf,idpdt,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs,constant_species_viscosities,constant_species_thermal_conductivities,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,logreg)
-        KP = MultiComponentReactiveMixtureProject.KinData{nreac(kinpar)}
-		# FluxIntp = flux_interpol(nom_flux)
-		# flux_inner, flux_outer = flux_inner_outer(nom_flux)
-        new{ng,KP}(dim,dt_mf,dt_hf_enth,dt_hf_irrad,inlet_boundaries,irradiated_boundaries,outlet_boundaries,side_boundaries,catalyst_regions,impermeable_regions,kinpar,ng,is_reactive,solve_T_equation,constant_properties,include_Soret_Dufour,include_dpdt,ip,iT,iTw,iTp,ibf,idpdt,p,Tamb,Treac,gn,gni,Fluids,m,X0,mmix0,W0,constant_binary_diff_coeffs,constant_newman_soret_diff_coeffs,constant_species_viscosities,constant_species_thermal_conductivities,nflowin,mflowin,mfluxin,T_gas_in,mcat,Vcat,lcat,uc_h,lc_h,Nu,uc_window,uc_cat,uc_mask,lc_frit,lc_plate,delta_gap,delta_wall,shell_h,k_nat_conv,nom_flux,dp,poros,perm,γ_τ,rhos,lambdas,cs,lambda_window,lambda_Al,logreg)
-
-    end
 end
 
 
@@ -575,7 +734,9 @@ function kbed(data, lambdaf)
 	1-sqrt(1-poros)+sqrt(1-poros)*kc
 end
 
-ngas(::ReactorData{NG,KP}) where {NG,KP} = NG
+# ngas(::ReactorData{NG,KP}) where {NG,KP} = NG
+ngas(data::ReactorData) = data.ng
+nvar(data::ReactorData) = data.nvar
 
 #function PTR_grid_boundaries_regions(dim;nref=0)
 function PTR_grid_boundaries_regions(dim;nref=0,H=0.5,W=16)
@@ -640,7 +801,7 @@ function PTR_grid_boundaries_regions(dim;nref=0,H=0.5,W=16)
 	return grid, inb, irrb, outb, sb, [Ω_catalyst]
 end
 
-function PTR_init_system(dim, grid, data::ReactorData)
+function PTR_init_system(dim, grid, data)
 
 	(;p,ip,Tamb,iT,iTw,iTp,ibf,idpdt,inlet_boundaries,irradiated_boundaries,outlet_boundaries,catalyst_regions,X0,solve_T_equation,include_dpdt,nom_flux) = data
 	ng=ngas(data)
@@ -725,6 +886,8 @@ function PTR_init_system(dim, grid, data::ReactorData)
 	
 	return inival,sys
 end
+
+
 
 
 # Function to calculate surface areas of boundaries. Used for calculation of 

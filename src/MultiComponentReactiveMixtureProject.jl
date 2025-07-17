@@ -2,9 +2,13 @@ module MultiComponentReactiveMixtureProject
 
 using VoronoiFVM, ExtendableGrids
 using LessUnitful, Printf, Dates, CSV, DataFrames, Interpolations
-using StaticArrays
+using StaticArrays, PreallocationTools 
+using LinearAlgebra
 using Documenter
 using DocStringExtensions: TYPEDEF, TYPEDSIGNATURES, SIGNATURES, TYPEDFIELDS, METHODLIST
+
+# invoking the macro @ph_str via ph"R" causes allocations
+@phconstants R σ
 
 include("physprops.jl")
 export AbstractFluidProps, FluidProps, AbstractPropsCoeffs, PropsCoeffs
