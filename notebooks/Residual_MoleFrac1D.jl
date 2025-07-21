@@ -1,17 +1,19 @@
 ### A Pluto.jl notebook ###
-# v0.19.43
+# v0.20.13
 
 using Markdown
 using InteractiveUtils
 
 # This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
 macro bind(def, element)
-    quote
+    #! format: off
+    return quote
         local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
         local el = $(esc(element))
         global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
         el
     end
+    #! format: on
 end
 
 # ╔═╡ c21e1942-628c-11ee-2434-fd4adbdd2b93
@@ -99,8 +101,8 @@ function calce(data,nref=0)
 	inival,sys = PTR_init_system(1, grid, data)
 	
 	control = SolverControl(nothing, sys;)
-		control.handle_exceptions=true
-		control.Δu_opt=100
+	control.handle_exceptions=true
+	control.Δu_opt=100
 
 	times=[0,20]
 	tsol=solve(sys;inival=inival,times,control)
@@ -125,7 +127,7 @@ A grid refinement study is performed and the maximum value of $x_3$ is plotted o
 
 # ╔═╡ a5e9ffdb-083a-4192-bd8e-6f0ccb79598e
 function make_data()
-	MinKin = KinData{}(;
+	MinKin = KinData(;
 		ng = 3,
 		gnames = [:A, :B, :C],
 		Fluids = Vector{FluidProps}(undef,3),
@@ -157,7 +159,7 @@ function make_data()
 		is_reactive = true,
 		kinpar = MinKin,
 		lcat = 1.0,
-		ng = 3,
+		#ng = 3,
 		Tamb = 273.15,
 		m = [2.0,6.0,21.0]*ufac"g/mol",
 		X0 = [0.2, 0.8, 0.0],

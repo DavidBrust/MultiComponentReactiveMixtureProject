@@ -28,11 +28,50 @@
 
 
 
-abstract type AbstractKineticsData end
+# abstract type AbstractKineticsData end
+##################################### BAK ########################################
+# Base.@kwdef struct KinData{NR}
+#     ng::Int64=6 # number of gas phase species
+#     gnames::Vector{Symbol} = [:CO, :H2, :CH4, :H2O, :CO2, :N2]
+#     Fluids::Vector{FluidProps} = [CO,H2,CH4,H2O,CO2,N2]
+#     gn::Dict{Int, Symbol} 	= Dict(1:ng .=> gnames)
+# 	# inverse names and fluid indices
+# 	gni::Dict{Symbol, Int}  = Dict(value => key for (key, value) in gn)
+    
+#     nr::Int64=3 # number of reactions
+#     rnames::Vector{Symbol} = [:R1, :R2, :R3]
+#     rn::Dict{Int, Symbol} 	= Dict(1:nr .=> rnames[1:nr])
+# 	rni::Dict{Symbol, Int}  = Dict(value => key for (key, value) in rn)
 
+#     nuij::Vector{Int64} = vcat(
+#         [-1, 1, 0, -1, 1, 0], #R1 : CO + H2O -> CO2 + H2
+#         [0, 4, -1, -2, 1, 0], #R2 : CH4 + 2 H2O -> 4 H2 + CO2
+#         [1, 3, -1, -1, 0, 0], #R2 : CH4 + H2O -> 3 H2 + CO
+#     )
+#     # values of reaction rate constants @ Tref
+# 	# ki_ref::Dict{Symbol,Float64} = Dict(:R1=>-1.51715, :R2=>-11.2379, :R3=>-Inf)
+#     ki_ref::Dict{Symbol,Float64} = Dict(rnames .=> [-1.51715, -11.2379, -Inf][1:nr])
+#     Tki_ref::Dict{Symbol,Float64} = Dict( rnames .=> [648.0, 648.0, 648.0][1:nr]*ufac"K")
+#     # Activation energies
+#     Ei::Dict{Symbol,Float64} = Dict( rnames .=> [0.0, 175.904, 0.0][1:nr]*ufac"kJ/mol")
 
-#Base.@kwdef struct KinData{NR} <:AbstractKineticsData
-Base.@kwdef struct KinData{NR}
+#     # equilibrium constants Ki
+#     Ki_ref::Dict{Symbol,Float64} = Dict( rnames .=> [10.18, 1.947e-3, 1.913e-4][1:nr])
+#     TKi_ref::Dict{Symbol,Float64} = Dict( rnames .=> [693.0, 693.0, 693.0][1:nr]*ufac"K")
+#     # reaction enthalpies
+#     ΔHi::Dict{Symbol,Float64} = Dict( rnames .=> [-37.92, 182.09, 220.01][1:nr]*ufac"kJ/mol")
+	
+#     # values of gas phase species adsorption coefficients @ Tref
+# 	Kj_ref::Dict{Symbol,Float64} = Dict( gnames .=> [0.0, 0.0296, 0.0, 0.0, 0.0, 0.0][1:ng])
+#     TKj_ref::Dict{Symbol,Float64} = Dict( gnames .=> [648.0, 648.0, 823.0, 823.0, 823.0, 823.0][1:ng]*ufac"K" )
+#     ΔHj::Dict{Symbol,Float64} = Dict( gnames .=> [-70.65, -82.9, -38.28, 88.68, 0, 0][1:ng]*ufac"kJ/mol")
+
+#     KinData(ng,gnames,Fluids,gn,gni,nr,rnames,rn,rni,nuij,ki_ref,Tki_ref,Ei,Ki_ref,TKi_ref,ΔHi,Kj_ref,TKj_ref,ΔHj) = 
+#     new{nr}(ng,gnames,Fluids,gn,gni,nr,rnames,rn,rni,nuij,ki_ref,Tki_ref,Ei,Ki_ref,TKi_ref,ΔHi,Kj_ref,TKj_ref,ΔHj)
+# end
+##################################### BAK ########################################
+
+Base.@kwdef struct KinData
     ng::Int64=6 # number of gas phase species
     gnames::Vector{Symbol} = [:CO, :H2, :CH4, :H2O, :CO2, :N2]
     Fluids::Vector{FluidProps} = [CO,H2,CH4,H2O,CO2,N2]
@@ -68,18 +107,18 @@ Base.@kwdef struct KinData{NR}
     TKj_ref::Dict{Symbol,Float64} = Dict( gnames .=> [648.0, 648.0, 823.0, 823.0, 823.0, 823.0][1:ng]*ufac"K" )
     ΔHj::Dict{Symbol,Float64} = Dict( gnames .=> [-70.65, -82.9, -38.28, 88.68, 0, 0][1:ng]*ufac"kJ/mol")
 
-    KinData(ng,gnames,Fluids,gn,gni,nr,rnames,rn,rni,nuij,ki_ref,Tki_ref,Ei,Ki_ref,TKi_ref,ΔHi,Kj_ref,TKj_ref,ΔHj) = 
-    new{nr}(ng,gnames,Fluids,gn,gni,nr,rnames,rn,rni,nuij,ki_ref,Tki_ref,Ei,Ki_ref,TKi_ref,ΔHi,Kj_ref,TKj_ref,ΔHj)
 end
 
 # !!!ALLOC Method to be called instead of data.ng
-nreac(::KinData{NR}) where NR = NR
+# nreac(::KinData{NR}) where NR = NR
+nreac(kinpar::KinData) = kinpar.nr
 
 # !!!ALLOC Additional constructo taking nr as parameter	
 
 
 #S3P = KinData{:S3P}()
-const S3P = KinData{}()
+# const S3P = KinData{}()
+const S3P = KinData()
 
 
 #Species indices:
@@ -99,7 +138,8 @@ const S3P = KinData{}()
 # temporary variables
 ng = 6; gnames = [:CO, :H2, :CH4, :H2O, :CO2, :N2]; gn = Dict(1:ng .=> gnames); nr = 3; rnames = [:R1, :R2, :R3]; rn = Dict(1:nr .=> rnames);
 
-const XuFroment = KinData{}(;
+# const XuFroment = KinData{}(;
+const XuFroment = KinData(;
     ng = ng,
     gnames = gnames,
     Fluids = [CO,H2,CH4,H2O,CO2,N2],
@@ -133,7 +173,7 @@ const XuFroment = KinData{}(;
 )
 
 
-const Wolf_rWGS = KinData{}(;
+const Wolf_rWGS = KinData(;
     nr = 1,
     rnames = [:R1],
     rn = Dict(1:1 .=> [:R1]),
@@ -154,7 +194,7 @@ const Wolf_rWGS = KinData{}(;
     TKi_ref = Dict( [:R1] .=> [693.0]*ufac"K"),
 )
 
-const Riedel_rWGS = KinData{}(;
+const Riedel_rWGS = KinData(;
     nr = 1,
     rnames = [:R1],
     rn = Dict(1:1 .=> [:R1]),
@@ -184,64 +224,128 @@ end
 
 
 # equilibrium constants Ki
-function Ki(data, T)
+
+################################## BAK ###########################
+# function Ki(data, T)
+#     (;kinpar)=data
+#     (;Ki_ref,TKi_ref,ΔHi,rn)=kinpar
+   
+#     # !!!ALLOC Use MVectors with static size information instef of Vector
+#     Ki=MVector{nreac(kinpar),eltype(T)}(undef)
+
+#     for i=1:nreac(kinpar)
+#         Ki[i] = Ki_ref[rn[i]] * exp(-ΔHi[rn[i]]/ph"R"*(1.0/T - 1.0/TKi_ref[rn[i]]))
+#     end
+# 	Ki
+# end
+################################## BAK ###########################
+
+function Ki!(Ki, T, data)
     (;kinpar)=data
     (;Ki_ref,TKi_ref,ΔHi,rn)=kinpar
+
+    nr = nreac(kinpar)
    
     # !!!ALLOC Use MVectors with static size information instef of Vector
-    Ki=MVector{nreac(kinpar),eltype(T)}(undef)
-
-    for i=1:nreac(kinpar)
-        Ki[i] = Ki_ref[rn[i]] * exp(-ΔHi[rn[i]]/ph"R"*(1.0/T - 1.0/TKi_ref[rn[i]]))
+    # Ki=MVector{nreac(kinpar),eltype(T)}(undef)
+    # Ki = get_tmp(data.TDR, u); Ki = @view Ki[1:nr]
+    
+    for i=1:nr
+        # Ki[i] = Ki_ref[rn[i]] * exp(-ΔHi[rn[i]]/ph"R"*(1.0/T - 1.0/TKi_ref[rn[i]]))
+        Ki[i] = Ki_ref[rn[i]] * exp(-ΔHi[rn[i]]/R*(1.0/T - 1.0/TKi_ref[rn[i]]))
     end
-	Ki
+
 end
 
 
 
 # kinetic pre-factors ki
-function ki(data, T)
+################################## BAK ###########################
+# function ki(data, T)
+#     (;kinpar)=data
+#     (;ki_ref,Tki_ref,Ei,rn)=kinpar
+
+#     # !!!ALLOC Use MVectors with static size information instef of Vector
+#     ki=MVector{nreac(kinpar),eltype(T)}(undef)
+
+#     for i=1:nreac(kinpar)
+#         ki[i] = exp(ki_ref[rn[i]]) * exp(-Ei[rn[i]]/ph"R"*(1.0/T - 1.0/Tki_ref[rn[i]]))
+#     end
+# 	ki
+# end
+################################## BAK ###########################
+
+function ki!(ki, T, data)
     (;kinpar)=data
     (;ki_ref,Tki_ref,Ei,rn)=kinpar
 
-    # !!!ALLOC Use MVectors with static size information instef of Vector
-    ki=MVector{nreac(kinpar),eltype(T)}(undef)
-
     for i=1:nreac(kinpar)
-        ki[i] = exp(ki_ref[rn[i]]) * exp(-Ei[rn[i]]/ph"R"*(1.0/T - 1.0/Tki_ref[rn[i]]))
+        ki[i] = exp(ki_ref[rn[i]]) * exp(-Ei[rn[i]]/R*(1.0/T - 1.0/Tki_ref[rn[i]]))
     end
-	ki
+	
 end
 
 # adsorption constants Kj
-function Kj(data, T)
+################################## BAK ###########################
+# function Kj(data, T)
+#     (;kinpar)=data
+#     (;Kj_ref,TKj_ref,ΔHj,gn)=kinpar
+
+#     # !!!ALLOC Use MVectors with static size information instef of Vector
+#     Kj=MVector{ngas(data),eltype(T)}(undef)
+    
+#     for j=1:ngas(data)
+#         Kj[j] = Kj_ref[gn[j]] * exp(-ΔHj[gn[j]]/ph"R"*(1.0/T - 1.0/TKj_ref[gn[j]]))        
+#     end
+# 	Kj
+# end
+################################## BAK ###########################
+function Kj!(Kj, T, data)
     (;kinpar)=data
     (;Kj_ref,TKj_ref,ΔHj,gn)=kinpar
 
     # !!!ALLOC Use MVectors with static size information instef of Vector
-    Kj=MVector{ngas(data),eltype(T)}(undef)
+    # Kj=MVector{ngas(data),eltype(T)}(undef)
     
     for j=1:ngas(data)
-        Kj[j] = Kj_ref[gn[j]] * exp(-ΔHj[gn[j]]/ph"R"*(1.0/T - 1.0/TKj_ref[gn[j]]))        
+        Kj[j] = Kj_ref[gn[j]] * exp(-ΔHj[gn[j]]/R*(1.0/T - 1.0/TKj_ref[gn[j]]))        
     end
-	Kj
+	
 end
 
 
-function DEN(data,T,p)
+################################## BAK ###########################
+# function DEN(data,T,p)
 
-    #  !!!ALLOC for types stubility & correctness
-    #  !!!ALLOC initialize with zero(eltype) instead of 0.0
-    DEN=zero(eltype(p))
-    (;kinpar)=data
-    (;gni)=kinpar
+#     #  !!!ALLOC for types stubility & correctness
+#     #  !!!ALLOC initialize with zero(eltype) instead of 0.0
+#     DEN=zero(eltype(p))
+#     (;kinpar)=data
+#     (;gni)=kinpar
 	
-    p_=MVector{ngas(data),eltype(T)}(undef)
-    p_ .= p
+#     p_=MVector{ngas(data),eltype(T)}(undef)
+#     p_ .= p
 
-    @inbounds p_[gni[:H2O]]=p_[gni[:H2O]]/p_[gni[:H2]]    
+#     @inbounds p_[gni[:H2O]]=p_[gni[:H2O]]/p_[gni[:H2]]    
 
-    DEN = @inline 1 + sum(  Kj(data, T).*p_)
+#     DEN = @inline 1 + sum(  Kj(data, T).*p_)
+# end
+################################## BAK ###########################
+
+function DEN(p, T, Kj, data)
+
+    (;kinpar) = data
+    (;gni) = kinpar
+    ng = ngas(data)
+
+    p[gni[:H2O]] = p[gni[:H2O]] / p[gni[:H2]]
+
+    DEN = one(eltype(p))
+    for j=1:ng
+        DEN += Kj[j] * p[j]
+    end
+    DEN
+
 end
 
 function K_rWGS_Twigg(T)
@@ -254,39 +358,65 @@ function Kequil_WGS_Zimmermann(T)
 	exp(2073.0/T-2.029)
 end
 
-function ri(data,T,p_)
+function ri!(ri, u, T, data)
     
-    (;kinpar)=data
-    n=kinpar.gni
-    r=kinpar.rni
-    p = MVector{ngas(data),eltype(p_)}(undef)
-    p .= p_
+    (;ip, kinpar) = data
+    ng = ngas(data)
+    nr = nreac(kinpar)
+    n = kinpar.gni
+    r = kinpar.rni
 
-    ri_ = MVector{nreac(kinpar),eltype(p_)}(undef)
+    # p = MVector{ngas(data),eltype(p_)}(undef)
+    # p .= p_
+
+    p = get_tmp(data.X, u); p = @view p[1:ng]
+    c = get_tmp(data.D, u); c = @view c[1:ng]
+    for i=1:ng
+        p[i] = u[ip] * u[i]
+        c[i] = p[i] / (R*T)
+    end
+
+    # ri_ = MVector{nreac(kinpar),eltype(p_)}(undef)
     
-    Ki_ = @inline Ki(data, T)
-    pexp = MVector{nreac(kinpar),eltype(p_)}(undef)
-    unitc=one(eltype(p_))
+    # pexp = MVector{nreac(kinpar),eltype(p_)}(undef)
+    pexp = get_tmp(data.W, u); pexp = @view pexp[1:nr]
+
+    # Ki_ = Ki(data, T)
+    # Ki_ = Ki(u, T, data)
+
+    Ki = get_tmp(data.TDR, u); Ki = @view Ki[1:nr]
+    Ki!(Ki, T, data)
+
+    Kj = get_tmp(data.F, u); Kj = @view Kj[1:ng]
+
+
+    unitc=one(eltype(p))
+
     if kinpar == XuFroment
         p ./= ufac"bar"
         unitc *=ufac"mol/(hr*g)"
-        pexp[1] = @inbounds 1/p[n[:H2]]^2.5*(p[n[:CH4]]*p[n[:H2O]]-p[n[:H2]]^3*p[n[:CO]]/Ki_[r[:R1]])    
-        pexp[2] = @inbounds 1/p[n[:H2]]*(p[n[:CO]]*p[n[:H2O]]-p[n[:H2]]*p[n[:CO2]]/Ki_[r[:R2]])
-        pexp[3] = @inbounds 1/p[n[:H2]]^3.5*(p[n[:CH4]]*p[n[:H2O]]^2-p[n[:H2]]^4*p[n[:CO2]]/Ki_[r[:R3]])
-        pexp ./= @inline DEN(data,T,p)^2
+        
+        pexp[1] = 1/p[n[:H2]]^2.5*(p[n[:CH4]]*p[n[:H2O]]-p[n[:H2]]^3*p[n[:CO]]/Ki[r[:R1]])    
+        pexp[2] = 1/p[n[:H2]]*(p[n[:CO]]*p[n[:H2O]]-p[n[:H2]]*p[n[:CO2]]/Ki[r[:R2]])
+        pexp[3] = 1/p[n[:H2]]^3.5*(p[n[:CH4]]*p[n[:H2O]]^2-p[n[:H2]]^4*p[n[:CO2]]/Ki[r[:R3]])
+        
+        Kj!(Kj, T, data)
+        pexp ./= DEN(p, T, Kj, data)^2
         
     elseif kinpar == S3P
         p ./= ufac"bar"
         unitc *=ufac"mol/(s*kg)"
-        pexp[1] = @inbounds 1/p[n[:H2]]*(p[n[:CO]]*p[n[:H2O]]-p[n[:H2]]*p[n[:CO2]]/Ki_[r[:R1]])    
-        pexp[2] = @inbounds 1/p[n[:H2]]^3.5*(p[n[:CH4]]*p[n[:H2O]]^2-p[n[:H2]]^4*p[n[:CO2]]/Ki_[r[:R2]])
-        pexp[3] = @inbounds 1/p[n[:H2]]^2.5*(p[n[:CH4]]*p[n[:H2O]]-p[n[:H2]]^3*p[n[:CO]]/Ki_[r[:R3]])
-        pexp ./= @inline DEN(data,T,p)^2
+        pexp[1] = 1/p[n[:H2]]*(p[n[:CO]]*p[n[:H2O]]-p[n[:H2]]*p[n[:CO2]]/Ki[r[:R1]])    
+        pexp[2] = 1/p[n[:H2]]^3.5*(p[n[:CH4]]*p[n[:H2O]]^2-p[n[:H2]]^4*p[n[:CO2]]/Ki[r[:R2]])
+        pexp[3] = 1/p[n[:H2]]^2.5*(p[n[:CH4]]*p[n[:H2O]]-p[n[:H2]]^3*p[n[:CO]]/Ki[r[:R3]])
+
+        Kj!(Kj, T, data)
+        pexp ./= DEN(p, T, Kj, data)^2
     
     elseif kinpar == Wolf_rWGS
         # convert partial pressures (Pa) into molar concentrations (mol/m3) for Wolf 2016 kinetics
-        c=MVector{ngas(data),eltype(p)}(undef)
-        c .= p ./ (ph"R"*T)
+        # c=MVector{ngas(data),eltype(p)}(undef)
+        # c .= p ./ (ph"R"*T)
         unitc *=ufac"mol/(s*kg)"
 
         pexp[1] = @inbounds @inline (c[n[:CO2]]*c[n[:H2]]^0.3 - c[n[:CO]]*c[n[:H2O]]/c[n[:H2]]^0.7/K_rWGS_Twigg(T))
@@ -297,15 +427,16 @@ function ri(data,T,p_)
         unitc *=ufac"mol/(s*g)"
         pexp[1] = @inbounds @inline (p[n[:CO2]]*p[n[:H2]] - p[n[:CO]]*p[n[:H2O]]*Kequil_WGS_Zimmermann(T)) / (p[n[:CO]] + 65.0*p[n[:H2O]] + 7.4*p[n[:CO2]])
     else # ad-hoc defined kinetics, apply mass action law
+
         (;nuij) = kinpar
-        c=MVector{ngas(data),eltype(p)}(undef)
-        c .= p ./ (ph"R"*T)
+        # c=MVector{ngas(data),eltype(p)}(undef)
+        # c .= p ./ (ph"R"*T)
 
         @inbounds for i=1:nreac(kinpar)
             pexp[i] = zero(eltype(pexp))
             for j=1:ngas(data) 
                 if nuij[j,i] > 0 # product, contrib of backward reaction
-                    pexp[i] -= c[j]^nuij[j,i]/Ki_[j]
+                    pexp[i] -= c[j]^nuij[j,i]/Ki[j]
                 elseif nuij[j,i] < 0 # reactant, contrib of forward reaction
                     pexp[i] += c[j]^(-nuij[j,i])
                 end
@@ -313,8 +444,82 @@ function ri(data,T,p_)
         end        
     end
     
-    ri_ = @inline ki(data,T) .* pexp * unitc
- 
+    # ri_ = @inline ki(data,T) .* pexp * unitc
+    # ki(data,T) .* pexp * unitc
 
+    ki = get_tmp(data.X, u); ki = @view ki[1:nr]
+    ki!(ki, T, data)
 
+    for i=1:nr
+        ri[i] = ki[i] * pexp[i] * unitc
+    end
+        
 end
+
+
+############################ BAK ################################
+
+# function ri(data,T,p_)
+    
+#     (;kinpar)=data
+#     n=kinpar.gni
+#     r=kinpar.rni
+
+#     p = MVector{ngas(data),eltype(p_)}(undef)
+#     p .= p_
+
+#     ri_ = MVector{nreac(kinpar),eltype(p_)}(undef)
+    
+#     Ki_ = @inline Ki(data, T)
+#     pexp = MVector{nreac(kinpar),eltype(p_)}(undef)
+#     unitc=one(eltype(p_))
+#     if kinpar == XuFroment
+#         p ./= ufac"bar"
+#         unitc *=ufac"mol/(hr*g)"
+#         pexp[1] = @inbounds 1/p[n[:H2]]^2.5*(p[n[:CH4]]*p[n[:H2O]]-p[n[:H2]]^3*p[n[:CO]]/Ki_[r[:R1]])    
+#         pexp[2] = @inbounds 1/p[n[:H2]]*(p[n[:CO]]*p[n[:H2O]]-p[n[:H2]]*p[n[:CO2]]/Ki_[r[:R2]])
+#         pexp[3] = @inbounds 1/p[n[:H2]]^3.5*(p[n[:CH4]]*p[n[:H2O]]^2-p[n[:H2]]^4*p[n[:CO2]]/Ki_[r[:R3]])
+#         pexp ./= @inline DEN(data,T,p)^2
+        
+#     elseif kinpar == S3P
+#         p ./= ufac"bar"
+#         unitc *=ufac"mol/(s*kg)"
+#         pexp[1] = @inbounds 1/p[n[:H2]]*(p[n[:CO]]*p[n[:H2O]]-p[n[:H2]]*p[n[:CO2]]/Ki_[r[:R1]])    
+#         pexp[2] = @inbounds 1/p[n[:H2]]^3.5*(p[n[:CH4]]*p[n[:H2O]]^2-p[n[:H2]]^4*p[n[:CO2]]/Ki_[r[:R2]])
+#         pexp[3] = @inbounds 1/p[n[:H2]]^2.5*(p[n[:CH4]]*p[n[:H2O]]-p[n[:H2]]^3*p[n[:CO]]/Ki_[r[:R3]])
+#         pexp ./= @inline DEN(data,T,p)^2
+    
+#     elseif kinpar == Wolf_rWGS
+#         # convert partial pressures (Pa) into molar concentrations (mol/m3) for Wolf 2016 kinetics
+#         c=MVector{ngas(data),eltype(p)}(undef)
+#         c .= p ./ (ph"R"*T)
+#         unitc *=ufac"mol/(s*kg)"
+
+#         pexp[1] = @inbounds @inline (c[n[:CO2]]*c[n[:H2]]^0.3 - c[n[:CO]]*c[n[:H2O]]/c[n[:H2]]^0.7/K_rWGS_Twigg(T))
+
+#     elseif kinpar == Riedel_rWGS
+#         # convert partial pressures (Pa) into (MPa) for Riedel 2001 kinetics
+#         p ./= ufac"MPa"
+#         unitc *=ufac"mol/(s*g)"
+#         pexp[1] = @inbounds @inline (p[n[:CO2]]*p[n[:H2]] - p[n[:CO]]*p[n[:H2O]]*Kequil_WGS_Zimmermann(T)) / (p[n[:CO]] + 65.0*p[n[:H2O]] + 7.4*p[n[:CO2]])
+#     else # ad-hoc defined kinetics, apply mass action law
+#         (;nuij) = kinpar
+#         c=MVector{ngas(data),eltype(p)}(undef)
+#         c .= p ./ (ph"R"*T)
+
+#         @inbounds for i=1:nreac(kinpar)
+#             pexp[i] = zero(eltype(pexp))
+#             for j=1:ngas(data) 
+#                 if nuij[j,i] > 0 # product, contrib of backward reaction
+#                     pexp[i] -= c[j]^nuij[j,i]/Ki_[j]
+#                 elseif nuij[j,i] < 0 # reactant, contrib of forward reaction
+#                     pexp[i] += c[j]^(-nuij[j,i])
+#                 end
+#             end
+#         end        
+#     end
+    
+#     ri_ = @inline ki(data,T) .* pexp * unitc
+# end
+
+############################ BAK ################################
