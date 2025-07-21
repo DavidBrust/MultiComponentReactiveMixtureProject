@@ -423,7 +423,7 @@ function WriteSolution3D(sol,grid,data;desc="")
     _t = now()
     tm = "$(hour(_t))_$(minute(_t))_$(second(_t))"
     desc = isempty(desc) ? desc : "_"*desc
-    path = joinpath(@__DIR__,"../data/out/$(Date(_t))/$(tm)$(desc)")
+    path = joinpath(@__DIR__,"../data/out/$(Date(_t))/$(tm)$(desc)_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr")")
     try
         mkpath(path)
     catch e
@@ -431,15 +431,15 @@ function WriteSolution3D(sol,grid,data;desc="")
     end
     #mkdir(string(Date(_t)))
     
-    ExtendableGrids.writeVTK("$(path)/$(tm)_3D_ptot_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[ip,:])
+    ExtendableGrids.writeVTK("$(path)/3D_p.vtu", grid; point_data = sol[ip,:])
 	if solve_T_equation
-        ExtendableGrids.writeVTK("$(path)/$(tm)_3D_T_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[iT,:] .-273.15)
+        ExtendableGrids.writeVTK("$(path)/3D_T.vtu", grid; point_data = sol[iT,:] .-273.15)
     end
     for i=1:ng
-        ExtendableGrids.writeVTK("$(path)/$(tm)_3D_x$(gn[i])_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[i,:])
+        ExtendableGrids.writeVTK("$(path)/3D_x$(gn[i]).vtu", grid; point_data = sol[i,:])
     end
 	if dim == 3
-		ExtendableGrids.writeVTK("$(path)/$(tm)_3D_irradiation_flux_$(data.nom_flux/ufac"kW/m^2")suns_$(nflowin/ufac"mol/hr").vtu", grid; point_data = sol[ibf,:])
+		ExtendableGrids.writeVTK("$(path)/3D_input_irradiation_flux.vtu", grid; point_data = sol[ibf,:])
 	end
 end
 

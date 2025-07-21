@@ -581,15 +581,16 @@ $(TYPEDFIELDS)
 	iT::Int64 = solve_T_equation ? ip+1 : 0
 	# inlcude window & plate temperatures as boundary species
 	iTw::Int64 = solve_T_equation ? iT+1 : 0 # index of window Temperature (upper chamber)
-	iTp::Int64 = solve_T_equation ? iTw+1 : 0# index of plate Temperature (lower chamber)
+	iTp::Int64 = solve_T_equation ? iTw+1 : 0 # index of plate Temperature (lower chamber)
 	
-	ibf::Int64 = dim == 3 ? iTp+1 : iTp # index of boundary flux species, workaround to include spatially varying boundary flux
+	ibf::Int64 = (solve_T_equation && dim == 3) ? iTp+1 : iTp # index of boundary flux species, workaround to include spatially varying boundary flux
 
-	idpdt::Int64 = include_dpdt ? ibf+1 : 0 # index of auxiliary variable holding dp/dt for use in enthalpy equation
-
+	idpdt::Int64 = (solve_T_equation && include_dpdt) ? (dim == 3 ? ibf+1 : iTp+1) : 0 # index of auxiliary variable holding dp/dt for use in enthalpy equation
+	
+	# number of unknows / dofs / variables per node
 	nvar::Int64 = maximum([ip, iT, iTw, iTp, ibf, idpdt])
 
-	
+	# pre-allocated buffers via PreallocationTools.jl
 	X::DiffCache{Vector{Float64}, Vector{Float64}} = DiffCache(ones(nvar), 2 * nvar)	
 	W::DiffCache{Vector{Float64}, Vector{Float64}} = DiffCache(ones(nvar), 2 * nvar)
     
@@ -604,6 +605,7 @@ $(TYPEDFIELDS)
 	dynvisc::DiffCache{Vector{Float64}, Vector{Float64}} = DiffCache(ones(nvar), 2 * nvar)
 	thermcond::DiffCache{Vector{Float64}, Vector{Float64}} = DiffCache(ones(nvar), 2 * nvar)
 
+	# vector holding pivoting information for linear system solution via RecursiveFactorizations.jl (see vfvm_functions.jl)
 	ipiv::Vector{Int} = zeros(Int, ng-1)
 	
 	
@@ -739,13 +741,13 @@ ngas(data::ReactorData) = data.ng
 nvar(data::ReactorData) = data.nvar
 
 #function PTR_grid_boundaries_regions(dim;nref=0)
-function PTR_grid_boundaries_regions(dim;nref=0,H=0.5,W=16)
+function PTR_grid_boundaries_regions(dim;uf=ufac"cm",nref=0,H=0.5,W=16)
 	Ω_catalyst = 2
 	# W=16
 	# H=0.5
 
 	nz = 10*2^(nref)
-	Z=(0:(H/nz):H)*ufac"cm"
+	Z=(0:(H/nz):H)*uf
 
 	if dim == 2
 		Γ_bottom = 1
@@ -757,14 +759,14 @@ function PTR_grid_boundaries_regions(dim;nref=0,H=0.5,W=16)
 
 		W=W/2 # axisymmetry, half domain is sufficient
 		nr=W*2^(nref)
-		R=(0:(W/nr):W)*ufac"cm"
+		R=(0:(W/nr):W)*uf
 		
 		grid=simplexgrid(R,Z)
 		circular_symmetric!(grid)
 	
-		cellmask!(grid,[0,9/10*H].*ufac"cm",[W,H].*ufac"cm",Ω_catalyst) # catalyst layer	
-		bfacemask!(grid, [0,H].*ufac"cm",[W-1,H].*ufac"cm",Γ_top_permeable; allow_new=false)
-		bfacemask!(grid, [0,H].*ufac"cm",[W-2,0.5].*ufac"cm",Γ_top_irradiated; allow_new=false) 
+		cellmask!(grid,[0,9/10*H].*uf,[W,H].*uf,Ω_catalyst) # catalyst layer	
+		bfacemask!(grid, [0,H].*uf,[W-1,H].*uf,Γ_top_permeable; allow_new=false)
+		bfacemask!(grid, [0,H].*uf,[W-2,0.5].*uf,Γ_top_irradiated; allow_new=false) 
 				
 		inb = [Γ_top_permeable,Γ_top_irradiated]
 		irrb = [Γ_top_irradiated]
@@ -780,17 +782,27 @@ function PTR_grid_boundaries_regions(dim;nref=0,H=0.5,W=16)
 		Γ_top_irradiated = 8
 		
 		nxy=W*2^(nref)
-		X=(0:(W/nxy):W)*ufac"cm"
+		X=(0:(W/nxy):W)*uf
 		Y=X
-		# X=(0:1:W)*ufac"cm"
-		# Y=(0:1:W)*ufac"cm"
-		# Z=(0:H/10:H)*ufac"cm"	
+		# X=(0:1:W)*uf
+		# Y=(0:1:W)*uf
+		# Z=(0:H/10:H)*uf	
 		grid=simplexgrid(X,Y,Z)
+
+
 	
 		# catalyst region
-		cellmask!(grid,[0,0,9/10*H].*ufac"cm",[W,W,H].*ufac"cm",Ω_catalyst) # catalyst layer	
-		bfacemask!(grid, [1,1,H].*ufac"cm",[W-1,W-1,H].*ufac"cm",Γ_top_permeable; allow_new=false)
-		bfacemask!(grid, [2,2,H].*ufac"cm",[W-2,W-2,H].*ufac"cm",Γ_top_irradiated; allow_new=false)
+		cellmask!(grid,[0,0,9/10*H].*uf,[W,W,H].*uf,Ω_catalyst) # catalyst layer
+
+		# mark gas permeable region in inlet plane
+		# bfacemask!(grid, [1,1,H].*uf,[W-1,W-1,H].*uf,Γ_top_permeable; allow_new=false)
+		w_top_perm = (W/2)/8
+		bfacemask!(grid, [w_top_perm,w_top_perm,H].*uf,[W-w_top_perm,W-w_top_perm,H].*uf,Γ_top_permeable; allow_new=false)
+
+		# mark irradiated region in inlet plane
+		w_top_irrad = (W/2)/4
+		# bfacemask!(grid, [2,2,H].*uf,[W-2,W-2,H].*uf,Γ_top_irradiated; allow_new=false)
+		bfacemask!(grid, [w_top_irrad,w_top_irrad,H].*uf,[W-w_top_irrad,W-w_top_irrad,H].*uf,Γ_top_irradiated; allow_new=false)
 
 		inb = [Γ_top_permeable,Γ_top_irradiated]
 		irrb = [Γ_top_irradiated]
@@ -820,8 +832,10 @@ function PTR_init_system(dim, grid, data)
 							unknown_storage=:dense
 							)
 
+	enable_species!(sys; species=collect(1:ng)) # gas phase species xi
+	enable_species!(sys; species=ip) # gas phase pressure
 	if solve_T_equation
-		enable_species!(sys; species=collect(1:(ng+2))) # gas phase species xi, ptotal & T
+		enable_species!(sys; species=iT) # temperature T
 		enable_boundary_species!(sys, iTw, irradiated_boundaries) # window temperature as boundary species in upper chamber
 		enable_boundary_species!(sys, iTp, outlet_boundaries) # plate temperature as boundary species in lower chamber
 
@@ -832,10 +846,7 @@ function PTR_init_system(dim, grid, data)
 		end
 		if include_dpdt
 			enable_species!(sys; species=idpdt) # auxiliary variable holding dpdt term
-		end
-		
-	else
-		enable_species!(sys; species=collect(1:(ng+1))) # gas phase species xi, ptotal
+		end		
 	end
 
 	inival=unknowns(sys)
@@ -855,12 +866,18 @@ function PTR_init_system(dim, grid, data)
 				a[2]=b[2]
 			end
 			inival[ibf,:] .= zero(eltype(inival))
-			sub=ExtendableGrids.subgrid(grid,irradiated_boundaries,boundary=true, transform=d3tod2 )
+			# sub=ExtendableGrids.subgrid(grid,irradiated_boundaries,boundary=true, transform=d3tod2 )
+			subg_window = ExtendableGrids.subgrid(grid, irradiated_boundaries, boundary=true, transform=d3tod2)
+			W_window = maximum(subg_window[Coordinates][1,:]) - minimum(subg_window[Coordinates][1,:]) # square window
+			W_domain = maximum(grid[Coordinates][1,:]) - minimum(grid[Coordinates][1,:]) # square prismatic domain
+			
+			coord_offset = 0.5*(W_domain-W_window)
 				
-			for inode in sub[CellNodes]
-				c = sub[Coordinates][:,inode]
-				inodeip = sub[ExtendableGrids.NodeParents][inode]
-				inival[ibf,inodeip] = FluxIntp(c[1]-0.02, c[2]-0.02)
+			for inode in subg_window[CellNodes]
+				c = subg_window[Coordinates][:,inode]
+				inodeip = subg_window[ExtendableGrids.NodeParents][inode]
+				# inival[ibf,inodeip] = FluxIntp(c[1]-0.02, c[2]-0.02)
+				inival[ibf,inodeip] = FluxIntp(c[1]-coord_offset, c[2]-coord_offset)
 			end
 		end
 		if include_dpdt
