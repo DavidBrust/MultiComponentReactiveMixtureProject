@@ -20,14 +20,13 @@ end
 begin
 	using Pkg
 	Pkg.activate(joinpath(@__DIR__,".."))
-	using Revise, Test
+	#using Revise
+	using Test
 	using VoronoiFVM, ExtendableGrids, GridVisualize
-	using LinearSolve, Pardiso, ExtendableSparse
+	using LinearSolve, ExtendableSparse
 	
 	using LessUnitful
-	using PlutoUI, PlutoVista, CairoMakie, Colors, ColorSchemes
-	using CSV, Tables, Dates, Printf
-	using StaticArrays
+	using PlutoUI, PlutoVista, Colors
 	using MultiComponentReactiveMixtureProject
 	
 	GridVisualize.default_plotter!(PlutoVista)
@@ -110,13 +109,14 @@ function ThermalDemo(dim; nref=nref)
 
 	if dim == 2
 		times = [0,1000.0]
-		control = SolverControl(nothing, sys;)
+		control = SolverControl()
 	elseif dim == 3
 		times = [0,200.0]
-		control = SolverControl(
-			GMRESIteration(MKLPardisoLU(), EquationBlock()),
-			sys
-		)
+		control = SolverControl(;
+			method_linear = LinearSolve.KrylovJL_GMRES(
+				precs = ExtendableSparse.ILUZeroPreconBuilder()
+			),
+   		)
 	end
 	control.handle_exceptions=true
 	control.Δu_opt=100
@@ -209,24 +209,6 @@ end
 # ╔═╡ e148f083-4d4e-4fe8-960d-bccd00689c9b
 sol_ss = run_ss(solt,sys);
 
-# ╔═╡ e6828f65-fc35-4e2e-aedd-324ccfe4a22c
-function write_sol(sol; desc="")
-	
-	_t = now()
-	tm = "$(hour(_t))_$(minute(_t))_$(second(_t))"
-	path = "../../data/out/$(Date(_t))/"
-	fn = tm*"_sol_$(desc).csv"
-	try
-        mkpath(path)
-    catch e
-        println("Directory " * path * " already exists.")
-    end
-	CSV.write(path*fn, Tables.table(sol), decimal=',', delim=";")
-end
-
-# ╔═╡ f99203e7-e53e-4109-b6ff-7fb87d290324
-#write_sol(solt(3.0), desc="include_dpdt=$(data.include_dpdt)")
-
 # ╔═╡ dbb6346c-e08a-4ad0-a985-3052272cf6c7
 function Test_RR(sol_ss, sys, data)
 	(;gni, m) = data
@@ -266,10 +248,10 @@ end
 # ╔═╡ 58c0b05d-bb0e-4a3f-af05-71782040c8b9
 if dim == 2
 md"""
-- (1,1): T-profile at r=0
-- (2,1): T-profile at z=0
-- (1,2): Window T-profile
-- (2,2): Bottom Plate T-profile
+- (1,1): axial T-profile (z-axis) at cylinder axis (r=0)
+- (2,1): radial T-profile at cylinder base (z=0)
+- (1,2): Window T-profile (boundary species)
+- (2,2): Bottom Plate T-profile (boundary species)
 """
 end
 
@@ -516,8 +498,6 @@ Re, Pr, Pe_h, Pe_m, Kn = RePrPeKn(600+273.15, 1*ufac"bar", data)
 # ╟─560ad300-42fc-4528-a3ec-95bcd66cdbce
 # ╠═70cdb28c-4b23-4ea4-8cd4-5eb97a3b930a
 # ╠═e148f083-4d4e-4fe8-960d-bccd00689c9b
-# ╠═e6828f65-fc35-4e2e-aedd-324ccfe4a22c
-# ╠═f99203e7-e53e-4109-b6ff-7fb87d290324
 # ╠═dbb6346c-e08a-4ad0-a985-3052272cf6c7
 # ╠═380c74fb-66c4-43fb-a3f5-9c942b13fa0d
 # ╟─98468f9e-6dee-4b0b-8421-d77ac33012cc

@@ -2,7 +2,7 @@ module MultiComponentReactiveMixtureProject
 
 using VoronoiFVM, ExtendableGrids
 using LessUnitful, Printf, Dates, CSV, DataFrames, Interpolations
-using StaticArrays, PreallocationTools 
+using PreallocationTools 
 using LinearAlgebra
 using Documenter
 using DocStringExtensions: TYPEDEF, TYPEDSIGNATURES, SIGNATURES, TYPEDFIELDS, METHODLIST

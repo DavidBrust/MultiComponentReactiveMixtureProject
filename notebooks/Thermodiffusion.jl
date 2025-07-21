@@ -22,7 +22,7 @@ begin
 	using LessUnitful
 	using VoronoiFVM
 	using ExtendableGrids, GridVisualize, PlutoVista, ColorSchemes, CairoMakie
-	using StaticArrays, LinearAlgebra
+	using LinearAlgebra
 	using Revise
 	using Printf
 	using MultiComponentReactiveMixtureProject

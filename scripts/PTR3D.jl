@@ -22,17 +22,14 @@ function run_transient(;dim=3, times=[0,20.0], nref=0, control=control)
         outlet_boundaries=outlet_boundaries,
         side_boundaries=side_boundaries,
         catalyst_regions=catalyst_regions,
-        rhos=5.0*ufac"kg/m^3" # set solid density to low value to reduce thermal inertia of system
+        # rhos=5.0*ufac"kg/m^3" # set solid density to low value to reduce thermal inertia of system
     )
 
     inival,sys = PTR_init_system(dim, grid, data)
   
     control.handle_exceptions=true
     control.Δu_opt = 40
-    #control.Δt_max = 0.5
-    control.Δt_max = 2.0
-    control.tol_round=1.0e-9
-    control.max_round=3
+    control.Δt_max = Inf
     solt=VoronoiFVM.solve(sys;inival=inival,times,control,verbose="nae",log=true)
 
     return solt,grid,sys,data
@@ -57,16 +54,18 @@ end
 function runtests(;dim=3, nref=0)
 
     if dim == 3
+        times = [0,200.0]
         control = SolverControl(;
 			method_linear = LinearSolve.KrylovJL_GMRES(
 				precs = ExtendableSparse.ILUZeroPreconBuilder()
 			),
    		)
     else
+        times = [0,1000.0]
         control = SolverControl(;nothing)
     end
     
-    solt,grid,sys,data = run_transient(dim=dim, nref=nref, control=control)
+    solt,grid,sys,data = run_transient(dim=dim, times=times, nref=nref, control=control)
     solss,grid,sys,data = run_stationary(solt, grid, sys, data, control=control)
 
     # @test isapprox(minimum(solss[data.iT,:]), 410.60941331349306) # 100 suns
@@ -76,16 +75,18 @@ end
 function run(;dim=3, nref=0)
 
     if dim == 3
+        times = [0,200.0]
         control = SolverControl(;
 			method_linear = LinearSolve.KrylovJL_GMRES(
 				precs = ExtendableSparse.ILUZeroPreconBuilder()
 			),
    		)
     else
-        control = SolverControl(;nothing)
+        times = [0,1000.0]
+        control = SolverControl()
     end
 
-    solt,grid,sys,data = run_transient(dim=dim, nref=nref, control=control)
+    solt,grid,sys,data = run_transient(dim=dim, times=times, nref=nref, control=control)
     # grid = run_transient(dim=dim, nref=nref, control=control)
     # GridVisualize.gridplot(grid, Plotter=CairoMakie, resolution=(1200,900))
     # return 

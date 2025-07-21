@@ -23,9 +23,7 @@ begin
 	using Revise
 	using VoronoiFVM
 	using ExtendableGrids, GridVisualize,ExtendableSparse
-	using NLsolve, LinearSolve
-	using StaticArrays
-
+	using LinearSolve
 	using LessUnitful
 	
 	using PlutoVista, Plots, Printf
