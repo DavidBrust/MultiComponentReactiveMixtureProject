@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.20.13
+# v0.20.19
 
 using Markdown
 using InteractiveUtils
@@ -25,7 +25,7 @@ begin
 	using GridVisualize, ExtendableGrids
 
 	using LessUnitful	
-	using PlutoUI, PlutoVista, Plots, CairoMakie, Printf
+	using PlutoUI, PlutoVista, Plots
 	using MultiComponentReactiveMixtureProject
 	
 	GridVisualize.default_plotter!(PlutoVista)
@@ -184,7 +184,7 @@ function plotting_movie(
 						data,
 						flowrate;
 						filename = "plotting_video.gif",
-						Plotter = CairoMakie)
+						Plotter = Plots)
 	(;gn,ng) = data
 	vis =GridVisualizer(resolution=(600,300), Plotter=Plotter)
 
@@ -195,7 +195,7 @@ function plotting_movie(
         for t in solt.t
 			for i=1:ng
 				clear = i==1 ? true : false
-				title = @sprintf "Molar fractions %s flowrate, t= %.2f s" flowrate t
+				title = "Molar fractions $(flowrate) flowrate, t= $(round(t; sigdigits=2)) s"
 				scalarplot!(vis,
 					grid,
 					solt(t)[i,:],
@@ -245,7 +245,7 @@ let
 	tstep = 0.01
 	solt = solve(sys;inival=inival,times,tstep=tstep,control,verbose="a")
 	
-	filename = @sprintf "Uphill_diff_demo_%s.mp4" flowrate
+	filename = "Uphill_diff_demo_$(flowrate).mp4" 
 	# uncomment the following line to export the time evolution of the solution as an animation
 	plotting_movie(solt,grid,data,flowrate,filename=filename)
 	LocalResource(filename)

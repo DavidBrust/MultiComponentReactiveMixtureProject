@@ -5,7 +5,7 @@
 Model equations for multi-component transport of reacting (ideal) gas phase mixtures in porous media.
 ## Total mass continuity
 Mixture mass flow (overall mass flow) through the pore space of the porous medium.
-Mixture mass averaged velocity is calculated from Darcy equation. The void fraction (porosity) is given by $\epsilon$.
+Mixture mass averaged velocity is calculated from Darcy equation. The void fraction (porosity) is given by $\phi$.
 
 ```math
 \begin{align}
