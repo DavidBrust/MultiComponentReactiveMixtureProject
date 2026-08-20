@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.20.19
+# v1.0.3
 
 using Markdown
 using InteractiveUtils
@@ -106,7 +106,8 @@ function calc(data,nref=0)
 	grid = grid1D(nref)
 	inival, sys = PTR_init_system(1, grid, data)
 	
-	control = SolverControl(nothing, sys;)
+	#control = SolverControl(nothing, sys;)
+	control = SolverControl()
 		control.handle_exceptions=true
 		control.Δu_opt=100.0
 
@@ -235,11 +236,12 @@ let
 	grid = grid1D(2)
 	inival, sys = PTR_init_system(1, grid, data)
 	
-	control = SolverControl(nothing, sys;)
-		control.handle_exceptions=true
-		control.Δu_opt=100.0
-		control.Δt_max=0.01
-		control.Δt=0.01
+	#control = SolverControl(nothing, sys;)
+	control = SolverControl()
+	control.handle_exceptions=true
+	control.Δu_opt=100.0
+	control.Δt_max=0.01
+	control.Δt=0.01
 
 	times = [0,2]
 	tstep = 0.01

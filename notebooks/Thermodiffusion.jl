@@ -1,17 +1,19 @@
 ### A Pluto.jl notebook ###
-# v0.19.43
+# v1.0.3
 
 using Markdown
 using InteractiveUtils
 
 # This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
 macro bind(def, element)
-    quote
+    #! format: off
+    return quote
         local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
         local el = $(esc(element))
         global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
         el
     end
+    #! format: on
 end
 
 # ╔═╡ 349e7220-dc69-11ee-13d2-8f95e6ee5c96
@@ -131,7 +133,7 @@ Setup data structure corresponding to the ernary gas mixture consisting of the n
 """
 
 # ╔═╡ e7ca4902-0e14-48ca-bcc6-96b06c85a39d
-HeArKr = KinData{}(;
+HeArKr = KinData(;
     ng = 3,
     gnames = [:He, :Ar, :Kr],
     Fluids = [He, Ar, Kr],
@@ -247,6 +249,12 @@ md"""
 Uncomment the following line to export the time evolution of the solution as an animation.
 """
 
+# ╔═╡ 8b30f68c-9111-4803-b3dc-16e4c440865b
+let
+	#plotting_movie(filename="Soret_demo_transient.mp4")
+	#LocalResource("Soret_demo_transient.mp4")
+end
+
 # ╔═╡ 8c53810e-330f-4eef-9402-62d31fb5d753
 md"""
 ## Stationary solution
@@ -256,6 +264,9 @@ md"""
 md"""
 Using the transient solution at the final time step as initial value for the solution of the stationary system, solve the stationary system and return the stationary solution:
 """
+
+# ╔═╡ 4296aa28-9f52-4d40-a968-ee583ffc7d3c
+#sol_ss = run_ss(solt,sys)
 
 # ╔═╡ dc79ae74-1480-472d-92ff-7e4c36c69215
 md"""
@@ -295,13 +306,16 @@ function grid_2D(;nref=0)
 	X = collect(0:(1/2^nref):18)*ufac"cm"
     Y = collect(0:(0.5/2^nref):8)*ufac"cm"
     grid = simplexgrid(X, Y)
-    
-	rect!(grid, [4, 0]*ufac"cm", [14, 2.5]*ufac"cm"; region = 2)
-	rect!(grid, [4, 5.5]*ufac"cm", [14, 8]*ufac"cm"; region = 2, bregions= [3, 3, 3, 3])
-	bfacemask!(grid, [0, 0]*ufac"cm", [4, 0]*ufac"cm", 4)
-	bfacemask!(grid, [0, 8]*ufac"cm", [4, 8]*ufac"cm", 4)
+
+	# uncommenting call to subgrid causes stackoverflow upon solve
+	#### DEBUG ####
+	#rect!(grid, [4, 0]*ufac"cm", [14, 2.5]*ufac"cm"; region = 2)
+	#rect!(grid, [4, 5.5]*ufac"cm", [14, 8]*ufac"cm"; region = 2, bregions= [3, 3, 3, 3])
+	#bfacemask!(grid, [0, 0]*ufac"cm", [4, 0]*ufac"cm", 4)
+	#bfacemask!(grid, [0, 8]*ufac"cm", [4, 8]*ufac"cm", 4)
 	
-	subgrid(grid, [1])
+	#subgrid(grid, [1])
+	#### DEBUG ####
 end
 
 # ╔═╡ b55537bf-9982-4997-8a2a-1972127bdd86
@@ -364,7 +378,8 @@ function setup_run_sim(grid, data)
 		inival[i,:] .= X0[i]
 	end
 
-	control = SolverControl(nothing, sys;)
+	#control = SolverControl(nothing, sys;)
+	control = SolverControl()
 	control.handle_exceptions=true
 	if dim == 2
 		control.Δu_opt=1000
@@ -375,10 +390,9 @@ function setup_run_sim(grid, data)
 		control.Δt_max=10.0		
 		times=[0,3000.0]
 	end
-		
 
-	
-	sol=VoronoiFVM.solve(sys;inival=inival,times,control,log=true)
+	#sol=VoronoiFVM.solve(sys;inival=inival,times,control,log=true)
+	sol=VoronoiFVM.solve(sys;inival=inival,times,control)
 	return (sol,sys)
 end
 
@@ -402,9 +416,6 @@ if isa(solt, TransientSolution)
 	sol = solt(t)
 end;
 
-# ╔═╡ 4296aa28-9f52-4d40-a968-ee583ffc7d3c
-sol_ss = run_ss(solt,sys)
-
 # ╔═╡ 9ba456c7-f6ed-49c5-9878-d9e0deb96384
 let
 	(; gni,iT,ip) = data;
@@ -414,7 +425,7 @@ let
 	scalarplot!(vis[1,2], grid, sol[gni[:Kr],:], colormap=:coolwarm, title = "Kr molar fraction",)
 	scalarplot!(vis[2,1], grid, sol[iT,:], colormap=:gist_heat, title = "Temperature (K)",)
 
-	#f = map((x, y) -> maximum(sol[ip,:]), grid)
+	f = map((x, y) -> maximum(sol[ip,:]), grid)
 	pmax = round(maximum(sol[ip,:]))
 	f = map((x, y) -> pmax, grid)
 	scalarplot!(vis[2,2], grid, f, title = "Pressure (Pa)",)
@@ -491,12 +502,6 @@ function plotting_movie(; filename = "plotting_video.gif", Plotter = default_plo
     end
 end
 
-# ╔═╡ 8b30f68c-9111-4803-b3dc-16e4c440865b
-let
-	plotting_movie(filename="Soret_demo_transient.mp4")
-	LocalResource("Soret_demo_transient.mp4")
-end
-
 # ╔═╡ Cell order:
 # ╠═349e7220-dc69-11ee-13d2-8f95e6ee5c96
 # ╟─0f102f06-3ff3-4bcc-8892-8d9190a87849
@@ -507,7 +512,7 @@ end
 # ╟─43148504-814c-46ec-985a-2d790e1265e4
 # ╟─b3a6fe03-be46-4159-96ab-477a42d0eec5
 # ╟─f4286a46-ceb4-40b2-8ce5-7fcd231e3168
-# ╟─b55537bf-9982-4997-8a2a-1972127bdd86
+# ╠═b55537bf-9982-4997-8a2a-1972127bdd86
 # ╟─6939978d-9590-407b-80dc-54721c3f672d
 # ╠═138b4d12-af0f-4a1c-a4aa-4f55e6038664
 # ╟─e9cb07eb-cfbb-4802-bc7f-6de7a6ad8ac6
@@ -530,7 +535,7 @@ end
 # ╟─3a063481-d447-4bf5-9c49-ecde37a0fcea
 # ╠═035d4123-7092-4429-8cfd-1e5926e84493
 # ╟─076b4a28-be0f-46f0-9857-e6f886c4b118
-# ╟─9ba456c7-f6ed-49c5-9878-d9e0deb96384
+# ╠═9ba456c7-f6ed-49c5-9878-d9e0deb96384
 # ╟─5a0900cc-df10-4176-b903-358b3e00415c
 # ╟─78ce253e-49b3-46ee-90d8-54a43369ce9f
 # ╠═8b30f68c-9111-4803-b3dc-16e4c440865b

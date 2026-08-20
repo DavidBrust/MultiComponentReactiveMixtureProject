@@ -1,17 +1,19 @@
 ### A Pluto.jl notebook ###
-# v0.19.43
+# v1.0.3
 
 using Markdown
 using InteractiveUtils
 
 # This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
 macro bind(def, element)
-    quote
+    #! format: off
+    return quote
         local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
         local el = $(esc(element))
         global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
         el
     end
+    #! format: on
 end
 
 # ╔═╡ 349e7220-dc69-11ee-13d2-8f95e6ee5c96
@@ -155,7 +157,7 @@ Setup data structure corresponding to the ernary gas mixture consisting of the n
 """
 
 # ╔═╡ e7ca4902-0e14-48ca-bcc6-96b06c85a39d
-CH4ArH2 = KinData{}(;
+CH4ArH2 = KinData(;
     ng = 3,
     gnames = [:CH4, :Ar, :H2],
     Fluids = [CH4, Ar, H2],
@@ -320,7 +322,7 @@ function setup_run_sim(grid, data)
 		inival[i,:] .= Xpm(i, X0_bottom, X0_top, grid)
 	end
 
-	control = SolverControl(nothing, sys;)
+	control = SolverControl()
 	control.handle_exceptions=true
 	control.Δt_max=100.0
 
