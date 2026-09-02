@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.20.13
+# v1.0.3
 
 using Markdown
 using InteractiveUtils
@@ -98,7 +98,7 @@ function calce(data,nref=0)
 	grid = grid1D(nref=nref)
 	inival,sys = PTR_init_system(1, grid, data)
 	
-	control = SolverControl(nothing, sys;)
+	control = SolverControl()
 	control.handle_exceptions=true
 	control.Δu_opt=100
 
@@ -227,6 +227,9 @@ function runtests()
     @test isapprox(err, 1.8146659931244213e-7)	
 end;
 
+# ╔═╡ 552d5bae-0b62-46dd-957a-194f3e5c8c22
+runtests()
+
 # ╔═╡ Cell order:
 # ╠═c21e1942-628c-11ee-2434-fd4adbdd2b93
 # ╟─2c4b16ab-8f60-467b-b608-2fea9fbc741c
@@ -244,3 +247,4 @@ end;
 # ╟─7dd363bf-d6e0-4dfb-b29f-85aa1fb62429
 # ╠═c5190db5-ed3d-4084-ba16-496cc825fa9d
 # ╠═6f02c9cf-7670-4224-9239-b825d8331174
+# ╠═552d5bae-0b62-46dd-957a-194f3e5c8c22

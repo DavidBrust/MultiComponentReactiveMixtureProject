@@ -265,9 +265,6 @@ md"""
 Using the transient solution at the final time step as initial value for the solution of the stationary system, solve the stationary system and return the stationary solution:
 """
 
-# ╔═╡ 4296aa28-9f52-4d40-a968-ee583ffc7d3c
-#sol_ss = run_ss(solt,sys)
-
 # ╔═╡ dc79ae74-1480-472d-92ff-7e4c36c69215
 md"""
 Plot the stationary solution corresponding to Figure 8:
@@ -291,7 +288,9 @@ function run_ss(solt,sys)
 		sys;
 		time = solt.t[end],
 		inival=solt(solt.t[end]),
-		verbose="na"
+		verbose="na",
+		tol_round=1.0e-12,
+		max_round=3
 	)
 end
 
@@ -309,12 +308,12 @@ function grid_2D(;nref=0)
 
 	# uncommenting call to subgrid causes stackoverflow upon solve
 	#### DEBUG ####
-	#rect!(grid, [4, 0]*ufac"cm", [14, 2.5]*ufac"cm"; region = 2)
-	#rect!(grid, [4, 5.5]*ufac"cm", [14, 8]*ufac"cm"; region = 2, bregions= [3, 3, 3, 3])
-	#bfacemask!(grid, [0, 0]*ufac"cm", [4, 0]*ufac"cm", 4)
-	#bfacemask!(grid, [0, 8]*ufac"cm", [4, 8]*ufac"cm", 4)
+	rect!(grid, [4, 0]*ufac"cm", [14, 2.5]*ufac"cm"; region = 2)
+	rect!(grid, [4, 5.5]*ufac"cm", [14, 8]*ufac"cm"; region = 2, bregions= [3, 3, 3, 3])
+	bfacemask!(grid, [0, 0]*ufac"cm", [4, 0]*ufac"cm", 4)
+	bfacemask!(grid, [0, 8]*ufac"cm", [4, 8]*ufac"cm", 4)
 	
-	#subgrid(grid, [1])
+	subgrid(grid, [1])
 	#### DEBUG ####
 end
 
@@ -415,6 +414,9 @@ Plot the transient solution at time $t=$ $(round(t)):
 if isa(solt, TransientSolution)
 	sol = solt(t)
 end;
+
+# ╔═╡ 4296aa28-9f52-4d40-a968-ee583ffc7d3c
+sol_ss = run_ss(solt,sys);
 
 # ╔═╡ 9ba456c7-f6ed-49c5-9878-d9e0deb96384
 let

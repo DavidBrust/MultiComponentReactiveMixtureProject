@@ -146,8 +146,8 @@ function TotalFlows(t,solt,grid,sys,data)
     ind = findfirst(x->x.== t, solt.t)
 
 
-    ifr=integrate(sys,tf_in,solt[ind],solt[ind-1],solt.t[ind]-solt.t[ind-1])[iT]
-    ofr=integrate(sys,tf_out,solt[ind],solt[ind-1],solt.t[ind]-solt.t[ind-1])[iT]
+    ifr=integrate(sys,tf_in,solt.u[ind],solt.u[ind-1],solt.t[ind]-solt.t[ind-1])[iT]
+    ofr=integrate(sys,tf_out,solt.u[ind],solt.u[ind-1],solt.t[ind]-solt.t[ind-1])[iT]
    
     ifr, ofr
     # inflow_rate[ind], outflow_rate[ind]
@@ -277,16 +277,16 @@ function BoundaryFlows_Integrals(solt::TransientSolution, sys, data)
 	reaction_rate=Vector{Float64}[]
 	stored_amount=Vector{Float64}[]
 
-	for i=2:length(solt)
+	for i=2:length(solt.t)
 		
-		ifr=integrate(sys,tf_in,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])
-		ofr=integrate(sys,tf_out,solt[i],solt[i-1],solt.t[i]-solt.t[i-1])
+		ifr=integrate(sys,tf_in,solt.u[i],solt.u[i-1],solt.t[i]-solt.t[i-1])
+		ofr=integrate(sys,tf_out,solt.u[i],solt.u[i-1],solt.t[i]-solt.t[i-1])
 
 		push!(inflow_rate,ifr)
 		push!(outflow_rate,ofr)
 
-		rr = vec(sum(integrate(sys,sys.physics.reaction,solt[i]), dims=2))
-		amount = vec(sum(integrate(sys,sys.physics.storage,solt[i]), dims=2))
+		rr = vec(sum(integrate(sys,sys.physics.reaction,solt.u[i]), dims=2))
+		amount = vec(sum(integrate(sys,sys.physics.storage,solt.u[i]), dims=2))
 
 		push!(reaction_rate, rr)
 		push!(stored_amount, amount)
@@ -297,7 +297,7 @@ function BoundaryFlows_Integrals(solt::TransientSolution, sys, data)
 	I_in=zeros(num_species(sys))
 	I_out=zeros(num_species(sys))
 	I_reac=zeros(num_species(sys))
-	for i=1:length(solt)-1
+	for i=1:length(solt.t)-1
 		I_in .+= inflow_rate[i]*(solt.t[i+1]-solt.t[i])
 		I_out .+= outflow_rate[i]*(solt.t[i+1]-solt.t[i])
 		I_reac .+= reaction_rate[i]*(solt.t[i+1]-solt.t[i])

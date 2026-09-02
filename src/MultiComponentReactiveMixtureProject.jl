@@ -5,6 +5,7 @@ using LessUnitful, Printf, Dates, CSV, DataFrames, Interpolations
 using PreallocationTools 
 using LinearAlgebra
 using Documenter
+using StaticArraysCore
 using DocStringExtensions: TYPEDEF, TYPEDSIGNATURES, SIGNATURES, TYPEDFIELDS, METHODLIST
 
 # invoking the macro @ph_str via ph"R" causes allocations
