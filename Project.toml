@@ -36,6 +36,7 @@ PreallocationTools = "d236fae5-4411-538c-8e31-a6e3d9e00b46"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 SimplexGridFactory = "57bfcd06-606e-45d6-baf4-4ba06da0efd5"
+StaticArraysCore = "1e83bf80-4336-4d27-bf5d-d5a4f845583c"
 VoronoiFVM = "82b139dc-5afc-11e9-35da-9b9bdfd336f3"
 
 [compat]
@@ -63,8 +64,10 @@ Pluto = "1"
 PlutoUI = "0.7"
 PlutoVista = "1"
 PreallocationTools = "1"
+Printf = "1.10.0"
 Revise = "3"
 SimplexGridFactory = "2"
+StaticArraysCore = "1.4.4"
 VoronoiFVM = "3"
 julia = "1.10"
 
