@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.20.13
+# v1.0.3
 
 using Markdown
 using InteractiveUtils
@@ -28,7 +28,7 @@ begin
 	using LessUnitful
 	using PlutoUI, PlutoVista, Colors
 	using MultiComponentReactiveMixtureProject
-	
+	using Printf
 	GridVisualize.default_plotter!(PlutoVista)
 end;
 
